@@ -4,7 +4,8 @@
   "scripts": {
     "start": "node server/server.js",
     "client": "cd client && npm start",
-    "build": "cd client && npm run build"
+    "build": "cd client && npm run build",
+    "postinstall": "npm rebuild sqlite3"
   },
   "dependencies": {
     "express": "^4.21.2",
