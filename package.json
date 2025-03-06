@@ -1,0 +1,19 @@
+{
+  "name": "barrel_tracker_web",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server/server.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
+  },
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
