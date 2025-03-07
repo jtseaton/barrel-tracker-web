@@ -4,6 +4,9 @@ const path = require('path');
 const app = express();
 
 app.use(express.json());
+const basicAuth = require('express-basic-auth');
+app.use(basicAuth({ users: { 'admin': 'yourpassword' }, challenge: true }));
+
 app.use(express.static(path.join(__dirname, '../client/build')));
 
 app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
@@ -47,9 +50,6 @@ db.serialize(() => {
   `);
   // Drop old processing_totals, use inventory for report IDs
 });
-
-const basicAuth = require('express-basic-auth');
-app.use(basicAuth({ users: { 'admin': 'yourpassword' }, challenge: true }));
 
 app.post('/api/receive', (req, res) => {
   console.log('Received POST to /api/receive:', req.body);
