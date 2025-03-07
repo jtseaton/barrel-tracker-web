@@ -67,7 +67,7 @@ const App: React.FC = () => {
     proofGallons: ''
   });
   const [packageForm, setPackageForm] = useState({
-    barrelId: '',
+    batchId: '',  // Was barrelId
     product: 'Old Black Bear Vodka',
     proofGallons: '',
     targetProof: '80'
@@ -142,6 +142,9 @@ const App: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Move response:', data);
+      if (data.batchId) {
+        setPackageForm(prev => ({ ...prev, batchId: data.batchId }));
+      }
       await fetchInventory();
       if (data.tankSummary) {
         console.log('tankSummary exists, forcing export:', data.tankSummary);
@@ -156,33 +159,33 @@ const App: React.FC = () => {
   };
 
   const handlePackage = async () => {
-    if (!packageForm.barrelId || !packageForm.proofGallons || !packageForm.targetProof) {
+    if (!packageForm.batchId || !packageForm.proofGallons || !packageForm.targetProof) {
       console.log('Invalid package request:', packageForm);
-      alert('Please fill in Barrel ID, Proof Gallons, and Target Proof.');
+      alert('Please fill in Batch ID, Proof Gallons, and Target Proof.');
       return;
     }
     const sourceProofGallons = parseFloat(packageForm.proofGallons);
     const targetProof = parseFloat(packageForm.targetProof);
-    const bottleSizeGal = 0.198129; // 750ml in gallons
-
-    // Fetch source barrel to get proof
-    const sourceItem = inventory.find(item => item.barrelId === packageForm.barrelId && item.account === 'Processing');
+    const bottleSizeGal = 0.198129;
+  
+    const sourceItem = inventory.find(item => item.barrelId === packageForm.batchId.trim() && item.account === 'Processing');
     if (!sourceItem) {
-      console.log('Barrel not found in Processing for ID:', packageForm.barrelId, 'Inventory:', inventory);
+      console.log('Barrel not found in Processing. Entered Batch ID:', packageForm.batchId);
+      console.log('Processing inventory:', inventory.filter(item => item.account === 'Processing'));
       alert('Barrel not found in Processing!');
       return;
     }
     const sourceProof = sourceItem.proof;
-    const sourceVolume = sourceProofGallons / (sourceProof / 100); // Gallons
-    const targetVolume = sourceProofGallons / (targetProof / 100); // Gallons before shrinkage
+    const sourceVolume = sourceProofGallons / (sourceProof / 100);
+    const targetVolume = sourceProofGallons / (targetProof / 100);
     const waterVolume = targetVolume - sourceVolume;
-    const shrinkageFactor = 0.98; // ~2% shrinkage
+    const shrinkageFactor = 0.98;
     const finalVolume = targetVolume * shrinkageFactor;
     const bottleCount = Math.floor(finalVolume / bottleSizeGal);
     const finalProofGallons = bottleCount * bottleSizeGal * (targetProof / 100);
-
+  
     console.log('Packaging calc:', { 
-      barrelId: packageForm.barrelId, 
+      batchId: packageForm.batchId, 
       sourceProofGallons, 
       sourceProof, 
       targetProof, 
@@ -198,7 +201,7 @@ const App: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          barrelId: packageForm.barrelId,
+          batchId: packageForm.batchId,  // Changed to batchId
           product: packageForm.product,
           proofGallons: finalProofGallons.toFixed(2),
           targetProof: targetProof.toFixed(2),
@@ -212,11 +215,12 @@ const App: React.FC = () => {
       const data = await res.json();
       console.log('Package response:', data);
       await fetchInventory();
+      console.log('Inventory fetched after package:', inventory);
       if (data.tankSummary) {
         console.log('Exporting tank summary for package:', data.tankSummary);
         exportTankSummaryToExcel(data.tankSummary);
       }
-      setPackageForm({ barrelId: '', product: 'Old Black Bear Vodka', proofGallons: '', targetProof: '80' });
+      setPackageForm({ batchId: '', product: 'Old Black Bear Vodka', proofGallons: '', targetProof: '80' });
     } catch (err: unknown) {
       const error = err as Error;
       console.error('Package error:', error);
@@ -448,9 +452,9 @@ const App: React.FC = () => {
               <h3>Package Product</h3>
               <input
                 type="text"
-                placeholder="Barrel ID in Processing"
-                value={packageForm.barrelId}
-                onChange={e => setPackageForm({ ...packageForm, barrelId: e.target.value })}
+                placeholder="Batch ID in Processing"
+                value={packageForm.batchId}
+                onChange={e => setPackageForm({ ...packageForm, batchId: e.target.value })}
               />
               <select value={packageForm.product} onChange={e => setPackageForm({ ...packageForm, product: e.target.value })}>
                 <option value="Old Black Bear Vodka">Old Black Bear Vodka (Vodka)</option>
