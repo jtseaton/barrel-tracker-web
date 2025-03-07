@@ -38,9 +38,12 @@ interface TankSummary {
   barrelId: string;
   type: string;
   proofGallons: string;
+  proof: string;
+  totalProofGallonsLeft: string;
   date: string;
-  fromAccount: string;
+  fromAccount?: string;
   toAccount: string;
+  serialNumber: string;
 }
 
 const App: React.FC = () => {
@@ -206,33 +209,32 @@ const App: React.FC = () => {
   };
 
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
-  console.log('Starting exportTankSummaryToExcel with:', tankSummary);
-  try {
-    const wsData = [
-      ['Tank Summary Report', tankSummary.barrelId],
-      [''],
-      ['Type', tankSummary.type],
-      ['Proof Gallons Moved', Number(tankSummary.proofGallons).toFixed(2)],
-      ['Date', tankSummary.date],
-      ['From Account', tankSummary.fromAccount],
-      ['To Account', tankSummary.toAccount]
-    ];
-    console.log('wsData prepared:', wsData);
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    console.log('Worksheet created');
-    const wb = XLSX.utils.book_new();
-    console.log('Workbook created');
-    XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-    console.log('Sheet appended');
-    const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
-    console.log('Attempting to write file:', filename);
-    XLSX.writeFile(wb, filename);
-    console.log('Export successful:', filename);
-  } catch (err: unknown) {
-    console.error('Export failed:', err);
-    alert('Export failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
-  }
-};
+    console.log('Starting exportTankSummaryToExcel with:', tankSummary);
+    try {
+      const wsData = [
+        [`Tank Summary Report - ${tankSummary.serialNumber}`],
+        [''],
+        ['Barrel ID:', tankSummary.barrelId],
+        ['Date:', tankSummary.date],
+        ['Type:', tankSummary.type],
+        ['Proof:', Number(tankSummary.proof).toFixed(2)],
+        ['Proof Gallons Moved:', Number(tankSummary.proofGallons).toFixed(2)],
+        ['Total Proof Gallons Left:', Number(tankSummary.totalProofGallonsLeft).toFixed(2)],
+        ['To Account:', tankSummary.toAccount],
+        ...(tankSummary.fromAccount ? [['From Account:', tankSummary.fromAccount]] : [])
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.serialNumber}.xlsx`;
+      console.log('Writing file:', filename);
+      XLSX.writeFile(wb, filename);
+      console.log('Export successful:', filename);
+    } catch (err: unknown) {
+      console.error('Export failed:', err);
+      alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
 
   return (
     <div className="App">
@@ -322,8 +324,20 @@ const App: React.FC = () => {
           <button onClick={fetchDailyReport}>Fetch Daily Report</button>
         </div>
         <div>
-          <button onClick={() => exportTankSummaryToExcel({ barrelId: 'GNS250329', type: 'Spirits', proofGallons: '0', date: 'N/A', fromAccount: 'Storage', toAccount: 'Processing' })}>Export Tank Summary</button>
-        </div>
+  <button onClick={() => exportTankSummaryToExcel({
+    barrelId: 'GNS250329',
+    type: 'Spirits',
+    proofGallons: '0',
+    proof: '0',                    // Add proof
+    totalProofGallonsLeft: '0',    // Add total left
+    date: 'N/A',
+    fromAccount: 'Storage',
+    toAccount: 'Processing',
+    serialNumber: '250307'         // Add serial number
+  })}>
+    Export Tank Summary
+  </button>
+</div>
         {report ? (
           <div>
             <h3>{report.month ? `Monthly Report: ${report.month}` : `Daily Report: ${report.date}`}</h3>
