@@ -157,7 +157,7 @@ const App: React.FC = () => {
 
   const handlePackage = async () => {
     if (!packageForm.barrelId || !packageForm.proofGallons || !packageForm.targetProof) {
-      console.log('Invalid package request: missing fields');
+      console.log('Invalid package request:', packageForm);
       alert('Please fill in Barrel ID, Proof Gallons, and Target Proof.');
       return;
     }
@@ -168,6 +168,7 @@ const App: React.FC = () => {
     // Fetch source barrel to get proof
     const sourceItem = inventory.find(item => item.barrelId === packageForm.barrelId && item.account === 'Processing');
     if (!sourceItem) {
+      console.log('Barrel not found in Processing for ID:', packageForm.barrelId, 'Inventory:', inventory);
       alert('Barrel not found in Processing!');
       return;
     }
@@ -180,8 +181,18 @@ const App: React.FC = () => {
     const bottleCount = Math.floor(finalVolume / bottleSizeGal);
     const finalProofGallons = bottleCount * bottleSizeGal * (targetProof / 100);
 
-    console.log('Packaging calc:', { sourceProofGallons, sourceProof, targetProof, sourceVolume, targetVolume, waterVolume, finalVolume, bottleCount, finalProofGallons });
-
+    console.log('Packaging calc:', { 
+      barrelId: packageForm.barrelId, 
+      sourceProofGallons, 
+      sourceProof, 
+      targetProof, 
+      sourceVolume, 
+      targetVolume, 
+      waterVolume, 
+      finalVolume, 
+      bottleCount, 
+      finalProofGallons 
+    });
     try {
       const res = await fetch('/api/package', {
         method: 'POST',
