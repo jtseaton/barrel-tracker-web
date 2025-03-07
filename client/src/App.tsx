@@ -124,14 +124,18 @@ const App: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      console.log('Move response:', data);
+      console.log('Move response received:', data);
       await fetchInventory();
-      console.log('Checking tankSummary:', data.tankSummary);
-      if (data.tankSummary && data.tankSummary.toAccount === 'Processing') {
-        console.log('Exporting tank summary for:', data.tankSummary);
-        exportTankSummaryToExcel(data.tankSummary);
+      console.log('Tank summary in response:', data.tankSummary);
+      if (data.tankSummary) {
+        if (data.tankSummary.toAccount === 'Processing') {
+          console.log('Processing move detected, exporting:', data.tankSummary);
+          exportTankSummaryToExcel(data.tankSummary);
+        } else {
+          console.log('Move to non-Processing account, no export needed:', data.tankSummary.toAccount);
+        }
       } else {
-        console.log('No tank summary export needed - not a Processing move');
+        console.log('No tankSummary in response');
       }
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
     } catch (err: unknown) {
@@ -201,7 +205,7 @@ const App: React.FC = () => {
 
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
     try {
-      console.log('Attempting to export tank summary:', tankSummary);
+      console.log('Starting tank summary export:', tankSummary);
       const wsData = [
         ['Tank Summary Report', tankSummary.barrelId],
         [''],
@@ -214,11 +218,12 @@ const App: React.FC = () => {
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-      console.log('Writing file:', `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`);
-      XLSX.writeFile(wb, `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`);
-      console.log('Tank summary exported successfully');
+      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
+      console.log('Attempting to write file:', filename);
+      XLSX.writeFile(wb, filename);
+      console.log('Tank summary export completed:', filename);
     } catch (err: unknown) {
-      console.error('Tank summary export error:', err);
+      console.error('Tank summary export failed:', err);
       alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
