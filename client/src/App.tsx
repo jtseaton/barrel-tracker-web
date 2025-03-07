@@ -126,9 +126,17 @@ const App: React.FC = () => {
       const data = await res.json();
       console.log('Move response:', data);
       await fetchInventory();
-      if (data.tankSummary && data.tankSummary.toAccount === 'Processing') {
-        console.log('Exporting tank summary:', data.tankSummary);
-        exportTankSummaryToExcel(data.tankSummary);
+      console.log('Checking tankSummary:', data.tankSummary);
+      if (data.tankSummary) {
+        console.log('tankSummary exists, toAccount:', data.tankSummary.toAccount);
+        if (data.tankSummary.toAccount === 'Processing') {
+          console.log('Exporting tank summary:', data.tankSummary);
+          exportTankSummaryToExcel(data.tankSummary);
+        } else {
+          console.log('Not exporting - toAccount is not Processing:', data.tankSummary.toAccount);
+        }
+      } else {
+        console.log('No tankSummary in response');
       }
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
     } catch (err: unknown) {
@@ -137,7 +145,6 @@ const App: React.FC = () => {
       alert('Failed to move item: ' + error.message);
     }
   };
-
   const fetchMonthlyReport = async () => {
     console.log('Fetching monthly report for:', reportMonth);
     try {
