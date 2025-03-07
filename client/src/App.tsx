@@ -34,6 +34,15 @@ interface ReportData {
   transactions?: Transaction[];
 }
 
+interface TankSummary {
+  barrelId: string;
+  type: string;
+  proofGallons: string;
+  date: string;
+  fromAccount: string;
+  toAccount: string;
+}
+
 const App: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [receiveForm, setReceiveForm] = useState({
@@ -117,7 +126,8 @@ const App: React.FC = () => {
       const data = await res.json();
       console.log('Move response:', data);
       await fetchInventory();
-      if (moveForm.toAccount === 'Processing') {
+      if (data.tankSummary && data.tankSummary.toAccount === 'Processing') {
+        console.log('Generating tank summary for:', data.tankSummary);
         exportTankSummaryToExcel(data.tankSummary);
       }
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
@@ -186,20 +196,26 @@ const App: React.FC = () => {
     XLSX.writeFile(wb, `Monthly_Report_${report.month}.xlsx`);
   };
 
-  const exportTankSummaryToExcel = (tankSummary: { barrelId: string; type: string; proofGallons: string; date: string; fromAccount: string; toAccount: string }) => {
-    const wsData = [
-      ['Tank Summary Report', tankSummary.barrelId],
-      [''],
-      ['Type', tankSummary.type],
-      ['Proof Gallons Moved', Number(tankSummary.proofGallons).toFixed(2)],
-      ['Date', tankSummary.date],
-      ['From Account', tankSummary.fromAccount],
-      ['To Account', tankSummary.toAccount]
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-    XLSX.writeFile(wb, `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`);
+  const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
+    try {
+      console.log('Exporting tank summary:', tankSummary);
+      const wsData = [
+        ['Tank Summary Report', tankSummary.barrelId],
+        [''],
+        ['Type', tankSummary.type],
+        ['Proof Gallons Moved', Number(tankSummary.proofGallons).toFixed(2)],
+        ['Date', tankSummary.date],
+        ['From Account', tankSummary.fromAccount],
+        ['To Account', tankSummary.toAccount]
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+      XLSX.writeFile(wb, `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`);
+    } catch (err: unknown) {
+      console.error('Tank summary export error:', err);
+      alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
   };
 
   return (
