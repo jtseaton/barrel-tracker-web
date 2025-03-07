@@ -97,6 +97,12 @@ const App: React.FC = () => {
   };
 
   const handleMove = async () => {
+    if (!moveForm.barrelId || !moveForm.proofGallons) {
+      console.log('Invalid move request: missing barrelId or proofGallons');
+      alert('Please fill in Barrel ID and Proof Gallons.');
+      return;
+    }
+
     console.log('Sending move request:', moveForm);
     try {
       const res = await fetch('/api/move', {
