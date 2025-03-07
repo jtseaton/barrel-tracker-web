@@ -125,6 +125,7 @@ app.post('/api/move', (req, res) => {
     const movedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
 
     db.serialize(() => {
+      // Update source barrel
       db.run(
         `UPDATE inventory SET quantity = ?, proofGallons = ? WHERE barrelId = ?`,
         [remainingQuantity, remainingProofGallons, barrelId],
@@ -133,39 +134,140 @@ app.post('/api/move', (req, res) => {
             console.error('Update Remaining Error:', err);
             return res.status(500).json({ error: err.message });
           }
-          const dateStr = moveDate.replace(/-/g, '').slice(2);
-          db.get(
-            `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Moved'`,
-            [moveDate],
-            (err, rowCount) => {
+          // Insert moved amount into toAccount
+          const newBarrelId = toAccount === 'Processing' ? `${barrelId}-PROC-${moveDate.replace(/-/g, '')}` : barrelId;
+          db.run(
+            `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [newBarrelId, toAccount, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.source, row.dspNumber],
+            (err) => {
               if (err) {
-                console.error('Serial Number Count Error:', err);
+                console.error('Insert Moved Error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              const serialSuffix = rowCount.count > 0 ? `-${rowCount.count}` : '';
-              const serialNumber = `${dateStr}${serialSuffix}`;
-              db.run(
-                `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
-                 VALUES (?, ?, ?, ?, ?, ?, 'Moved', ?, ?)`,
-                [toAccount === 'Processing' ? null : barrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, OUR_DSP, toAccount],
-                (err) => {
+              const dateStr = moveDate.replace(/-/g, '').slice(2);
+              db.get(
+                `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Moved'`,
+                [moveDate],
+                (err, rowCount) => {
                   if (err) {
-                    console.error('Transaction Insert Error:', err);
+                    console.error('Serial Number Count Error:', err);
                     return res.status(500).json({ error: err.message });
                   }
-                  const tankSummary = {
-                    barrelId,
-                    type: row.type,
-                    proofGallons: fixedProofGallons,
-                    proof: row.proof,
-                    totalProofGallonsLeft: remainingProofGallons,
-                    date: moveDate,
-                    fromAccount: row.account,
-                    toAccount,
-                    serialNumber
-                  };
-                  console.log('Sending response with tankSummary:', tankSummary);
-                  res.json({ message: 'Item moved', barrelId, tankSummary });
+                  const serialSuffix = rowCount.count > 0 ? `-${rowCount.count}` : '';
+                  const serialNumber = `${dateStr}${serialSuffix}`;
+                  db.run(
+                    `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+                     VALUES (?, ?, ?, ?, ?, ?, 'Moved', ?, ?)`,
+                    [newBarrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.dspNumber, toAccount],
+                    (err) => {
+                      if (err) {
+                        console.error('Transaction Insert Error:', err);
+                        return res.status(500).json({ error: err.message });
+                      }
+                      const tankSummary = {
+                        barrelId,
+                        type: row.type,
+                        proofGallons: fixedProofGallons,
+                        proof: row.proof,
+                        totalProofGallonsLeft: remainingProofGallons,
+                        date: moveDate,
+                        fromAccount: row.account,
+                        toAccount,
+                        serialNumber,
+                        producingDSP: row.source || row.dspNumber || OUR_DSP
+                      };
+                      console.log('Sending response with tankSummary:', tankSummary);
+                      res.json({ message: 'Item moved', barrelId: newBarrelId, tankSummary });
+                    }
+                  );
+                }
+              );
+            }
+          );
+        }
+      );
+    });
+  });
+});
+
+app.post('/api/package', (req, res) => {
+  const { barrelId, product, proofGallons, toAccount, date } = req.body;
+  console.log('Received package request:', { barrelId, product, proofGallons, toAccount });
+
+  db.get('SELECT * FROM inventory WHERE barrelId = ? AND account = "Processing"', [barrelId], (err, row) => {
+    if (err) {
+      console.error('Inventory Fetch Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) return res.status(404).json({ error: 'Barrel not found in Processing' });
+
+    const fixedProofGallons = Number(proofGallons).toFixed(2);
+    const numExistingProofGallons = Number(row.proofGallons);
+    const numFixedProofGallons = Number(fixedProofGallons);
+    const remainingProofGallons = Number((numExistingProofGallons - numFixedProofGallons).toFixed(2));
+    if (remainingProofGallons < 0) return res.status(400).json({ error: 'Insufficient proof gallons' });
+
+    const remainingQuantity = row.type === 'Spirits' ? Number(((remainingProofGallons * 100) / row.proof).toFixed(2)) : Number((row.quantity - numFixedProofGallons).toFixed(2));
+    const packagedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
+
+    db.serialize(() => {
+      // Update original barrel (subtract packaged amount)
+      db.run(
+        `UPDATE inventory SET quantity = ?, proofGallons = ? WHERE barrelId = ? AND account = "Processing"`,
+        [remainingQuantity, remainingProofGallons, barrelId],
+        (err) => {
+          if (err) {
+            console.error('Update Remaining Error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          // Insert packaged product as Finished Goods
+          const newBarrelId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}`;
+          db.run(
+            `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [newBarrelId, toAccount, product, packagedQuantity, row.proof, fixedProofGallons, date, row.source, row.dspNumber],
+            (err) => {
+              if (err) {
+                console.error('Insert Finished Goods Error:', err);
+                return res.status(500).json({ error: err.message });
+              }
+              const dateStr = date.replace(/-/g, '').slice(2);
+              db.get(
+                `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Packaged'`,
+                [date],
+                (err, rowCount) => {
+                  if (err) {
+                    console.error('Serial Number Count Error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  const serialSuffix = rowCount.count > 0 ? `-${rowCount.count}` : '';
+                  const serialNumber = `${dateStr}${serialSuffix}`;
+                  db.run(
+                    `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+                     VALUES (?, ?, ?, ?, ?, ?, 'Packaged', ?, ?)`,
+                    [newBarrelId, product, packagedQuantity, row.proof, fixedProofGallons, date, row.dspNumber, toAccount],
+                    (err) => {
+                      if (err) {
+                        console.error('Transaction Insert Error:', err);
+                        return res.status(500).json({ error: err.message });
+                      }
+                      const tankSummary = {
+                        barrelId: newBarrelId,
+                        type: product,
+                        proofGallons: fixedProofGallons,
+                        proof: row.proof,
+                        totalProofGallonsLeft: remainingProofGallons,
+                        date,
+                        fromAccount: 'Processing',
+                        toAccount,
+                        serialNumber,
+                        producingDSP: row.source || row.dspNumber || OUR_DSP
+                      };
+                      console.log('Sending response with tankSummary:', tankSummary);
+                      res.json({ message: 'Item packaged', barrelId: newBarrelId, tankSummary });
+                    }
+                  );
                 }
               );
             }
