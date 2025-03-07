@@ -54,10 +54,21 @@ const App: React.FC = () => {
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
-    fetch('/api/inventory')
-      .then(res => res.json())
-      .then(data => setInventory(data));
+    fetchInventory();
   }, []);
+
+  const fetchInventory = async () => {
+    try {
+      const res = await fetch('/api/inventory');
+      if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
+      const data = await res.json();
+      console.log('Fetched inventory:', data); // Debug log
+      setInventory(data);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('Inventory fetch error:', error);
+    }
+  };
 
   const handleReceive = async () => {
     console.log('Sending receive request:', receiveForm);
@@ -74,11 +85,7 @@ const App: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Receive response:', data);
-      const inventoryRes = await fetch('/api/inventory');
-      if (!inventoryRes.ok) throw new Error('Failed to fetch inventory');
-      const inventoryData = await inventoryRes.json();
-      console.log('Updated inventory:', inventoryData);
-      setInventory(inventoryData);
+      await fetchInventory(); // Refresh inventory
       setReceiveForm({ ...receiveForm, barrelId: '', quantity: '', proof: '', source: '', receivedDate: new Date().toISOString().split('T')[0] });
     } catch (err: unknown) {
       const error = err as Error;
@@ -101,11 +108,7 @@ const App: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Move response:', data);
-      const inventoryRes = await fetch('/api/inventory');
-      if (!inventoryRes.ok) throw new Error('Failed to fetch inventory');
-      const inventoryData = await inventoryRes.json();
-      console.log('Updated inventory after move:', inventoryData);
-      setInventory(inventoryData);
+      await fetchInventory(); // Refresh inventory after move
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
     } catch (err: unknown) {
       const error = err as Error;
