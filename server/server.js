@@ -287,4 +287,54 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'build', 'index.html'));
 });
 
+app.get('/reset-db', (req, res) => {
+  const fs = require('fs');
+  const dbPath = 'barrels.db';
+  fs.unlink(dbPath, (err) => {
+    if (err) {
+      console.error('Failed to delete barrels.db:', err);
+      return res.status(500).json({ error: 'Failed to delete database' });
+    }
+    console.log('Deleted barrels.db successfully');
+    // Restart DB connection
+    db.close(() => {
+      const newDb = new sqlite3.Database('barrels.db', (err) => {
+        if (err) console.error('DB Reconnect Error:', err);
+        else console.log('Reconnected to new SQLite DB');
+      });
+      newDb.serialize(() => {
+        newDb.run(`
+          CREATE TABLE inventory (
+            barrelId TEXT PRIMARY KEY,
+            account TEXT CHECK(account IN ('Production', 'Storage', 'Processing')),
+            type TEXT CHECK(type IN ('Cane Sugar', 'Corn Sugar', 'Agave Syrup', 'Flaked Corn', 'Rye Barley', 'Malted Barley', 'Spirits')),
+            quantity REAL,
+            proof REAL,
+            proofGallons REAL,
+            receivedDate TEXT,
+            source TEXT,
+            dspNumber TEXT
+          )
+        `);
+        newDb.run(`
+          CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barrelId TEXT,
+            type TEXT,
+            quantity REAL,
+            proof REAL,
+            proofGallons REAL,
+            date TEXT,
+            action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed')),
+            dspNumber TEXT,
+            toAccount TEXT
+          )
+        `);
+      });
+      db = newDb; // Update global db reference
+    });
+    res.json({ message: 'Database reset successfully' });
+  });
+});
+
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('Server started'));
