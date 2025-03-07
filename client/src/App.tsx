@@ -73,10 +73,11 @@ const App: React.FC = () => {
       const res = await fetch('/api/inventory');
       if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
       const data = await res.json();
-      console.log('Fetched inventory:', data);
+      console.log('Updated inventory after move:', data);
       setInventory(data);
     } catch (err: unknown) {
-      console.error('Inventory fetch error:', err);
+      const error = err as Error;
+      console.error('Inventory fetch error:', error);
     }
   };
 
@@ -98,8 +99,9 @@ const App: React.FC = () => {
       await fetchInventory();
       setReceiveForm({ ...receiveForm, barrelId: '', quantity: '', proof: '', source: '', receivedDate: new Date().toISOString().split('T')[0] });
     } catch (err: unknown) {
-      console.error('Receive error:', err);
-      alert('Failed to receive item: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      const error = err as Error;
+      console.error('Receive error:', error);
+      alert('Failed to receive item: ' + error.message);
     }
   };
 
@@ -130,8 +132,9 @@ const App: React.FC = () => {
       }
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
     } catch (err: unknown) {
-      console.error('Move error:', err);
-      alert('Failed to move item: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      const error = err as Error;
+      console.error('Move error:', error);
+      alert('Failed to move item: ' + error.message);
     }
   };
 
@@ -205,13 +208,13 @@ const App: React.FC = () => {
         ['From Account', tankSummary.fromAccount],
         ['To Account', tankSummary.toAccount]
       ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-    const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
-    console.log('Writing file:', filename);
-    XLSX.writeFile(wb, filename);
-    console.log('Export successful:', filename);
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
+      console.log('Writing file:', filename);
+      XLSX.writeFile(wb, filename);
+      console.log('Export successful:', filename);
     } catch (err: unknown) {
       console.error('Export failed:', err);
       alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
