@@ -44,6 +44,7 @@ interface TankSummary {
   fromAccount?: string;
   toAccount: string;
   serialNumber: string;
+  producingDSP: string;
 }
 
 const App: React.FC = () => {
@@ -212,18 +213,63 @@ const App: React.FC = () => {
     console.log('Starting exportTankSummaryToExcel with:', tankSummary);
     try {
       const wsData = [
-        [`Tank Summary Report - ${tankSummary.serialNumber}`],
-        [''],
+        [`Tank Summary Report - ${tankSummary.serialNumber}`], // Row 1
+        [''], // Row 2: Spacer
         ['Barrel ID:', tankSummary.barrelId],
         ['Date:', tankSummary.date],
         ['Type:', tankSummary.type],
         ['Proof:', Number(tankSummary.proof).toFixed(2)],
         ['Proof Gallons Moved:', Number(tankSummary.proofGallons).toFixed(2)],
         ['Total Proof Gallons Left:', Number(tankSummary.totalProofGallonsLeft).toFixed(2)],
+        ['Producing DSP:', tankSummary.producingDSP],
         ['To Account:', tankSummary.toAccount],
-        ...(tankSummary.fromAccount ? [['From Account:', tankSummary.fromAccount]] : [])
+        ...(tankSummary.fromAccount ? [['From Account:', tankSummary.fromAccount]] : []),
+        [''], // Spacer before perjury
+        ['I certify under penalty of perjury that the information provided is true and correct.'],
+        ['Signature:', '____________________'],
+        ['Date:', '____________________']
       ];
+  
       const ws = XLSX.utils.aoa_to_sheet(wsData);
+  
+      // Formatting: Highlight labels (yellow background, bold)
+      const labelCells = [
+        'A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10',
+        ...(tankSummary.fromAccount ? ['A11'] : []),
+        'A13', 'A14'
+      ];
+      labelCells.forEach(cell => {
+        if (ws[cell]) {
+          ws[cell].s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: 'FFFF00' } } // Yellow background
+          };
+        }
+      });
+  
+      // Center title
+      if (ws['A1']) {
+        ws['A1'].s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: 'FFFF00' } },
+          alignment: { horizontal: 'center' }
+        };
+      }
+  
+      // Full-width perjury statement
+      if (ws['A12']) {
+        ws['A12'].s = {
+          font: { bold: true },
+          alignment: { horizontal: 'left', wrapText: true }
+        };
+      }
+  
+      // Column widths
+      ws['!cols'] = [
+        { wch: 25 }, // Labels
+        { wch: 30 }  // Values
+      ];
+  
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
       const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.serialNumber}.xlsx`;
@@ -324,20 +370,19 @@ const App: React.FC = () => {
           <button onClick={fetchDailyReport}>Fetch Daily Report</button>
         </div>
         <div>
-  <button onClick={() => exportTankSummaryToExcel({
-    barrelId: 'GNS250329',
-    type: 'Spirits',
-    proofGallons: '0',
-    proof: '0',                    // Add proof
-    totalProofGallonsLeft: '0',    // Add total left
-    date: 'N/A',
-    fromAccount: 'Storage',
-    toAccount: 'Processing',
-    serialNumber: '250307'         // Add serial number
-  })}>
-    Export Tank Summary
-  </button>
-</div>
+        <button onClick={() => exportTankSummaryToExcel({
+          barrelId: 'GNS250329',
+          type: 'Spirits',
+          proofGallons: '0',
+          proof: '0',
+          totalProofGallonsLeft: '0',
+          date: 'N/A',
+          fromAccount: 'Storage',
+          toAccount: 'Processing',
+          serialNumber: '250307',
+          producingDSP: 'DSP-KY-417'
+          })}>Export Tank Summary</button>
+        </div>
         {report ? (
           <div>
             <h3>{report.month ? `Monthly Report: ${report.month}` : `Daily Report: ${report.date}`}</h3>
