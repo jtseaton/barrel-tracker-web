@@ -128,13 +128,8 @@ const App: React.FC = () => {
       await fetchInventory();
       console.log('Checking tankSummary:', data.tankSummary);
       if (data.tankSummary) {
-        console.log('tankSummary exists, toAccount:', data.tankSummary.toAccount);
-        if (data.tankSummary.toAccount === 'Processing') {
-          console.log('Exporting tank summary:', data.tankSummary);
-          exportTankSummaryToExcel(data.tankSummary);
-        } else {
-          console.log('Not exporting - toAccount is not Processing:', data.tankSummary.toAccount);
-        }
+        console.log('tankSummary exists, forcing export:', data.tankSummary);
+        exportTankSummaryToExcel(data.tankSummary); // Force export for now
       } else {
         console.log('No tankSummary in response');
       }
@@ -145,6 +140,7 @@ const App: React.FC = () => {
       alert('Failed to move item: ' + error.message);
     }
   };
+
   const fetchMonthlyReport = async () => {
     console.log('Fetching monthly report for:', reportMonth);
     try {
