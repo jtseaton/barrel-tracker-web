@@ -135,11 +135,12 @@ app.post('/api/move', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           // Insert moved amount into toAccount
-          const newBarrelId = toAccount === 'Processing' ? `${barrelId}-PROC-${moveDate.replace(/-/g, '')}` : barrelId;
+          const newBarrelId = barrelId; // Keep original for other accounts
+          const batchId = toAccount === 'Processing' ? `${barrelId}-BATCH-${moveDate.replace(/-/g, '')}` : null;
           db.run(
             `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [newBarrelId, toAccount, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.source, row.dspNumber],
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [batchId || newBarrelId, toAccount, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.source, row.dspNumber],
             (err) => {
               if (err) {
                 console.error('Insert Moved Error:', err);
@@ -178,7 +179,7 @@ app.post('/api/move', (req, res) => {
                         producingDSP: row.source || row.dspNumber || OUR_DSP
                       };
                       console.log('Sending response with tankSummary:', tankSummary);
-                      res.json({ message: 'Item moved', barrelId: newBarrelId, tankSummary });
+                      res.json({ message: 'Item moved', barrelId: newBarrelId, batchId, tankSummary });
                     }
                   );
                 }
@@ -192,11 +193,10 @@ app.post('/api/move', (req, res) => {
 });
 
 app.post('/api/package', (req, res) => {
-  const { barrelId, product, proofGallons, toAccount, date } = req.body;
-  console.log('Received package request:', { barrelId, product, proofGallons, toAccount });
+  const { batchId, product, proofGallons, targetProof, waterVolume, bottleCount, toAccount, date } = req.body;
+  console.log('Received package request:', req.body);
 
-  db.get('SELECT * FROM inventory WHERE barrelId = ? AND account = "Processing"', [barrelId], (err, row) => {
-    if (err) {
+  db.get('SELECT * FROM inventory WHERE barrelId = ? AND account = "Processing"', [batchId], (err, row) => {    if (err) {
       console.error('Inventory Fetch Error:', err);
       return res.status(500).json({ error: err.message });
     }
@@ -208,25 +208,23 @@ app.post('/api/package', (req, res) => {
     const remainingProofGallons = Number((numExistingProofGallons - numFixedProofGallons).toFixed(2));
     if (remainingProofGallons < 0) return res.status(400).json({ error: 'Insufficient proof gallons' });
 
-    const remainingQuantity = row.type === 'Spirits' ? Number(((remainingProofGallons * 100) / row.proof).toFixed(2)) : Number((row.quantity - numFixedProofGallons).toFixed(2));
-    const packagedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
+    const remainingQuantity = Number(((remainingProofGallons * 100) / row.proof).toFixed(2));
+    const packagedQuantity = Number((fixedProofGallons * 100) / targetProof).toFixed(2);
 
     db.serialize(() => {
-      // Update original barrel (subtract packaged amount)
       db.run(
         `UPDATE inventory SET quantity = ?, proofGallons = ? WHERE barrelId = ? AND account = "Processing"`,
-        [remainingQuantity, remainingProofGallons, barrelId],
+        [remainingQuantity, remainingProofGallons, batchId],
         (err) => {
           if (err) {
             console.error('Update Remaining Error:', err);
             return res.status(500).json({ error: err.message });
           }
-          // Insert packaged product as Finished Goods
           const newBarrelId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}`;
           db.run(
             `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [newBarrelId, toAccount, product, packagedQuantity, row.proof, fixedProofGallons, date, row.source, row.dspNumber],
+            [newBarrelId, toAccount, product, packagedQuantity, targetProof, fixedProofGallons, date, row.source, row.dspNumber],
             (err) => {
               if (err) {
                 console.error('Insert Finished Goods Error:', err);
@@ -246,7 +244,7 @@ app.post('/api/package', (req, res) => {
                   db.run(
                     `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
                      VALUES (?, ?, ?, ?, ?, ?, 'Packaged', ?, ?)`,
-                    [newBarrelId, product, packagedQuantity, row.proof, fixedProofGallons, date, row.dspNumber, toAccount],
+                    [newBarrelId, product, packagedQuantity, targetProof, fixedProofGallons, date, row.dspNumber, toAccount],
                     (err) => {
                       if (err) {
                         console.error('Transaction Insert Error:', err);
@@ -256,16 +254,18 @@ app.post('/api/package', (req, res) => {
                         barrelId: newBarrelId,
                         type: product,
                         proofGallons: fixedProofGallons,
-                        proof: row.proof,
+                        proof: targetProof,
                         totalProofGallonsLeft: remainingProofGallons,
                         date,
                         fromAccount: 'Processing',
                         toAccount,
                         serialNumber,
-                        producingDSP: row.source || row.dspNumber || OUR_DSP
+                        producingDSP: row.source || row.dspNumber || OUR_DSP,
+                        waterVolume,
+                        bottleCount
                       };
                       console.log('Sending response with tankSummary:', tankSummary);
-                      res.json({ message: 'Item packaged', barrelId: newBarrelId, tankSummary });
+                      res.json({ message: 'Item packaged', batchId: newBarrelId, tankSummary });
                     }
                   );
                 }
