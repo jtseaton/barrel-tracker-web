@@ -212,10 +212,11 @@ const App: React.FC = () => {
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
     console.log('Starting exportTankSummaryToExcel with:', tankSummary);
     try {
+      // Data with explicit spacing
       const wsData = [
         [`Tank Summary Report - ${tankSummary.serialNumber}`], // Row 1
         [''], // Row 2: Spacer
-        ['Barrel ID:', tankSummary.barrelId],
+        ['Barrel ID:', tankSummary.barrelId], // Row 3
         ['Date:', tankSummary.date],
         ['Type:', tankSummary.type],
         ['Proof:', Number(tankSummary.proof).toFixed(2)],
@@ -232,42 +233,54 @@ const App: React.FC = () => {
   
       const ws = XLSX.utils.aoa_to_sheet(wsData);
   
-      // Formatting: Highlight labels (yellow background, bold)
+      // Highlighted boxes for labels
       const labelCells = [
         'A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10',
         ...(tankSummary.fromAccount ? ['A11'] : []),
-        'A13', 'A14'
+        'A13', 'A14', 'A15'
       ];
       labelCells.forEach(cell => {
         if (ws[cell]) {
           ws[cell].s = {
             font: { bold: true },
-            fill: { fgColor: { rgb: 'FFFF00' } } // Yellow background
+            fill: { fgColor: { rgb: 'FFFF00' } }, // Yellow background
+            border: {
+              top: { style: 'thin', color: { rgb: '000000' } },
+              bottom: { style: 'thin', color: { rgb: '000000' } },
+              left: { style: 'thin', color: { rgb: '000000' } },
+              right: { style: 'thin', color: { rgb: '000000' } }
+            }
           };
         }
       });
   
-      // Center title
+      // Center and style title
       if (ws['A1']) {
         ws['A1'].s = {
           font: { bold: true },
           fill: { fgColor: { rgb: 'FFFF00' } },
-          alignment: { horizontal: 'center' }
+          alignment: { horizontal: 'center' },
+          border: {
+            top: { style: 'thin', color: { rgb: '000000' } },
+            bottom: { style: 'thin', color: { rgb: '000000' } },
+            left: { style: 'thin', color: { rgb: '000000' } },
+            right: { style: 'thin', color: { rgb: '000000' } }
+          }
         };
       }
   
-      // Full-width perjury statement
-      if (ws['A12']) {
-        ws['A12'].s = {
+      // Perjury statement: Bold, full width
+      if (ws['A13']) {
+        ws['A13'].s = {
           font: { bold: true },
           alignment: { horizontal: 'left', wrapText: true }
         };
       }
   
-      // Column widths
+      // Column widths for readability
       ws['!cols'] = [
-        { wch: 25 }, // Labels
-        { wch: 30 }  // Values
+        { wch: 30 }, // Labels (wider for boxed effect)
+        { wch: 35 }  // Values
       ];
   
       const wb = XLSX.utils.book_new();
