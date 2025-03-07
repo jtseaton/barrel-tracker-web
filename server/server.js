@@ -196,20 +196,24 @@ app.post('/api/package', (req, res) => {
   const { batchId, product, proofGallons, targetProof, waterVolume, bottleCount, toAccount, date } = req.body;
   console.log('Received package request:', req.body);
 
-  db.get('SELECT * FROM inventory WHERE barrelId = ? AND account = "Processing"', [batchId], (err, row) => {    if (err) {
+  db.get('SELECT * FROM inventory WHERE barrelId = ? AND account = "Processing"', [batchId], (err, row) => {
+    if (err) {
       console.error('Inventory Fetch Error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!row) return res.status(404).json({ error: 'Barrel not found in Processing' });
+    console.log('Found barrel in Processing:', row);
 
     const fixedProofGallons = Number(proofGallons).toFixed(2);
     const numExistingProofGallons = Number(row.proofGallons);
     const numFixedProofGallons = Number(fixedProofGallons);
     const remainingProofGallons = Number((numExistingProofGallons - numFixedProofGallons).toFixed(2));
     if (remainingProofGallons < 0) return res.status(400).json({ error: 'Insufficient proof gallons' });
+    console.log('Calculated values:', { fixedProofGallons, numExistingProofGallons, remainingProofGallons });
 
     const remainingQuantity = Number(((remainingProofGallons * 100) / row.proof).toFixed(2));
     const packagedQuantity = Number((fixedProofGallons * 100) / targetProof).toFixed(2);
+    console.log('Quantities:', { remainingQuantity, packagedQuantity });
 
     db.serialize(() => {
       db.run(
@@ -220,16 +224,18 @@ app.post('/api/package', (req, res) => {
             console.error('Update Remaining Error:', err);
             return res.status(500).json({ error: err.message });
           }
+          console.log('Updated remaining inventory for batchId:', batchId);
           const newBarrelId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}`;
           db.run(
             `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [newBarrelId, toAccount, product, packagedQuantity, targetProof, fixedProofGallons, date, row.source, row.dspNumber],
+            [newBarrelId, toAccount, product, packagedQuantity, targetProof, fixedProofGallons, date, row.source || 'Unknown', row.dspNumber || OUR_DSP],
             (err) => {
               if (err) {
                 console.error('Insert Finished Goods Error:', err);
                 return res.status(500).json({ error: err.message });
               }
+              console.log('Inserted new barrel:', newBarrelId);
               const dateStr = date.replace(/-/g, '').slice(2);
               db.get(
                 `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Packaged'`,
