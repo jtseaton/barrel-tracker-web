@@ -215,5 +215,25 @@ app.get('/api/report/monthly', (req, res) => {
   );
 });
 
+app.get('/api/report/daily', (req, res) => {
+  const { date } = req.query;
+  console.log('Fetching daily report for:', date);
+  db.all(
+    `SELECT * FROM transactions WHERE date = ?`,
+    [date],
+    (err, rows) => {
+      if (err) {
+        console.error('Daily Report Error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      const totalReceived = rows.reduce((sum, r) => sum + (r.action === 'Received' ? r.proofGallons : 0), 0);
+      const totalProcessed = rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.barrelId === null ? r.proofGallons : 0), 0);
+      const totalMoved = rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.barrelId !== null ? r.proofGallons : 0), 0);
+      const totalRemoved = rows.reduce((sum, r) => sum + (r.action === 'Removed' ? r.proofGallons : 0), 0);
+      res.json({ date, totalReceived, totalProcessed, totalMoved, totalRemoved, transactions: rows });
+    }
+  );
+});
+
 // Other endpoints unchanged...
 app.listen(process.env.PORT || 3000);
