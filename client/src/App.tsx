@@ -106,40 +106,41 @@ const App: React.FC = () => {
   };
 
   const handleMove = async () => {
-    if (!moveForm.barrelId || !moveForm.proofGallons) {
-      console.log('Invalid move request: missing barrelId or proofGallons');
-      alert('Please fill in Barrel ID and Proof Gallons.');
-      return;
-    }
+  if (!moveForm.barrelId || !moveForm.proofGallons) {
+    console.log('Invalid move request: missing barrelId or proofGallons');
+    alert('Please fill in Barrel ID and Proof Gallons.');
+    return;
+  }
 
-    console.log('Sending move request:', moveForm);
-    try {
-      const res = await fetch('/api/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...moveForm,
-          proofGallons: parseFloat(moveForm.proofGallons)
-        })
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      console.log('Move response:', data);
-      await fetchInventory();
-      console.log('Checking tankSummary:', data.tankSummary);
-      if (data.tankSummary) {
-        console.log('tankSummary exists, forcing export:', data.tankSummary);
-        exportTankSummaryToExcel(data.tankSummary); // Force export for now
-      } else {
-        console.log('No tankSummary in response');
-      }
-      setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Move error:', error);
-      alert('Failed to move item: ' + error.message);
+  console.log('Sending move request:', moveForm);
+  try {
+    const res = await fetch('/api/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...moveForm,
+        proofGallons: parseFloat(moveForm.proofGallons)
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+    console.log('Move response:', data);
+    await fetchInventory();
+    console.log('Checking tankSummary:', data.tankSummary);
+    if (data.tankSummary) {
+      console.log('tankSummary exists, forcing export:', data.tankSummary);
+      exportTankSummaryToExcel(data.tankSummary);
+    } else {
+      console.log('No tankSummary in response');
+      alert('No tank summary received from server');
     }
-  };
+    setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error('Move error:', error);
+    alert('Failed to move item: ' + error.message);
+  }
+};
 
   const fetchMonthlyReport = async () => {
     console.log('Fetching monthly report for:', reportMonth);
