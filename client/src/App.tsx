@@ -20,6 +20,7 @@ interface Transaction {
   type: string;
   date: string;
   barrelId?: string;
+  toAccount?: string;
 }
 
 interface ReportData {
@@ -29,6 +30,7 @@ interface ReportData {
   totalProcessed: number;
   totalMoved?: number;
   totalRemoved?: number;
+  byType?: { [key: string]: number };
   transactions?: Transaction[];
 }
 
@@ -62,7 +64,7 @@ const App: React.FC = () => {
       const res = await fetch('/api/inventory');
       if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
       const data = await res.json();
-      console.log('Fetched inventory:', data); // Debug log
+      console.log('Fetched inventory:', data);
       setInventory(data);
     } catch (err: unknown) {
       const error = err as Error;
@@ -85,7 +87,7 @@ const App: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Receive response:', data);
-      await fetchInventory(); // Refresh inventory
+      await fetchInventory();
       setReceiveForm({ ...receiveForm, barrelId: '', quantity: '', proof: '', source: '', receivedDate: new Date().toISOString().split('T')[0] });
     } catch (err: unknown) {
       const error = err as Error;
@@ -108,7 +110,10 @@ const App: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Move response:', data);
-      await fetchInventory(); // Refresh inventory after move
+      await fetchInventory();
+      if (moveForm.toAccount === 'Processing') {
+        exportTankSummaryToExcel(data.tankSummary);
+      }
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
     } catch (err: unknown) {
       const error = err as Error;
@@ -155,14 +160,18 @@ const App: React.FC = () => {
       ['Total Moved (PG)', (report.totalMoved || 0).toFixed(2)],
       ['Total Removed (PG)', (report.totalRemoved || 0).toFixed(2)],
       [''],
+      ['Processed by Type (PG)'],
+      ...(report.byType ? Object.entries(report.byType).map(([type, pg]) => [type, Number(pg).toFixed(2)]) : []),
+      [''],
       ['Transactions'],
-      ['Action', 'Proof Gallons', 'Type', 'Date', 'Barrel ID'],
+      ['Action', 'Proof Gallons', 'Type', 'Date', 'Barrel ID', 'To Account'],
       ...(report.transactions || []).map((t: Transaction) => [
         t.action,
         Number(t.proofGallons).toFixed(2),
         t.type,
         t.date,
-        t.barrelId || 'N/A'
+        t.barrelId || 'N/A',
+        t.toAccount || 'N/A'
       ])
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -171,34 +180,20 @@ const App: React.FC = () => {
     XLSX.writeFile(wb, `Monthly_Report_${report.month}.xlsx`);
   };
 
-  const exportTankSummaryToExcel = async (barrelId: string) => {
-    try {
-      const response = await fetch(`/api/report/tank-summary?barrelId=${barrelId}`);
-      if (!response.ok) throw new Error(`Failed to fetch tank summary: ${response.status}`);
-      const data = await response.json();
-      const wsData = [
-        ['Tank Summary Report', barrelId],
-        [''],
-        ['Current Quantity (WG)', Number(data.currentQuantity).toFixed(2)],
-        ['Current Proof Gallons', Number(data.currentProofGallons).toFixed(2)],
-        [''],
-        ['Transactions'],
-        ['Action', 'Proof Gallons', 'Type', 'Date'],
-        ...(data.transactions || []).map((t: Transaction) => [
-          t.action,
-          Number(t.proofGallons).toFixed(2),
-          t.type,
-          t.date
-        ])
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-      XLSX.writeFile(wb, `${barrelId}_Tank_Summary.xlsx`);
-    } catch (err: unknown) {
-      console.error('Tank summary export error:', err);
-      alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    }
+  const exportTankSummaryToExcel = (tankSummary: { barrelId: string; type: string; proofGallons: string; date: string; fromAccount: string; toAccount: string }) => {
+    const wsData = [
+      ['Tank Summary Report', tankSummary.barrelId],
+      [''],
+      ['Type', tankSummary.type],
+      ['Proof Gallons Moved', Number(tankSummary.proofGallons).toFixed(2)],
+      ['Date', tankSummary.date],
+      ['From Account', tankSummary.fromAccount],
+      ['To Account', tankSummary.toAccount]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+    XLSX.writeFile(wb, `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`);
   };
 
   return (
@@ -289,7 +284,7 @@ const App: React.FC = () => {
           <button onClick={fetchDailyReport}>Fetch Daily Report</button>
         </div>
         <div>
-          <button onClick={() => exportTankSummaryToExcel('GNS250329')}>Export Tank Summary</button>
+          <button onClick={() => exportTankSummaryToExcel({ barrelId: 'GNS250329', type: 'Spirits', proofGallons: '0', date: 'N/A', fromAccount: 'Storage', toAccount: 'Processing' })}>Export Tank Summary</button>
         </div>
         {report ? (
           <div>
@@ -298,10 +293,20 @@ const App: React.FC = () => {
             <p>Total Processed: {Number(report.totalProcessed).toFixed(2)} PG</p>
             {report.totalMoved !== undefined && <p>Total Moved: {Number(report.totalMoved).toFixed(2)} PG</p>}
             {report.totalRemoved !== undefined && <p>Total Removed: {Number(report.totalRemoved).toFixed(2)} PG</p>}
+            {report.byType && (
+              <div>
+                <h4>Processed by Type</h4>
+                <ul>
+                  {Object.entries(report.byType).map(([type, pg]) => (
+                    <li key={type}>{`${type}: ${Number(pg).toFixed(2)} PG`}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {report.transactions && (
               <ul>
                 {report.transactions.map((t: Transaction, i) => (
-                  <li key={i}>{`${t.action}: ${Number(t.proofGallons).toFixed(2)} PG (${t.type}) on ${t.date} ${t.barrelId ? `(Barrel: ${t.barrelId})` : ''}`}</li>
+                  <li key={i}>{`${t.action}: ${Number(t.proofGallons).toFixed(2)} PG (${t.type}) on ${t.date} ${t.barrelId ? `(Barrel: ${t.barrelId})` : ''} ${t.toAccount ? `to ${t.toAccount}` : ''}`}</li>
                 ))}
               </ul>
             )}
