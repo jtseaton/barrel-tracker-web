@@ -64,11 +64,16 @@ const App: React.FC = () => {
     toAccount: 'Storage',
     proofGallons: ''
   });
+  const [packageForm, setPackageForm] = useState({
+    barrelId: '',
+    product: 'Old Black Bear Vodka',
+    proofGallons: ''
+  });
   const [report, setReport] = useState<ReportData | null>(null);
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeSection, setActiveSection] = useState('Home');
-  const [menuOpen, setMenuOpen] = useState(false); // New: Menu toggle
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     fetchInventory();
@@ -79,7 +84,7 @@ const App: React.FC = () => {
       const res = await fetch('/api/inventory');
       if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
       const data = await res.json();
-      console.log('Updated inventory after move:', data);
+      console.log('Updated inventory:', data);
       setInventory(data);
     } catch (err: unknown) {
       const error = err as Error;
@@ -144,6 +149,41 @@ const App: React.FC = () => {
       const error = err as Error;
       console.error('Move error:', error);
       alert('Failed to move item: ' + error.message);
+    }
+  };
+
+  const handlePackage = async () => {
+    if (!packageForm.barrelId || !packageForm.proofGallons) {
+      console.log('Invalid package request: missing barrelId or proofGallons');
+      alert('Please fill in Barrel ID and Proof Gallons.');
+      return;
+    }
+    console.log('Sending package request:', packageForm);
+    try {
+      const res = await fetch('/api/package', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          barrelId: packageForm.barrelId,
+          product: packageForm.product,
+          proofGallons: parseFloat(packageForm.proofGallons),
+          toAccount: 'Finished Goods',
+          date: new Date().toISOString().split('T')[0]
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      console.log('Package response:', data);
+      await fetchInventory();
+      if (data.tankSummary) {
+        console.log('Exporting tank summary for package:', data.tankSummary);
+        exportTankSummaryToExcel(data.tankSummary);
+      }
+      setPackageForm({ barrelId: '', product: 'Old Black Bear Vodka', proofGallons: '' });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('Package error:', error);
+      alert('Failed to package item: ' + error.message);
     }
   };
 
@@ -326,6 +366,7 @@ const App: React.FC = () => {
               <input type="number" placeholder="Proof Gallons to Move" value={moveForm.proofGallons} onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })} step="0.01" />
               <button onClick={handleMove}>Move</button>
             </div>
+            <h3>All Inventory</h3>
             <table>
               <thead>
                 <tr>
@@ -345,6 +386,64 @@ const App: React.FC = () => {
                   <tr key={item.barrelId}>
                     <td>{item.barrelId}</td>
                     <td>{item.account}</td>
+                    <td>{item.type}</td>
+                    <td>{item.quantity !== null ? Number(item.quantity).toFixed(2) : 'N/A'}</td>
+                    <td>{item.proof !== null ? Number(item.proof).toFixed(2) : 'N/A'}</td>
+                    <td>{Number(item.proofGallons).toFixed(2)}</td>
+                    <td>{item.receivedDate || 'N/A'}</td>
+                    <td>{item.source || 'N/A'}</td>
+                    <td>{item.dspNumber || 'N/A'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      case 'Processing':
+        return (
+          <div>
+            <h2>Processing</h2>
+            <div>
+              <h3>Package Product</h3>
+              <input
+                type="text"
+                placeholder="Barrel ID in Processing"
+                value={packageForm.barrelId}
+                onChange={e => setPackageForm({ ...packageForm, barrelId: e.target.value })}
+              />
+              <select value={packageForm.product} onChange={e => setPackageForm({ ...packageForm, product: e.target.value })}>
+                <option value="Old Black Bear Vodka">Old Black Bear Vodka (Vodka)</option>
+                <option value="Old Black Bear Gin">Old Black Bear Gin (Gin)</option>
+                <option value="Old Black Bear Rum">Old Black Bear Rum (Rum)</option>
+                <option value="Shine-O-Mite">Shine-O-Mite (Moonshine)</option>
+              </select>
+              <input
+                type="number"
+                placeholder="Proof Gallons to Package"
+                value={packageForm.proofGallons}
+                onChange={e => setPackageForm({ ...packageForm, proofGallons: e.target.value })}
+                step="0.01"
+              />
+              <button onClick={handlePackage}>Complete Packaging</button>
+            </div>
+            <h3>Processing Inventory</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Barrel ID</th>
+                  <th>Type</th>
+                  <th>Quantity (WG)</th>
+                  <th>Proof</th>
+                  <th>Proof Gallons</th>
+                  <th>Date</th>
+                  <th>Source</th>
+                  <th>DSP Number</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventory.filter(item => item.account === 'Processing').map(item => (
+                  <tr key={item.barrelId}>
+                    <td>{item.barrelId}</td>
                     <td>{item.type}</td>
                     <td>{item.quantity !== null ? Number(item.quantity).toFixed(2) : 'N/A'}</td>
                     <td>{item.proof !== null ? Number(item.proof).toFixed(2) : 'N/A'}</td>
@@ -436,6 +535,7 @@ const App: React.FC = () => {
           <li><button onClick={() => { setActiveSection('Home'); setMenuOpen(false); }} className={activeSection === 'Home' ? 'active' : ''}>Home</button></li>
           <li><button onClick={() => { setActiveSection('Production'); setMenuOpen(false); }} className={activeSection === 'Production' ? 'active' : ''}>Production</button></li>
           <li><button onClick={() => { setActiveSection('Inventory'); setMenuOpen(false); }} className={activeSection === 'Inventory' ? 'active' : ''}>Inventory</button></li>
+          <li><button onClick={() => { setActiveSection('Processing'); setMenuOpen(false); }} className={activeSection === 'Processing' ? 'active' : ''}>Processing</button></li>
           <li><button onClick={() => { setActiveSection('Sales & Distribution'); setMenuOpen(false); }} className={activeSection === 'Sales & Distribution' ? 'active' : ''}>Sales & Distribution</button></li>
           <li><button onClick={() => { setActiveSection('Users'); setMenuOpen(false); }} className={activeSection === 'Users' ? 'active' : ''}>Users</button></li>
           <li><button onClick={() => { setActiveSection('Reporting'); setMenuOpen(false); }} className={activeSection === 'Reporting' ? 'active' : ''}>Reporting</button></li>
