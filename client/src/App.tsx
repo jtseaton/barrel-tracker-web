@@ -45,6 +45,8 @@ interface TankSummary {
   toAccount: string;
   serialNumber: string;
   producingDSP: string;
+  waterVolume?: string;
+  bottleCount?: number;
 }
 
 const App: React.FC = () => {
@@ -67,7 +69,8 @@ const App: React.FC = () => {
   const [packageForm, setPackageForm] = useState({
     barrelId: '',
     product: 'Old Black Bear Vodka',
-    proofGallons: ''
+    proofGallons: '',
+    targetProof: '80'
   });
   const [report, setReport] = useState<ReportData | null>(null);
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -153,12 +156,32 @@ const App: React.FC = () => {
   };
 
   const handlePackage = async () => {
-    if (!packageForm.barrelId || !packageForm.proofGallons) {
-      console.log('Invalid package request: missing barrelId or proofGallons');
-      alert('Please fill in Barrel ID and Proof Gallons.');
+    if (!packageForm.barrelId || !packageForm.proofGallons || !packageForm.targetProof) {
+      console.log('Invalid package request: missing fields');
+      alert('Please fill in Barrel ID, Proof Gallons, and Target Proof.');
       return;
     }
-    console.log('Sending package request:', packageForm);
+    const sourceProofGallons = parseFloat(packageForm.proofGallons);
+    const targetProof = parseFloat(packageForm.targetProof);
+    const bottleSizeGal = 0.198129; // 750ml in gallons
+
+    // Fetch source barrel to get proof
+    const sourceItem = inventory.find(item => item.barrelId === packageForm.barrelId && item.account === 'Processing');
+    if (!sourceItem) {
+      alert('Barrel not found in Processing!');
+      return;
+    }
+    const sourceProof = sourceItem.proof;
+    const sourceVolume = sourceProofGallons / (sourceProof / 100); // Gallons
+    const targetVolume = sourceProofGallons / (targetProof / 100); // Gallons before shrinkage
+    const waterVolume = targetVolume - sourceVolume;
+    const shrinkageFactor = 0.98; // ~2% shrinkage
+    const finalVolume = targetVolume * shrinkageFactor;
+    const bottleCount = Math.floor(finalVolume / bottleSizeGal);
+    const finalProofGallons = bottleCount * bottleSizeGal * (targetProof / 100);
+
+    console.log('Packaging calc:', { sourceProofGallons, sourceProof, targetProof, sourceVolume, targetVolume, waterVolume, finalVolume, bottleCount, finalProofGallons });
+
     try {
       const res = await fetch('/api/package', {
         method: 'POST',
@@ -166,7 +189,10 @@ const App: React.FC = () => {
         body: JSON.stringify({
           barrelId: packageForm.barrelId,
           product: packageForm.product,
-          proofGallons: parseFloat(packageForm.proofGallons),
+          proofGallons: finalProofGallons.toFixed(2),
+          targetProof: targetProof.toFixed(2),
+          waterVolume: waterVolume.toFixed(2),
+          bottleCount,
           toAccount: 'Finished Goods',
           date: new Date().toISOString().split('T')[0]
         })
@@ -179,7 +205,7 @@ const App: React.FC = () => {
         console.log('Exporting tank summary for package:', data.tankSummary);
         exportTankSummaryToExcel(data.tankSummary);
       }
-      setPackageForm({ barrelId: '', product: 'Old Black Bear Vodka', proofGallons: '' });
+      setPackageForm({ barrelId: '', product: 'Old Black Bear Vodka', proofGallons: '', targetProof: '80' });
     } catch (err: unknown) {
       const error = err as Error;
       console.error('Package error:', error);
@@ -258,6 +284,8 @@ const App: React.FC = () => {
         ['Producing DSP:', tankSummary.producingDSP],
         ['To Account:', tankSummary.toAccount],
         ...(tankSummary.fromAccount ? [['From Account:', tankSummary.fromAccount]] : []),
+        ...(tankSummary.waterVolume ? [['Water Added (gal):', tankSummary.waterVolume]] : []),
+        ...(tankSummary.bottleCount ? [['Bottle Count (750ml):', tankSummary.bottleCount]] : []),
         [''],
         [''],
         ['I certify under penalty of perjury that the information provided is true and correct.'],
@@ -268,7 +296,9 @@ const App: React.FC = () => {
       const labelCells = [
         'A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10',
         ...(tankSummary.fromAccount ? ['A11'] : []),
-        'A14', 'A15'
+        ...(tankSummary.waterVolume ? ['A12'] : []),
+        ...(tankSummary.bottleCount ? ['A13'] : []),
+        'A15', 'A16'
       ];
       labelCells.forEach(cell => {
         if (ws[cell]) {
@@ -297,8 +327,8 @@ const App: React.FC = () => {
           }
         };
       }
-      if (ws['A14']) {
-        ws['A14'].s = {
+      if (ws['A15']) {
+        ws['A15'].s = {
           font: { bold: true },
           alignment: { horizontal: 'left', wrapText: true }
         };
@@ -422,6 +452,13 @@ const App: React.FC = () => {
                 placeholder="Proof Gallons to Package"
                 value={packageForm.proofGallons}
                 onChange={e => setPackageForm({ ...packageForm, proofGallons: e.target.value })}
+                step="0.01"
+              />
+              <input
+                type="number"
+                placeholder="Target Proof (e.g., 80)"
+                value={packageForm.targetProof}
+                onChange={e => setPackageForm({ ...packageForm, targetProof: e.target.value })}
                 step="0.01"
               />
               <button onClick={handlePackage}>Complete Packaging</button>
