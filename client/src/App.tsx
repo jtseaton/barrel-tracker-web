@@ -67,7 +67,8 @@ const App: React.FC = () => {
   const [report, setReport] = useState<ReportData | null>(null);
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
-  const [activeSection, setActiveSection] = useState('Home'); // New: Menu state
+  const [activeSection, setActiveSection] = useState('Home');
+  const [menuOpen, setMenuOpen] = useState(false); // New: Menu toggle
 
   useEffect(() => {
     fetchInventory();
@@ -285,6 +286,46 @@ const App: React.FC = () => {
         return (
           <div>
             <h2>Inventory</h2>
+            <div>
+              <h3>Receive Inventory</h3>
+              <input
+                type="text"
+                placeholder="Barrel ID (e.g., GNS250329)"
+                value={receiveForm.barrelId}
+                onChange={e => setReceiveForm({ ...receiveForm, barrelId: e.target.value })}
+              />
+              <select value={receiveForm.account} onChange={e => setReceiveForm({ ...receiveForm, account: e.target.value })}>
+                <option value="Production">Production</option>
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
+              </select>
+              <select value={receiveForm.type} onChange={e => setReceiveForm({ ...receiveForm, type: e.target.value })}>
+                <option value="Cane Sugar">Cane Sugar</option>
+                <option value="Corn Sugar">Corn Sugar</option>
+                <option value="Agave Syrup">Agave Syrup</option>
+                <option value="Flaked Corn">Flaked Corn</option>
+                <option value="Rye Barley">Rye Barley</option>
+                <option value="Malted Barley">Malted Barley</option>
+                <option value="Spirits">Spirits</option>
+              </select>
+              <input type="number" placeholder="Quantity (WG)" value={receiveForm.quantity} onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })} step="0.01" />
+              <input type="number" placeholder="Proof (if Spirits)" value={receiveForm.proof} onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })} step="0.01" />
+              <input type="text" placeholder="Source" value={receiveForm.source} onChange={e => setReceiveForm({ ...receiveForm, source: e.target.value })} />
+              <input type="text" placeholder="DSP Number" value={receiveForm.dspNumber} onChange={e => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })} />
+              <input type="date" value={receiveForm.receivedDate} onChange={e => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })} />
+              <button onClick={handleReceive}>Receive</button>
+            </div>
+            <div>
+              <h3>Move Inventory</h3>
+              <input type="text" placeholder="Barrel ID (e.g., GNS250329)" value={moveForm.barrelId} onChange={e => setMoveForm({ ...moveForm, barrelId: e.target.value })} />
+              <select value={moveForm.toAccount} onChange={e => setMoveForm({ ...moveForm, toAccount: e.target.value })}>
+                <option value="Production">Production</option>
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
+              </select>
+              <input type="number" placeholder="Proof Gallons to Move" value={moveForm.proofGallons} onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })} step="0.01" />
+              <button onClick={handleMove}>Move</button>
+            </div>
             <table>
               <thead>
                 <tr>
@@ -387,58 +428,21 @@ const App: React.FC = () => {
 
   return (
     <div className="App">
-      <nav className="menu">
+      <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
+        ☰
+      </button>
+      <nav className={`menu ${menuOpen ? 'open' : ''}`}>
         <ul>
-          <li><button onClick={() => setActiveSection('Home')} className={activeSection === 'Home' ? 'active' : ''}>Home</button></li>
-          <li><button onClick={() => setActiveSection('Production')} className={activeSection === 'Production' ? 'active' : ''}>Production</button></li>
-          <li><button onClick={() => setActiveSection('Inventory')} className={activeSection === 'Inventory' ? 'active' : ''}>Inventory</button></li>
-          <li><button onClick={() => setActiveSection('Sales & Distribution')} className={activeSection === 'Sales & Distribution' ? 'active' : ''}>Sales & Distribution</button></li>
-          <li><button onClick={() => setActiveSection('Users')} className={activeSection === 'Users' ? 'active' : ''}>Users</button></li>
-          <li><button onClick={() => setActiveSection('Reporting')} className={activeSection === 'Reporting' ? 'active' : ''}>Reporting</button></li>
+          <li><button onClick={() => { setActiveSection('Home'); setMenuOpen(false); }} className={activeSection === 'Home' ? 'active' : ''}>Home</button></li>
+          <li><button onClick={() => { setActiveSection('Production'); setMenuOpen(false); }} className={activeSection === 'Production' ? 'active' : ''}>Production</button></li>
+          <li><button onClick={() => { setActiveSection('Inventory'); setMenuOpen(false); }} className={activeSection === 'Inventory' ? 'active' : ''}>Inventory</button></li>
+          <li><button onClick={() => { setActiveSection('Sales & Distribution'); setMenuOpen(false); }} className={activeSection === 'Sales & Distribution' ? 'active' : ''}>Sales & Distribution</button></li>
+          <li><button onClick={() => { setActiveSection('Users'); setMenuOpen(false); }} className={activeSection === 'Users' ? 'active' : ''}>Users</button></li>
+          <li><button onClick={() => { setActiveSection('Reporting'); setMenuOpen(false); }} className={activeSection === 'Reporting' ? 'active' : ''}>Reporting</button></li>
         </ul>
       </nav>
       <div className="content">
         <h1>Barrel Tracker</h1>
-        <div>
-          <h2>Receive Inventory</h2>
-          <input
-            type="text"
-            placeholder="Barrel ID (e.g., GNS250329)"
-            value={receiveForm.barrelId}
-            onChange={e => setReceiveForm({ ...receiveForm, barrelId: e.target.value })}
-          />
-          <select value={receiveForm.account} onChange={e => setReceiveForm({ ...receiveForm, account: e.target.value })}>
-            <option value="Production">Production</option>
-            <option value="Storage">Storage</option>
-            <option value="Processing">Processing</option>
-          </select>
-          <select value={receiveForm.type} onChange={e => setReceiveForm({ ...receiveForm, type: e.target.value })}>
-            <option value="Cane Sugar">Cane Sugar</option>
-            <option value="Corn Sugar">Corn Sugar</option>
-            <option value="Agave Syrup">Agave Syrup</option>
-            <option value="Flaked Corn">Flaked Corn</option>
-            <option value="Rye Barley">Rye Barley</option>
-            <option value="Malted Barley">Malted Barley</option>
-            <option value="Spirits">Spirits</option>
-          </select>
-          <input type="number" placeholder="Quantity (WG)" value={receiveForm.quantity} onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })} step="0.01" />
-          <input type="number" placeholder="Proof (if Spirits)" value={receiveForm.proof} onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })} step="0.01" />
-          <input type="text" placeholder="Source" value={receiveForm.source} onChange={e => setReceiveForm({ ...receiveForm, source: e.target.value })} />
-          <input type="text" placeholder="DSP Number" value={receiveForm.dspNumber} onChange={e => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })} />
-          <input type="date" value={receiveForm.receivedDate} onChange={e => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })} />
-          <button onClick={handleReceive}>Receive</button>
-        </div>
-        <div>
-          <h2>Move Inventory</h2>
-          <input type="text" placeholder="Barrel ID (e.g., GNS250329)" value={moveForm.barrelId} onChange={e => setMoveForm({ ...moveForm, barrelId: e.target.value })} />
-          <select value={moveForm.toAccount} onChange={e => setMoveForm({ ...moveForm, toAccount: e.target.value })}>
-            <option value="Production">Production</option>
-            <option value="Storage">Storage</option>
-            <option value="Processing">Processing</option>
-          </select>
-          <input type="number" placeholder="Proof Gallons to Move" value={moveForm.proofGallons} onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })} step="0.01" />
-          <button onClick={handleMove}>Move</button>
-        </div>
         {renderSection()}
       </div>
     </div>
