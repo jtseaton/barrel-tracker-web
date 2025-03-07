@@ -14,6 +14,14 @@ interface InventoryItem {
   dspNumber: string;
 }
 
+interface Transaction {
+  action: string;
+  proofGallons: number;
+  type: string;
+  date: string;
+  barrelId?: string;
+}
+
 interface ReportData {
   month?: string;
   date?: string;
@@ -21,7 +29,7 @@ interface ReportData {
   totalProcessed: number;
   totalMoved?: number;
   totalRemoved?: number;
-  transactions?: { action: string; proofGallons: number; type: string; date: string; barrelId?: string }[];
+  transactions?: Transaction[];
 }
 
 const App: React.FC = () => {
@@ -139,19 +147,55 @@ const App: React.FC = () => {
     const wsData = [
       ['TTB F 5110.40 - Monthly Report', report.month],
       [''],
-      ['Total Received (PG)', report.totalReceived],
-      ['Total Processed (PG)', report.totalProcessed],
-      ['Total Moved (PG)', report.totalMoved || 0],
-      ['Total Removed (PG)', report.totalRemoved || 0],
+      ['Total Received (PG)', report.totalReceived.toFixed(2)],
+      ['Total Processed (PG)', report.totalProcessed.toFixed(2)],
+      ['Total Moved (PG)', (report.totalMoved || 0).toFixed(2)],
+      ['Total Removed (PG)', (report.totalRemoved || 0).toFixed(2)],
       [''],
       ['Transactions'],
       ['Action', 'Proof Gallons', 'Type', 'Date', 'Barrel ID'],
-      ...(report.transactions || []).map(t => [t.action, t.proofGallons, t.type, t.date, t.barrelId || 'N/A'])
+      ...(report.transactions || []).map((t: Transaction) => [
+        t.action,
+        Number(t.proofGallons).toFixed(2),
+        t.type,
+        t.date,
+        t.barrelId || 'N/A'
+      ])
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Monthly Report');
     XLSX.writeFile(wb, `Monthly_Report_${report.month}.xlsx`);
+  };
+
+  const exportTankSummaryToExcel = async (barrelId: string) => {
+    try {
+      const response = await fetch(`/api/report/tank-summary?barrelId=${barrelId}`);
+      if (!response.ok) throw new Error(`Failed to fetch tank summary: ${response.status}`);
+      const data = await response.json();
+      const wsData = [
+        ['Tank Summary Report', barrelId],
+        [''],
+        ['Current Quantity (WG)', Number(data.currentQuantity).toFixed(2)],
+        ['Current Proof Gallons', Number(data.currentProofGallons).toFixed(2)],
+        [''],
+        ['Transactions'],
+        ['Action', 'Proof Gallons', 'Type', 'Date'],
+        ...(data.transactions || []).map((t: Transaction) => [
+          t.action,
+          Number(t.proofGallons).toFixed(2),
+          t.type,
+          t.date
+        ])
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+      XLSX.writeFile(wb, `${barrelId}_Tank_Summary.xlsx`);
+    } catch (err: unknown) {
+      console.error('Tank summary export error:', err);
+      alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
   };
 
   return (
@@ -179,8 +223,8 @@ const App: React.FC = () => {
           <option value="Malted Barley">Malted Barley</option>
           <option value="Spirits">Spirits</option>
         </select>
-        <input type="number" placeholder="Quantity (WG)" value={receiveForm.quantity} onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })} />
-        <input type="number" placeholder="Proof (if Spirits)" value={receiveForm.proof} onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })} />
+        <input type="number" placeholder="Quantity (WG)" value={receiveForm.quantity} onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })} step="0.01" />
+        <input type="number" placeholder="Proof (if Spirits)" value={receiveForm.proof} onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })} step="0.01" />
         <input type="text" placeholder="Source" value={receiveForm.source} onChange={e => setReceiveForm({ ...receiveForm, source: e.target.value })} />
         <input type="text" placeholder="DSP Number" value={receiveForm.dspNumber} onChange={e => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })} />
         <input type="date" value={receiveForm.receivedDate} onChange={e => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })} />
@@ -194,42 +238,42 @@ const App: React.FC = () => {
           <option value="Storage">Storage</option>
           <option value="Processing">Processing</option>
         </select>
-        <input type="number" placeholder="Proof Gallons to Move" value={moveForm.proofGallons} onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })} />
+        <input type="number" placeholder="Proof Gallons to Move" value={moveForm.proofGallons} onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })} step="0.01" />
         <button onClick={handleMove}>Move</button>
       </div>
       <div>
-  <h2>Inventory</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Barrel ID</th>
-        <th>Account</th>
-        <th>Type</th>
-        <th>Quantity (WG)</th>
-        <th>Proof</th>
-        <th>Proof Gallons</th>
-        <th>Date</th>
-        <th>Source</th>
-        <th>DSP Number</th>
-      </tr>
-    </thead>
-    <tbody>
-      {inventory.map(item => (
-        <tr key={item.barrelId}>
-          <td>{item.barrelId}</td>
-          <td>{item.account}</td>
-          <td>{item.type}</td>
-          <td>{item.quantity !== null ? item.quantity : 'N/A'}</td>
-          <td>{item.proof !== null ? item.proof : 'N/A'}</td>
-          <td>{item.proofGallons}</td>
-          <td>{item.receivedDate || 'N/A'}</td>
-          <td>{item.source || 'N/A'}</td>
-          <td>{item.dspNumber || 'N/A'}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+        <h2>Inventory</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Barrel ID</th>
+              <th>Account</th>
+              <th>Type</th>
+              <th>Quantity (WG)</th>
+              <th>Proof</th>
+              <th>Proof Gallons</th>
+              <th>Date</th>
+              <th>Source</th>
+              <th>DSP Number</th>
+            </tr>
+          </thead>
+          <tbody>
+            {inventory.map(item => (
+              <tr key={item.barrelId}>
+                <td>{item.barrelId}</td>
+                <td>{item.account}</td>
+                <td>{item.type}</td>
+                <td>{item.quantity !== null ? Number(item.quantity).toFixed(2) : 'N/A'}</td>
+                <td>{item.proof !== null ? Number(item.proof).toFixed(2) : 'N/A'}</td>
+                <td>{Number(item.proofGallons).toFixed(2)}</td>
+                <td>{item.receivedDate || 'N/A'}</td>
+                <td>{item.source || 'N/A'}</td>
+                <td>{item.dspNumber || 'N/A'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div>
         <h2>Reports</h2>
         <div>
@@ -241,17 +285,20 @@ const App: React.FC = () => {
           <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
           <button onClick={fetchDailyReport}>Fetch Daily Report</button>
         </div>
+        <div>
+          <button onClick={() => exportTankSummaryToExcel('GNS250329')}>Export Tank Summary</button>
+        </div>
         {report ? (
           <div>
             <h3>{report.month ? `Monthly Report: ${report.month}` : `Daily Report: ${report.date}`}</h3>
-            <p>Total Received: {report.totalReceived} PG</p>
-            <p>Total Processed: {report.totalProcessed} PG</p>
-            {report.totalMoved !== undefined && <p>Total Moved: {report.totalMoved} PG</p>}
-            {report.totalRemoved !== undefined && <p>Total Removed: {report.totalRemoved} PG</p>}
+            <p>Total Received: {Number(report.totalReceived).toFixed(2)} PG</p>
+            <p>Total Processed: {Number(report.totalProcessed).toFixed(2)} PG</p>
+            {report.totalMoved !== undefined && <p>Total Moved: {Number(report.totalMoved).toFixed(2)} PG</p>}
+            {report.totalRemoved !== undefined && <p>Total Removed: {Number(report.totalRemoved).toFixed(2)} PG</p>}
             {report.transactions && (
               <ul>
-                {report.transactions.map((t, i) => (
-                  <li key={i}>{`${t.action}: ${t.proofGallons} PG (${t.type}) on ${t.date} ${t.barrelId ? `(Barrel: ${t.barrelId})` : ''}`}</li>
+                {report.transactions.map((t: Transaction, i) => (
+                  <li key={i}>{`${t.action}: ${Number(t.proofGallons).toFixed(2)} PG (${t.type}) on ${t.date} ${t.barrelId ? `(Barrel: ${t.barrelId})` : ''}`}</li>
                 ))}
               </ul>
             )}
