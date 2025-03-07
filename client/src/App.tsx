@@ -201,29 +201,33 @@ const App: React.FC = () => {
   };
 
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
-    try {
-      console.log('Exporting tank summary:', tankSummary);
-      const wsData = [
-        ['Tank Summary Report', tankSummary.barrelId],
-        [''],
-        ['Type', tankSummary.type],
-        ['Proof Gallons Moved', Number(tankSummary.proofGallons).toFixed(2)],
-        ['Date', tankSummary.date],
-        ['From Account', tankSummary.fromAccount],
-        ['To Account', tankSummary.toAccount]
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
-      console.log('Writing file:', filename);
-      XLSX.writeFile(wb, filename);
-      console.log('Export successful:', filename);
-    } catch (err: unknown) {
-      console.error('Export failed:', err);
-      alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    }
-  };
+  console.log('Starting exportTankSummaryToExcel with:', tankSummary);
+  try {
+    const wsData = [
+      ['Tank Summary Report', tankSummary.barrelId],
+      [''],
+      ['Type', tankSummary.type],
+      ['Proof Gallons Moved', Number(tankSummary.proofGallons).toFixed(2)],
+      ['Date', tankSummary.date],
+      ['From Account', tankSummary.fromAccount],
+      ['To Account', tankSummary.toAccount]
+    ];
+    console.log('wsData prepared:', wsData);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    console.log('Worksheet created');
+    const wb = XLSX.utils.book_new();
+    console.log('Workbook created');
+    XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+    console.log('Sheet appended');
+    const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
+    console.log('Attempting to write file:', filename);
+    XLSX.writeFile(wb, filename);
+    console.log('Export successful:', filename);
+  } catch (err: unknown) {
+    console.error('Export failed:', err);
+    alert('Export failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+  }
+};
 
   return (
     <div className="App">
