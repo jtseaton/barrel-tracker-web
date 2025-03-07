@@ -90,11 +90,13 @@ app.post('/api/move', (req, res) => {
     if (!row) return res.status(404).json({ error: 'Barrel not found' });
 
     const fixedProofGallons = Number(proofGallons).toFixed(2);
-    const remainingProofGallons = Number((row.proofGallons - fixedProofGallons).toFixed(2));
+    const numExistingProofGallons = Number(row.proofGallons); // Convert DB string to number
+    const numFixedProofGallons = Number(fixedProofGallons);   // Convert input string to number
+    const remainingProofGallons = Number((numExistingProofGallons - numFixedProofGallons).toFixed(2));
     if (remainingProofGallons < 0) return res.status(400).json({ error: 'Insufficient proof gallons' });
 
-    const remainingQuantity = row.type === 'Spirits' ? Number(((remainingProofGallons * 100) / row.proof).toFixed(2)) : Number((row.quantity - fixedProofGallons).toFixed(2));
-    const movedQuantity = row.type === 'Spirits' ? Number(((fixedProofGallons * 100) / row.proof).toFixed(2)) : Number(fixedProofGallons);
+    const remainingQuantity = row.type === 'Spirits' ? Number(((remainingProofGallons * 100) / row.proof).toFixed(2)) : Number((row.quantity - numFixedProofGallons).toFixed(2));
+    const movedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
 
     db.serialize(() => {
       db.run(
@@ -128,9 +130,10 @@ app.post('/api/move', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           if (existing) {
+            const updatedProofGallons = Number((Number(existing.proofGallons) + numFixedProofGallons).toFixed(2));
             db.run(
               `UPDATE inventory SET proofGallons = ? WHERE barrelId = ?`,
-              [Number((existing.proofGallons + fixedProofGallons).toFixed(2)), reportId],
+              [updatedProofGallons, reportId],
               (err) => {
                 if (err) {
                   console.error('Update Report ID Error:', err);
@@ -179,7 +182,6 @@ app.get('/api/inventory', (req, res) => {
       console.error('DB Select Error:', err);
       return res.status(500).json({ error: err.message });
     }
-    // Format numbers to 2 decimals in response
     const formattedRows = rows.map(row => ({
       ...row,
       quantity: Number(row.quantity).toFixed(2),
