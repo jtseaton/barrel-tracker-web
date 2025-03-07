@@ -97,6 +97,10 @@ const App: React.FC = () => {
       const data = await res.json();
       console.log('Receive response:', data);
       await fetchInventory();
+      if (data.tankSummary) {
+        console.log('Exporting tank summary for receive:', data.tankSummary);
+        exportTankSummaryToExcel(data.tankSummary);
+      }
       setReceiveForm({ ...receiveForm, barrelId: '', quantity: '', proof: '', source: '', receivedDate: new Date().toISOString().split('T')[0] });
     } catch (err: unknown) {
       const error = err as Error;
@@ -123,17 +127,18 @@ const App: React.FC = () => {
       })
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    const data = await res.json();
-    console.log('Move response:', data);
-    await fetchInventory();
-    console.log('Checking tankSummary:', data.tankSummary);
-    if (data.tankSummary) {
-      console.log('tankSummary exists, forcing export:', data.tankSummary);
-      exportTankSummaryToExcel(data.tankSummary);
-    } else {
-      console.log('No tankSummary in response');
-      alert('No tank summary received from server');
-    }
+      const data = await res.json();
+      console.log('Move response:', data);
+      await fetchInventory();
+      console.log('DEBUG: POST-FETCH - LATEST APP.TSX HERE');
+      console.log('Checking tankSummary:', data.tankSummary);
+      if (data.tankSummary) {
+        console.log('tankSummary exists, forcing export:', data.tankSummary);
+        exportTankSummaryToExcel(data.tankSummary);
+      }else {
+        console.log('No tankSummary in response');
+        alert('No tank summary received from server');
+      }
     setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
   } catch (err: unknown) {
     const error = err as Error;
