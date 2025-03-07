@@ -71,7 +71,15 @@ app.post('/api/receive', (req, res) => {
             console.error('Transaction Insert Error:', err);
             return res.status(500).json({ error: err.message });
           }
-          res.json({ barrelId, message: 'Item received' });
+          // Add tankSummary for Production or Processing
+          const tankSummary = (account === 'Production' || account === 'Processing') ? {
+            barrelId,
+            type,
+            proofGallons, // Input = total at receipt
+            date: receivedDate,
+            toAccount: account
+          } : null;
+          res.json({ barrelId, message: 'Item received', tankSummary });
         }
       );
     }
