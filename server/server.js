@@ -72,10 +72,10 @@ app.post('/api/receive', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           // Add tankSummary for Production or Processing
-          const tankSummary = (account === 'Production' || account === 'Processing') ? {
+          const tankSummary = (account === 'Production' || account === 'Processing' || account === 'Storage') ? {
             barrelId,
             type,
-            proofGallons, // Input = total at receipt
+            proofGallons,
             date: receivedDate,
             toAccount: account
           } : null;
