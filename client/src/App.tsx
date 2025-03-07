@@ -76,8 +76,7 @@ const App: React.FC = () => {
       console.log('Fetched inventory:', data);
       setInventory(data);
     } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Inventory fetch error:', error);
+      console.error('Inventory fetch error:', err);
     }
   };
 
@@ -99,9 +98,8 @@ const App: React.FC = () => {
       await fetchInventory();
       setReceiveForm({ ...receiveForm, barrelId: '', quantity: '', proof: '', source: '', receivedDate: new Date().toISOString().split('T')[0] });
     } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Receive error:', error);
-      alert('Failed to receive item: ' + error.message);
+      console.error('Receive error:', err);
+      alert('Failed to receive item: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -124,24 +122,16 @@ const App: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      console.log('Move response received:', data);
+      console.log('Move response:', data);
       await fetchInventory();
-      console.log('Tank summary in response:', data.tankSummary);
-      if (data.tankSummary) {
-        if (data.tankSummary.toAccount === 'Processing') {
-          console.log('Processing move detected, exporting:', data.tankSummary);
-          exportTankSummaryToExcel(data.tankSummary);
-        } else {
-          console.log('Move to non-Processing account, no export needed:', data.tankSummary.toAccount);
-        }
-      } else {
-        console.log('No tankSummary in response');
+      if (data.tankSummary && data.tankSummary.toAccount === 'Processing') {
+        console.log('Exporting tank summary:', data.tankSummary);
+        exportTankSummaryToExcel(data.tankSummary);
       }
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
     } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Move error:', error);
-      alert('Failed to move item: ' + error.message);
+      console.error('Move error:', err);
+      alert('Failed to move item: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -205,7 +195,7 @@ const App: React.FC = () => {
 
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
     try {
-      console.log('Starting tank summary export:', tankSummary);
+      console.log('Exporting tank summary:', tankSummary);
       const wsData = [
         ['Tank Summary Report', tankSummary.barrelId],
         [''],
@@ -215,15 +205,15 @@ const App: React.FC = () => {
         ['From Account', tankSummary.fromAccount],
         ['To Account', tankSummary.toAccount]
       ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
-      console.log('Attempting to write file:', filename);
-      XLSX.writeFile(wb, filename);
-      console.log('Tank summary export completed:', filename);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
+    const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.date}.xlsx`;
+    console.log('Writing file:', filename);
+    XLSX.writeFile(wb, filename);
+    console.log('Export successful:', filename);
     } catch (err: unknown) {
-      console.error('Tank summary export failed:', err);
+      console.error('Export failed:', err);
       alert('Failed to export tank summary: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };

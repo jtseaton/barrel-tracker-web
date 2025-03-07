@@ -40,7 +40,8 @@ db.serialize(() => {
       proofGallons REAL,
       date TEXT,
       action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed')),
-      dspNumber TEXT
+      dspNumber TEXT,
+      toAccount TEXT
     )
   `);
 });
@@ -62,9 +63,9 @@ app.post('/api/receive', (req, res) => {
       }
       console.log('Inserted into inventory, barrelId:', barrelId);
       db.run(
-        `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber)
-         VALUES (?, ?, ?, ?, ?, ?, 'Received', ?)`,
-        [barrelId, type, fixedQuantity, fixedProof, proofGallons, receivedDate, dspNumber || OUR_DSP],
+        `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+         VALUES (?, ?, ?, ?, ?, ?, 'Received', ?, ?)`,
+        [barrelId, type, fixedQuantity, fixedProof, proofGallons, receivedDate, dspNumber || OUR_DSP, account],
         (err) => {
           if (err) {
             console.error('Transaction Insert Error:', err);
@@ -90,13 +91,22 @@ app.post('/api/move', (req, res) => {
     if (!row) return res.status(404).json({ error: 'Barrel not found' });
 
     const fixedProofGallons = Number(proofGallons).toFixed(2);
-    const numExistingProofGallons = Number(row.proofGallons); // Convert DB string to number
-    const numFixedProofGallons = Number(fixedProofGallons);   // Convert input string to number
+    const numExistingProofGallons = Number(row.proofGallons);
+    const numFixedProofGallons = Number(fixedProofGallons);
     const remainingProofGallons = Number((numExistingProofGallons - numFixedProofGallons).toFixed(2));
     if (remainingProofGallons < 0) return res.status(400).json({ error: 'Insufficient proof gallons' });
 
     const remainingQuantity = row.type === 'Spirits' ? Number(((remainingProofGallons * 100) / row.proof).toFixed(2)) : Number((row.quantity - numFixedProofGallons).toFixed(2));
     const movedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
+
+    const tankSummary = {
+      barrelId,
+      type: row.type,
+      proofGallons: fixedProofGallons,
+      date: moveDate,
+      fromAccount: row.account,
+      toAccount
+    };
 
     db.serialize(() => {
       db.run(
@@ -111,9 +121,9 @@ app.post('/api/move', (req, res) => {
       );
 
       db.run(
-        `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [toAccount === 'Processing' ? null : barrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, 'Moved', OUR_DSP],
+        `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [toAccount === 'Processing' ? null : barrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, 'Moved', OUR_DSP, toAccount],
         (err) => {
           if (err) {
             console.error('Transaction Insert Error:', err);
@@ -139,7 +149,8 @@ app.post('/api/move', (req, res) => {
                   console.error('Update Report ID Error:', err);
                   return res.status(500).json({ error: err.message });
                 }
-                res.json({ message: 'Item moved', barrelId });
+                console.log('Sending response with tankSummary:', tankSummary);
+                res.json({ message: 'Item moved', barrelId, tankSummary });
               }
             );
           } else {
@@ -152,7 +163,8 @@ app.post('/api/move', (req, res) => {
                   console.error('Insert Report ID Error:', err);
                   return res.status(500).json({ error: err.message });
                 }
-                res.json({ message: 'Item moved', barrelId });
+                console.log('Sending response with tankSummary:', tankSummary);
+                res.json({ message: 'Item moved', barrelId, tankSummary });
               }
             );
           }
@@ -167,7 +179,8 @@ app.post('/api/move', (req, res) => {
               console.error('Insert Moved Error:', err);
               return res.status(500).json({ error: err.message });
             }
-            res.json({ message: 'Item moved', barrelId });
+            console.log('Sending response with tankSummary:', tankSummary);
+            res.json({ message: 'Item moved', barrelId, tankSummary });
           }
         );
       }
@@ -204,10 +217,16 @@ app.get('/api/report/monthly', (req, res) => {
         return res.status(500).json({ error: err.message });
       }
       const totalReceived = Number(rows.reduce((sum, r) => sum + (r.action === 'Received' ? r.proofGallons : 0), 0).toFixed(2));
-      const totalProcessed = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.barrelId === null ? r.proofGallons : 0), 0).toFixed(2));
-      const totalMoved = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.barrelId !== null ? r.proofGallons : 0), 0).toFixed(2));
+      const totalProcessed = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.toAccount === 'Processing' ? r.proofGallons : 0), 0).toFixed(2));
+      const totalMoved = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.toAccount !== 'Processing' ? r.proofGallons : 0), 0).toFixed(2));
       const totalRemoved = Number(rows.reduce((sum, r) => sum + (r.action === 'Removed' ? r.proofGallons : 0), 0).toFixed(2));
-      res.json({ month, totalReceived, totalProcessed, totalMoved, totalRemoved, transactions: rows });
+      const byType = rows
+        .filter(r => r.action === 'Moved' && r.toAccount === 'Processing')
+        .reduce((acc, r) => {
+          acc[r.type] = (acc[r.type] || 0) + Number(r.proofGallons);
+          return acc;
+        }, {});
+      res.json({ month, totalReceived, totalProcessed, totalMoved, totalRemoved, byType, transactions: rows });
     }
   );
 });
@@ -224,8 +243,8 @@ app.get('/api/report/daily', (req, res) => {
         return res.status(500).json({ error: err.message });
       }
       const totalReceived = Number(rows.reduce((sum, r) => sum + (r.action === 'Received' ? r.proofGallons : 0), 0).toFixed(2));
-      const totalProcessed = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.barrelId === null ? r.proofGallons : 0), 0).toFixed(2));
-      const totalMoved = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.barrelId !== null ? r.proofGallons : 0), 0).toFixed(2));
+      const totalProcessed = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.toAccount === 'Processing' ? r.proofGallons : 0), 0).toFixed(2));
+      const totalMoved = Number(rows.reduce((sum, r) => sum + (r.action === 'Moved' && r.toAccount !== 'Processing' ? r.proofGallons : 0), 0).toFixed(2));
       const totalRemoved = Number(rows.reduce((sum, r) => sum + (r.action === 'Removed' ? r.proofGallons : 0), 0).toFixed(2));
       res.json({ date, totalReceived, totalProcessed, totalMoved, totalRemoved, transactions: rows });
     }
