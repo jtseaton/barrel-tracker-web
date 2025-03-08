@@ -17,27 +17,7 @@ const db = new sqlite3.Database('barrels.db', (err) => {
 });
 
 db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS transactions_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      barrelId TEXT,
-      type TEXT,
-      quantity REAL,
-      proof REAL,
-      proofGallons REAL,
-      date TEXT,
-      action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed', 'Packaged')),
-      dspNumber TEXT,
-      toAccount TEXT
-    )
-  `);
-  db.run(`
-    INSERT INTO transactions_new (id, barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
-    SELECT id, barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount FROM transactions
-  `);
-  db.run(`DROP TABLE IF EXISTS transactions`);
-  db.run(`ALTER TABLE transactions_new RENAME TO transactions`);
-
+  // Create inventory table (unchanged)
   db.run(`
     CREATE TABLE IF NOT EXISTS inventory (
       barrelId TEXT PRIMARY KEY,
@@ -51,8 +31,59 @@ db.serialize(() => {
       dspNumber TEXT
     )
   `);
+
+  // Check if transactions table exists before migration
+  db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'", (err, row) => {
+    if (err) {
+      console.error('Error checking for transactions table:', err);
+      return;
+    }
+
+    if (row) {
+      // Old transactions table exists, perform migration
+      db.run(`
+        CREATE TABLE transactions_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          barrelId TEXT,
+          type TEXT,
+          quantity REAL,
+          proof REAL,
+          proofGallons REAL,
+          date TEXT,
+          action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed', 'Packaged')),
+          dspNumber TEXT,
+          toAccount TEXT
+        )
+      `);
+      db.run(`
+        INSERT INTO transactions_new (id, barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+        SELECT id, barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount FROM transactions
+      `, (err) => {
+        if (err) console.error('Migration error:', err);
+      });
+      db.run(`DROP TABLE transactions`);
+      db.run(`ALTER TABLE transactions_new RENAME TO transactions`);
+    } else {
+      // No old transactions table, create it fresh
+      db.run(`
+        CREATE TABLE IF NOT EXISTS transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          barrelId TEXT,
+          type TEXT,
+          quantity REAL,
+          proof REAL,
+          proofGallons REAL,
+          date TEXT,
+          action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed', 'Packaged')),
+          dspNumber TEXT,
+          toAccount TEXT
+        )
+      `);
+    }
+  });
 });
 
+// Rest of the endpoints remain unchanged
 app.post('/api/receive', (req, res) => {
   console.log('Received POST to /api/receive:', req.body);
   const { barrelId, account, type, quantity, proof, source, dspNumber, receivedDate } = req.body;
