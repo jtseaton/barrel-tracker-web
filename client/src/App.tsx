@@ -85,7 +85,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Simulate loading delay for logo display (adjust as needed)
-    setTimeout(() => setIsLoading(false), 2000);
+    setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
   const fetchInventory = async () => {
