@@ -77,9 +77,15 @@ const App: React.FC = () => {
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchInventory();
+  }, []);
+
+  useEffect(() => {
+    // Simulate loading delay for logo display (adjust as needed)
+    setTimeout(() => setIsLoading(false), 2000);
   }, []);
 
   const fetchInventory = async () => {
@@ -675,6 +681,15 @@ const App: React.FC = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f5f5f5' }}>
+        <img src="/tilly-logo.png" alt="Tilly Logo" style={{ maxWidth: '80%', maxHeight: '60vh' }} />
+        <h1 style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>Tilly</h1>
+        <p style={{ fontFamily: 'Arial, sans-serif', color: '#666' }}>Powered by Paws & Pours</p>
+      </div>
+    );
+  }
   return (
     <div className="App">
       <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
