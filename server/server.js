@@ -7,16 +7,7 @@ const app = express();
 
 app.use(express.json());
 app.use(basicAuth({ users: { 'admin': 'yourpassword' }, challenge: true })); // Replace 'yourpassword'
-app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
-app.get('*', (req, res) => {
-  const filePath = path.join(__dirname, '..', 'client', 'build', 'index.html');
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('Error serving index.html:', err);
-      res.status(500).send('Server error: Unable to load the application');
-    }
-  });
-});
+
 
 const OUR_DSP = 'DSP-AL-20010';
 
@@ -341,7 +332,7 @@ app.get('/api/inventory', (req, res) => {
       console.error('DB Select Error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('DB rows fetched:', rows);  // Debug raw rows
+    console.log('DB rows fetched:', rows);
     const formattedRows = rows.map(row => ({
       ...row,
       quantity: Number(row.quantity).toFixed(2),
@@ -429,8 +420,22 @@ app.get('/api/report/tank-summary', (req, res) => {
   );
 });
 
+app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
+app.get('*', (req, res) => {
+  const filePath = path.join(__dirname, '..', 'client', 'build', 'index.html');
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      res.status(500).send('Server error: Unable to load the application');
+    }
+  });
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'build', 'index.html'));
 });
 
-app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('Server started'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server started on port ${PORT}`);
+});
