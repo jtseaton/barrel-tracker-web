@@ -9,7 +9,7 @@ app.use(express.json());
 app.use(basicAuth({ users: { 'admin': 'yourpassword' }, challenge: true })); // Replace 'yourpassword'
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-const OUR_DSP = 'DSP-AL-20010'; // Our DSP number
+const OUR_DSP = 'DSP-AL-20010';
 
 const db = new sqlite3.Database('barrels.db', (err) => {
   if (err) console.error('DB Error:', err);
@@ -17,6 +17,27 @@ const db = new sqlite3.Database('barrels.db', (err) => {
 });
 
 db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS transactions_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      barrelId TEXT,
+      type TEXT,
+      quantity REAL,
+      proof REAL,
+      proofGallons REAL,
+      date TEXT,
+      action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed', 'Packaged')),
+      dspNumber TEXT,
+      toAccount TEXT
+    )
+  `);
+  db.run(`
+    INSERT INTO transactions_new (id, barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+    SELECT id, barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount FROM transactions
+  `);
+  db.run(`DROP TABLE IF EXISTS transactions`);
+  db.run(`ALTER TABLE transactions_new RENAME TO transactions`);
+
   db.run(`
     CREATE TABLE IF NOT EXISTS inventory (
       barrelId TEXT PRIMARY KEY,
@@ -28,20 +49,6 @@ db.serialize(() => {
       receivedDate TEXT,
       source TEXT,
       dspNumber TEXT
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      barrelId TEXT,
-      type TEXT,
-      quantity REAL,
-      proof REAL,
-      proofGallons REAL,
-      date TEXT,
-      action TEXT CHECK(action IN ('Received', 'Moved', 'Processed', 'Removed')),
-      dspNumber TEXT,
-      toAccount TEXT
     )
   `);
 });
@@ -166,7 +173,7 @@ app.post('/api/move', (req, res) => {
                           return res.status(500).json({ error: err.message });
                         }
                         const tankSummary = {
-                          barrelId, // Original barrel for tank tracking
+                          barrelId,
                           type: row.type,
                           proofGallons: fixedProofGallons,
                           proof: row.proof,
