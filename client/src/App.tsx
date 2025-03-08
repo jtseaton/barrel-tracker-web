@@ -97,10 +97,13 @@ const App: React.FC = () => {
   const fetchInventory = async () => {
     try {
       const res = await fetch('/api/inventory');
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const text = await res.text();  // Get raw response
-      console.log('Raw fetch response:', text);  // Debug
-      const data = JSON.parse(text);  // Try to parse as JSON
+      if (!res.ok) {
+        console.log('Fetch inventory failed with status:', res.status, res.statusText);
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const text = await res.text();
+      console.log('Raw fetch response:', text);
+      const data = JSON.parse(text);
       console.log('Fetched inventory data:', data);
       setInventory(data);
       console.log('Updated inventory state:', data);
