@@ -342,6 +342,7 @@ app.get('/api/inventory', (req, res) => {
       console.error('DB Select Error:', err);
       return res.status(500).json({ error: err.message });
     }
+    console.log('DB rows fetched:', rows);  // Debug raw rows
     const formattedRows = rows.map(row => ({
       ...row,
       quantity: Number(row.quantity).toFixed(2),

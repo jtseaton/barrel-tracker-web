@@ -98,12 +98,17 @@ const App: React.FC = () => {
     try {
       const res = await fetch('/api/inventory');
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      console.log('Fetched inventory data:', data);  // Confirm data from server
+      const text = await res.text();  // Get raw response
+      console.log('Raw fetch response:', text);  // Debug
+      const data = JSON.parse(text);  // Try to parse as JSON
+      console.log('Fetched inventory data:', data);
       setInventory(data);
-      console.log('Updated inventory state:', data);  // Confirm state update
-    } catch (err) {
+      console.log('Updated inventory state:', data);
+    } catch (err: any) {
       console.error('Fetch inventory error:', err);
+      if (err.message.includes('Unexpected token')) {
+        console.error('Server returned HTML instead of JSON');
+      }
     }
   };
   
