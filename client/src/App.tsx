@@ -90,13 +90,18 @@ const App: React.FC = () => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
+  useEffect(() => {
+    console.log('Inventory state updated:', inventory);  // Log whenever inventory changes
+  }, [inventory]);
+
   const fetchInventory = async () => {
     try {
       const res = await fetch('/api/inventory');
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      console.log('Fetched inventory:', data);  // Debug to confirm data
-      setInventory(data);  // Ensure this updates state
+      console.log('Fetched inventory data:', data);  // Confirm data from server
+      setInventory(data);
+      console.log('Updated inventory state:', data);  // Confirm state update
     } catch (err) {
       console.error('Fetch inventory error:', err);
     }
@@ -104,7 +109,7 @@ const App: React.FC = () => {
   
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [editedBatchId, setEditedBatchId] = useState<string>('');
-  
+
   const handleBatchIdUpdate = async (oldBatchId: string) => {
     try {
       const res = await fetch('/api/update-batch-id', {
@@ -134,8 +139,8 @@ const App: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Receive response:', data);
-      // Wait for inventory to update
-      await fetchInventory();  // Already here, but let's ensure it works
+      await fetchInventory();  // Ensure this runs and completes
+      console.log('Inventory after fetch:', inventory);  // Confirm state after fetch
       if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
       setReceiveForm({ barrelId: '', account: 'Storage', type: 'Spirits', quantity: '', proof: '', source: '', dspNumber: OUR_DSP, receivedDate: new Date().toISOString().split('T')[0] });
     } catch (err: any) {
@@ -143,6 +148,8 @@ const App: React.FC = () => {
       alert('Failed to receive item: ' + err.message);
     }
   };
+  
+  
 
   const handleMove = async () => {
     if (!moveForm.barrelId || !moveForm.proofGallons) {
@@ -494,6 +501,73 @@ const App: React.FC = () => {
               />
               <button onClick={handlePackage}>Complete Packaging</button>
             </div>
+            <h2>Production Inventory</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Barrel ID</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Proof</th>
+                    <th>Proof Gallons</th>
+                    <th>Date Received</th>
+                    <th>Source</th>
+                    <th>DSP Number</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const productionItems = inventory.filter(item => item.account === 'Production');
+                    console.log('Production items for table:', productionItems);
+                    return productionItems.map(item => (
+                      <tr key={item.barrelId}>
+                        <td>{item.barrelId}</td>
+                        <td>{item.type}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.proof}</td>
+                        <td>{item.proofGallons}</td>
+                        <td>{item.receivedDate}</td>
+                        <td>{item.source}</td>
+                        <td>{item.dspNumber}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+
+              <h2>Storage Inventory</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Barrel ID</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Proof</th>
+                    <th>Proof Gallons</th>
+                    <th>Date Received</th>
+                    <th>Source</th>
+                    <th>DSP Number</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const storageItems = inventory.filter(item => item.account === 'Storage');
+                    console.log('Storage items for table:', storageItems);
+                    return storageItems.map(item => (
+                      <tr key={item.barrelId}>
+                        <td>{item.barrelId}</td>
+                        <td>{item.type}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.proof}</td>
+                        <td>{item.proofGallons}</td>
+                        <td>{item.receivedDate}</td>
+                        <td>{item.source}</td>
+                        <td>{item.dspNumber}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
             <h2>Processing Inventory</h2>
 
 <h3>Liquid in Processing</h3>

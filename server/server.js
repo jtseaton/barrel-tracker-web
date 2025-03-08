@@ -348,6 +348,7 @@ app.get('/api/inventory', (req, res) => {
       proof: Number(row.proof).toFixed(2),
       proofGallons: Number(row.proofGallons).toFixed(2)
     }));
+    console.log('Returning inventory:', formattedRows);
     res.json(formattedRows);
   });
 });
