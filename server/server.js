@@ -229,13 +229,13 @@ app.post('/api/package', (req, res) => {
           db.run(
             `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [newBarrelId, toAccount, product, packagedQuantity, targetProof, fixedProofGallons, date, row.source || 'Unknown', row.dspNumber || OUR_DSP],
+            [newBarrelId, 'Processing', product, packagedQuantity, targetProof, fixedProofGallons, date, row.source || 'Unknown', row.dspNumber || OUR_DSP],
             (err) => {
               if (err) {
                 console.error('Insert Finished Goods Error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              console.log('Inserted new barrel:', newBarrelId);
+              console.log('Inserted new barrel in Processing:', newBarrelId);
               const dateStr = date.replace(/-/g, '').slice(2);
               db.get(
                 `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Packaged'`,
@@ -250,7 +250,7 @@ app.post('/api/package', (req, res) => {
                   db.run(
                     `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
                      VALUES (?, ?, ?, ?, ?, ?, 'Packaged', ?, ?)`,
-                    [newBarrelId, product, packagedQuantity, targetProof, fixedProofGallons, date, row.dspNumber || OUR_DSP, toAccount],
+                    [newBarrelId, product, packagedQuantity, targetProof, fixedProofGallons, date, row.dspNumber || OUR_DSP, 'Processing'],
                     (err) => {
                       if (err) {
                         console.error('Transaction Insert Error:', err);
@@ -264,7 +264,7 @@ app.post('/api/package', (req, res) => {
                         totalProofGallonsLeft: remainingProofGallons,
                         date,
                         fromAccount: 'Processing',
-                        toAccount,
+                        toAccount: 'Processing',
                         serialNumber,
                         producingDSP: row.source || row.dspNumber || OUR_DSP,
                         waterVolume,

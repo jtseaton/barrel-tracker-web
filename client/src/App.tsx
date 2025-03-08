@@ -201,13 +201,13 @@ const App: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId: packageForm.batchId,  // Changed to batchId
+          batchId: packageForm.batchId,
           product: packageForm.product,
           proofGallons: finalProofGallons.toFixed(2),
           targetProof: targetProof.toFixed(2),
           waterVolume: waterVolume.toFixed(2),
           bottleCount,
-          toAccount: 'Finished Goods',
+          toAccount: 'Processing', // Hardcode to match server
           date: new Date().toISOString().split('T')[0]
         })
       });
@@ -215,19 +215,18 @@ const App: React.FC = () => {
       const data = await res.json();
       console.log('Package response:', data);
       await fetchInventory();
-      console.log('Inventory fetched after package:', inventory);
       if (data.tankSummary) {
         console.log('Exporting tank summary for package:', data.tankSummary);
         exportTankSummaryToExcel(data.tankSummary);
       }
       setPackageForm({ batchId: '', product: 'Old Black Bear Vodka', proofGallons: '', targetProof: '80' });
-    } catch (err: unknown) {
-      const error = err as Error;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
       console.error('Package error:', error);
       alert('Failed to package item: ' + error.message);
     }
   };
-
+  
   const fetchMonthlyReport = async () => {
     console.log('Fetching monthly report for:', reportMonth);
     try {
