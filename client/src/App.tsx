@@ -95,6 +95,26 @@ const App: React.FC = () => {
     }
   };
 
+  const [editingBatchId, setEditingBatchId] = useState(null);
+  const [editedBatchId, setEditedBatchId] = useState('');
+
+  const handleBatchIdUpdate = async (oldBatchId) => {
+    try {
+      const res = await fetch('/api/update-batch-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldBatchId, newBatchId: editedBatchId })
+      });
+      if (!res.ok) throw new Error('Failed to update batch ID');
+      await fetchInventory();
+      setEditingBatchId(null);
+      setEditedBatchId('');
+    } catch (err) {
+      console.error('Update error:', err);
+      alert('Failed to update batch ID: ' + err.message);
+    }
+  };
+
   const handleReceive = async () => {
     console.log('Sending receive request:', receiveForm);
     try {
@@ -473,33 +493,114 @@ const App: React.FC = () => {
               />
               <button onClick={handlePackage}>Complete Packaging</button>
             </div>
-            <h3>Processing Inventory</h3>
+            <h2>Processing Inventory</h2>
+
+            <h3>Liquid in Processing</h3>
             <table>
               <thead>
                 <tr>
-                  <th>Barrel ID</th>
+                  <th>Batch ID</th>
                   <th>Type</th>
                   <th>Quantity (WG)</th>
                   <th>Proof</th>
                   <th>Proof Gallons</th>
-                  <th>Date</th>
+                  <th>Date Received</th>
                   <th>Source</th>
                   <th>DSP Number</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {inventory.filter(item => item.account === 'Processing').map(item => (
-                  <tr key={item.barrelId}>
-                    <td>{item.barrelId}</td>
-                    <td>{item.type}</td>
-                    <td>{item.quantity !== null ? Number(item.quantity).toFixed(2) : 'N/A'}</td>
-                    <td>{item.proof !== null ? Number(item.proof).toFixed(2) : 'N/A'}</td>
-                    <td>{Number(item.proofGallons).toFixed(2)}</td>
-                    <td>{item.receivedDate || 'N/A'}</td>
-                    <td>{item.source || 'N/A'}</td>
-                    <td>{item.dspNumber || 'N/A'}</td>
-                  </tr>
-                ))}
+                {inventory
+                  .filter(item => item.account === 'Processing' && item.barrelId.includes('-BATCH-'))
+                  .map(item => (
+                    <tr key={item.barrelId}>
+                      <td>
+                        {editingBatchId === item.barrelId ? (
+                          <input
+                            type="text"
+                            value={editedBatchId}
+                            onChange={e => setEditedBatchId(e.target.value)}
+                          />
+                        ) : (
+                          item.barrelId
+                        )}
+                      </td>
+                      <td>{item.type}</td>
+                      <td>{item.quantity}</td>
+                      <td>{item.proof}</td>
+                      <td>{item.proofGallons}</td>
+                      <td>{item.receivedDate}</td>
+                      <td>{item.source}</td>
+                      <td>{item.dspNumber}</td>
+                      <td>
+                        {editingBatchId === item.barrelId ? (
+                          <>
+                            <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
+                            <button onClick={() => setEditingBatchId(null)}>Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+            <h3>Bottled in Processing</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Batch ID</th>
+                  <th>Type</th>
+                  <th>Quantity (WG)</th>
+                  <th>Proof</th>
+                  <th>Proof Gallons</th>
+                  <th>Date Packaged</th>
+                  <th>Source</th>
+                  <th>DSP Number</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventory
+                  .filter(item => item.account === 'Processing' && !item.barrelId.includes('-BATCH-'))
+                  .map(item => (
+                    <tr key={item.barrelId}>
+                      <td>
+                        {editingBatchId === item.barrelId ? (
+                          <input
+                            type="text"
+                            value={editedBatchId}
+                            onChange={e => setEditedBatchId(e.target.value)}
+                          />
+                        ) : (
+                          item.barrelId
+                        )}
+                      </td>
+                      <td>{item.type}</td>
+                      <td>{item.quantity}</td>
+                      <td>{item.proof}</td>
+                      <td>{item.proofGallons}</td>
+                      <td>{item.receivedDate}</td>
+                      <td>{item.source}</td>
+                      <td>{item.dspNumber}</td>
+                      <td>
+                        {editingBatchId === item.barrelId ? (
+                          <>
+                            <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
+                            <button onClick={() => setEditingBatchId(null)}>Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
