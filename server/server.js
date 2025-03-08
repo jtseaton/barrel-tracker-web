@@ -171,91 +171,123 @@ app.post('/api/update-batch-id', (req, res) => {
 });
 
 app.post('/api/move', (req, res) => {
+  console.log('Received POST to /api/move:', req.body);
   const { barrelId, toAccount, proofGallons } = req.body;
-  const moveDate = new Date().toISOString().split('T')[0];
-  console.log('Received move request:', { barrelId, toAccount, proofGallons });
+  const movedProofGallons = parseFloat(proofGallons);
 
-  db.all('SELECT barrelId, account, proofGallons FROM inventory', [], (err, rows) => {
-    console.log('Current inventory before move:', rows);
-    db.get('SELECT * FROM inventory WHERE barrelId = ?', [barrelId], (err, row) => {
-      if (err) {
-        console.error('Inventory Fetch Error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (!row) return res.status(404).json({ error: 'Barrel not found' });
+  if (!barrelId || !toAccount || isNaN(movedProofGallons) || movedProofGallons <= 0) {
+    return res.status(400).json({ error: 'Invalid move request: missing or invalid barrelId, toAccount, or proofGallons' });
+  }
 
-      const fixedProofGallons = Number(proofGallons).toFixed(2);
-      const numExistingProofGallons = Number(row.proofGallons);
-      const numFixedProofGallons = Number(fixedProofGallons);
-      const remainingProofGallons = Number((numExistingProofGallons - numFixedProofGallons).toFixed(2));
-      if (remainingProofGallons < 0) return res.status(400).json({ error: 'Insufficient proof gallons' });
+  db.get('SELECT * FROM inventory WHERE barrelId = ?', [barrelId], (err, row) => {
+    if (err) {
+      console.error('DB Select Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'Barrel not found' });
+    }
 
-      const remainingQuantity = row.type === 'Spirits' ? Number(((remainingProofGallons * 100) / row.proof).toFixed(2)) : Number((row.quantity - numFixedProofGallons).toFixed(2));
-      const movedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
+    const originalProofGallons = parseFloat(row.proofGallons);
+    if (movedProofGallons > originalProofGallons) {
+      return res.status(400).json({ error: 'Cannot move more proof gallons than available' });
+    }
 
-      db.serialize(() => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+
+      if (movedProofGallons === originalProofGallons) {
+        // Full move: Update the existing record
         db.run(
-          `UPDATE inventory SET quantity = ?, proofGallons = ? WHERE barrelId = ?`,
-          [remainingQuantity, remainingProofGallons, barrelId],
+          `UPDATE inventory SET account = ?, proofGallons = ? WHERE barrelId = ?`,
+          [toAccount, movedProofGallons.toFixed(2), barrelId],
+          (err) => {
+            if (err) {
+              console.error('Update Moved Error:', err);
+              db.run('ROLLBACK');
+              return res.status(500).json({ error: err.message });
+            }
+            db.run(
+              `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber, toAccount)
+               VALUES (?, ?, ?, ?, ?, 'Moved', ?, ?)`,
+              [barrelId, row.type, parseFloat(row.quantity), movedProofGallons, new Date().toISOString().split('T')[0], row.dspNumber, toAccount],
+              (err) => {
+                if (err) {
+                  console.error('Transaction Insert Error:', err);
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: err.message });
+                }
+                db.run('COMMIT');
+                const tankSummary = {
+                  barrelId,
+                  type: row.type,
+                  proofGallons: movedProofGallons.toFixed(2),
+                  proof: row.proof,
+                  totalProofGallonsLeft: '0.00',
+                  date: new Date().toISOString().split('T')[0],
+                  fromAccount: row.account,
+                  toAccount,
+                  serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
+                };
+                console.log('Move successful, tankSummary:', tankSummary);
+                res.json({ message: 'Move successful', tankSummary });
+              }
+            );
+          }
+        );
+      } else {
+        // Partial move: Create new records
+        const remainingProofGallons = (originalProofGallons - movedProofGallons).toFixed(2);
+        db.run(
+          `UPDATE inventory SET proofGallons = ? WHERE barrelId = ?`,
+          [remainingProofGallons, barrelId],
           (err) => {
             if (err) {
               console.error('Update Remaining Error:', err);
+              db.run('ROLLBACK');
               return res.status(500).json({ error: err.message });
             }
-            const batchId = toAccount === 'Processing' ? `${barrelId}-BATCH-${moveDate.replace(/-/g, '')}` : null;
-            const newBarrelId = batchId || barrelId;
             db.run(
               `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [newBarrelId, toAccount, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.source || 'Unknown', row.dspNumber || OUR_DSP],
+              [`${barrelId}-MOVED-${Date.now()}`, toAccount, row.type, (parseFloat(row.quantity) * (movedProofGallons / originalProofGallons)).toFixed(2), row.proof, movedProofGallons.toFixed(2), new Date().toISOString().split('T')[0], row.source, row.dspNumber],
               (err) => {
                 if (err) {
                   console.error('Insert Moved Error:', err);
+                  db.run('ROLLBACK');
                   return res.status(500).json({ error: err.message });
                 }
-                const dateStr = moveDate.replace(/-/g, '').slice(2);
-                db.get(
-                  `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Moved'`,
-                  [moveDate],
-                  (err, rowCount) => {
+                db.run(
+                  `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber, toAccount)
+                   VALUES (?, ?, ?, ?, ?, 'Moved', ?, ?)`,
+                  [`${barrelId}-MOVED-${Date.now()}`, row.type, (parseFloat(row.quantity) * (movedProofGallons / originalProofGallons)).toFixed(2), movedProofGallons, new Date().toISOString().split('T')[0], row.dspNumber, toAccount],
+                  (err) => {
                     if (err) {
-                      console.error('Serial Number Count Error:', err);
+                      console.error('Transaction Insert Error:', err);
+                      db.run('ROLLBACK');
                       return res.status(500).json({ error: err.message });
                     }
-                    const serialSuffix = rowCount.count > 0 ? `-${rowCount.count}` : '';
-                    const serialNumber = `${dateStr}${serialSuffix}`;
-                    db.run(
-                      `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
-                       VALUES (?, ?, ?, ?, ?, ?, 'Moved', ?, ?)`,
-                      [newBarrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.dspNumber || OUR_DSP, toAccount],
-                      (err) => {
-                        if (err) {
-                          console.error('Transaction Insert Error:', err);
-                          return res.status(500).json({ error: err.message });
-                        }
-                        const tankSummary = {
-                          barrelId,
-                          type: row.type,
-                          proofGallons: fixedProofGallons,
-                          proof: row.proof,
-                          totalProofGallonsLeft: remainingProofGallons,
-                          date: moveDate,
-                          fromAccount: row.account,
-                          toAccount,
-                          serialNumber,
-                          producingDSP: row.source || row.dspNumber || OUR_DSP
-                        };
-                        console.log('Sending response with tankSummary:', tankSummary);
-                        res.json({ message: 'Item moved', barrelId: newBarrelId, batchId, tankSummary });
-                      }
-                    );
+                    db.run('COMMIT');
+                    const tankSummary = {
+                      barrelId: `${barrelId}-MOVED-${Date.now()}`,
+                      type: row.type,
+                      proofGallons: movedProofGallons.toFixed(2),
+                      proof: row.proof,
+                      totalProofGallonsLeft: remainingProofGallons,
+                      date: new Date().toISOString().split('T')[0],
+                      fromAccount: row.account,
+                      toAccount,
+                      serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
+                    };
+                    console.log('Partial move successful, tankSummary:', tankSummary);
+                    res.json({ message: 'Partial move successful', tankSummary });
                   }
                 );
               }
             );
           }
         );
-      });
+      }
     });
   });
 });
