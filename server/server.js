@@ -107,6 +107,9 @@ app.post('/api/move', (req, res) => {
   const { barrelId, toAccount, proofGallons } = req.body;
   const moveDate = new Date().toISOString().split('T')[0];
   console.log('Received move request:', { barrelId, toAccount, proofGallons });
+  
+  db.all('SELECT barrelId, account, proofGallons FROM inventory', [], (err, rows) => {
+    console.log('Current inventory before move:', rows);
 
   db.get('SELECT * FROM inventory WHERE barrelId = ?', [barrelId], (err, row) => {
     if (err) {
@@ -125,7 +128,6 @@ app.post('/api/move', (req, res) => {
     const movedQuantity = row.type === 'Spirits' ? Number(((numFixedProofGallons * 100) / row.proof).toFixed(2)) : Number(numFixedProofGallons);
 
     db.serialize(() => {
-      // Update source barrel
       db.run(
         `UPDATE inventory SET quantity = ?, proofGallons = ? WHERE barrelId = ?`,
         [remainingQuantity, remainingProofGallons, barrelId],
@@ -134,13 +136,12 @@ app.post('/api/move', (req, res) => {
             console.error('Update Remaining Error:', err);
             return res.status(500).json({ error: err.message });
           }
-          // Insert moved amount into toAccount
-          const newBarrelId = barrelId; // Keep original for other accounts
           const batchId = toAccount === 'Processing' ? `${barrelId}-BATCH-${moveDate.replace(/-/g, '')}` : null;
+          const newBarrelId = batchId || barrelId;
           db.run(
             `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [batchId || newBarrelId, toAccount, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.source, row.dspNumber],
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [newBarrelId, toAccount, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.source || 'Unknown', row.dspNumber || OUR_DSP],
             (err) => {
               if (err) {
                 console.error('Insert Moved Error:', err);
@@ -160,7 +161,7 @@ app.post('/api/move', (req, res) => {
                   db.run(
                     `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
                      VALUES (?, ?, ?, ?, ?, ?, 'Moved', ?, ?)`,
-                    [newBarrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.dspNumber, toAccount],
+                    [newBarrelId, row.type, movedQuantity, row.proof, fixedProofGallons, moveDate, row.dspNumber || OUR_DSP, toAccount],
                     (err) => {
                       if (err) {
                         console.error('Transaction Insert Error:', err);
