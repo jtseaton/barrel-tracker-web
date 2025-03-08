@@ -166,7 +166,7 @@ app.post('/api/move', (req, res) => {
                           return res.status(500).json({ error: err.message });
                         }
                         const tankSummary = {
-                          barrelId,
+                          barrelId, // Original barrel for tank tracking
                           type: row.type,
                           proofGallons: fixedProofGallons,
                           proof: row.proof,
@@ -201,8 +201,8 @@ app.post('/api/package', (req, res) => {
       console.error('Inventory Fetch Error:', err);
       return res.status(500).json({ error: err.message });
     }
-    if (!row) return res.status(404).json({ error: 'Barrel not found in Processing' });
-    console.log('Found barrel in Processing:', row);
+    if (!row) return res.status(404).json({ error: 'Batch not found in Processing' });
+    console.log('Found batch in Processing:', row);
 
     const fixedProofGallons = Number(proofGallons).toFixed(2);
     const numExistingProofGallons = Number(row.proofGallons);
@@ -225,55 +225,28 @@ app.post('/api/package', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           console.log('Updated remaining inventory for batchId:', batchId);
-          const newBarrelId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}`;
+          const newBatchId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}`;
           db.run(
             `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [newBarrelId, 'Processing', product, packagedQuantity, targetProof, fixedProofGallons, date, row.source || 'Unknown', row.dspNumber || OUR_DSP],
+            [newBatchId, 'Processing', 'Spirits', packagedQuantity, targetProof, fixedProofGallons, date, row.source || 'Unknown', row.dspNumber || OUR_DSP],
             (err) => {
               if (err) {
                 console.error('Insert Finished Goods Error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              console.log('Inserted new barrel in Processing:', newBarrelId);
-              const dateStr = date.replace(/-/g, '').slice(2);
-              db.get(
-                `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Packaged'`,
-                [date],
-                (err, rowCount) => {
+              console.log('Inserted new batch in Processing:', newBatchId);
+              db.run(
+                `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
+                 VALUES (?, ?, ?, ?, ?, ?, 'Packaged', ?, ?)`,
+                [newBatchId, product, packagedQuantity, targetProof, fixedProofGallons, date, row.dspNumber || OUR_DSP, 'Processing'],
+                (err) => {
                   if (err) {
-                    console.error('Serial Number Count Error:', err);
+                    console.error('Transaction Insert Error:', err);
                     return res.status(500).json({ error: err.message });
                   }
-                  const serialSuffix = rowCount.count > 0 ? `-${rowCount.count}` : '';
-                  const serialNumber = `${dateStr}${serialSuffix}`;
-                  db.run(
-                    `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
-                     VALUES (?, ?, ?, ?, ?, ?, 'Packaged', ?, ?)`,
-                    [newBarrelId, product, packagedQuantity, targetProof, fixedProofGallons, date, row.dspNumber || OUR_DSP, 'Processing'],
-                    (err) => {
-                      if (err) {
-                        console.error('Transaction Insert Error:', err);
-                        return res.status(500).json({ error: err.message });
-                      }
-                      const tankSummary = {
-                        barrelId: newBarrelId,
-                        type: product,
-                        proofGallons: fixedProofGallons,
-                        proof: targetProof,
-                        totalProofGallonsLeft: remainingProofGallons,
-                        date,
-                        fromAccount: 'Processing',
-                        toAccount: 'Processing',
-                        serialNumber,
-                        producingDSP: row.source || row.dspNumber || OUR_DSP,
-                        waterVolume,
-                        bottleCount
-                      };
-                      console.log('Sending response with tankSummary:', tankSummary);
-                      res.json({ message: 'Item packaged', batchId: newBarrelId, tankSummary });
-                    }
-                  );
+                  console.log('Recorded packaging transaction for batchId:', newBatchId);
+                  res.json({ message: 'Item packaged', batchId: newBatchId });
                 }
               );
             }
