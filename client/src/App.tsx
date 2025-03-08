@@ -97,8 +97,8 @@ const App: React.FC = () => {
   const fetchInventory = async () => {
     try {
       const res = await fetch('/api/inventory');
+      console.log('Fetch inventory status:', res.status, res.statusText);
       if (!res.ok) {
-        console.log('Fetch inventory failed with status:', res.status, res.statusText);
         throw new Error(`HTTP error! status: ${res.status}`);
       }
       const text = await res.text();
