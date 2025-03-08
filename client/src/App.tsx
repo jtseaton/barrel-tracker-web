@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import './App.css';
 
+const OUR_DSP = 'DSP-AL-20010';
+
 interface InventoryItem {
   barrelId: string;
   account: string;
@@ -91,13 +93,12 @@ const App: React.FC = () => {
   const fetchInventory = async () => {
     try {
       const res = await fetch('/api/inventory');
-      if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      console.log('Updated inventory:', data);
-      setInventory(data);
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Inventory fetch error:', error);
+      console.log('Fetched inventory:', data);  // Debug to confirm data
+      setInventory(data);  // Ensure this updates state
+    } catch (err) {
+      console.error('Fetch inventory error:', err);
     }
   };
   
@@ -128,25 +129,18 @@ const App: React.FC = () => {
       const res = await fetch('/api/receive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...receiveForm,
-          quantity: parseFloat(receiveForm.quantity),
-          proof: parseFloat(receiveForm.proof) || 0
-        })
+        body: JSON.stringify(receiveForm)
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Receive response:', data);
-      await fetchInventory();
-      if (data.tankSummary) {
-        console.log('Exporting tank summary for receive:', data.tankSummary);
-        exportTankSummaryToExcel(data.tankSummary);
-      }
-      setReceiveForm({ ...receiveForm, barrelId: '', quantity: '', proof: '', source: '', receivedDate: new Date().toISOString().split('T')[0] });
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Receive error:', error);
-      alert('Failed to receive item: ' + error.message);
+      // Wait for inventory to update
+      await fetchInventory();  // Already here, but let's ensure it works
+      if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
+      setReceiveForm({ barrelId: '', account: 'Storage', type: 'Spirits', quantity: '', proof: '', source: '', dspNumber: OUR_DSP, receivedDate: new Date().toISOString().split('T')[0] });
+    } catch (err: any) {
+      console.error('Receive error:', err);
+      alert('Failed to receive item: ' + err.message);
     }
   };
 
