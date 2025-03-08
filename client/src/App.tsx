@@ -170,9 +170,9 @@ const App: React.FC = () => {
   
     const sourceItem = inventory.find(item => item.barrelId === packageForm.batchId.trim() && item.account === 'Processing');
     if (!sourceItem) {
-      console.log('Barrel not found in Processing. Entered Batch ID:', packageForm.batchId);
+      console.log('Batch not found in Processing. Entered Batch ID:', packageForm.batchId);
       console.log('Processing inventory:', inventory.filter(item => item.account === 'Processing'));
-      alert('Barrel not found in Processing!');
+      alert('Batch not found in Processing!');
       return;
     }
     const sourceProof = sourceItem.proof;
@@ -207,7 +207,7 @@ const App: React.FC = () => {
           targetProof: targetProof.toFixed(2),
           waterVolume: waterVolume.toFixed(2),
           bottleCount,
-          toAccount: 'Processing', // Hardcode to match server
+          toAccount: 'Processing',
           date: new Date().toISOString().split('T')[0]
         })
       });
@@ -215,10 +215,6 @@ const App: React.FC = () => {
       const data = await res.json();
       console.log('Package response:', data);
       await fetchInventory();
-      if (data.tankSummary) {
-        console.log('Exporting tank summary for package:', data.tankSummary);
-        exportTankSummaryToExcel(data.tankSummary);
-      }
       setPackageForm({ batchId: '', product: 'Old Black Bear Vodka', proofGallons: '', targetProof: '80' });
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -226,7 +222,7 @@ const App: React.FC = () => {
       alert('Failed to package item: ' + error.message);
     }
   };
-  
+
   const fetchMonthlyReport = async () => {
     console.log('Fetching monthly report for:', reportMonth);
     try {
