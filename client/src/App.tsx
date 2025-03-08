@@ -6,9 +6,9 @@ interface InventoryItem {
   barrelId: string;
   account: string;
   type: string;
-  quantity: number;
-  proof: number;
-  proofGallons: number;
+  quantity: string;
+  proof: string;
+  proofGallons: string;
   receivedDate: string;
   source: string;
   dspNumber: string;
@@ -94,11 +94,11 @@ const App: React.FC = () => {
       console.error('Inventory fetch error:', error);
     }
   };
-
-  const [editingBatchId, setEditingBatchId] = useState(null);
-  const [editedBatchId, setEditedBatchId] = useState('');
-
-  const handleBatchIdUpdate = async (oldBatchId) => {
+  
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [editedBatchId, setEditedBatchId] = useState<string>('');
+  
+  const handleBatchIdUpdate = async (oldBatchId: string) => {
     try {
       const res = await fetch('/api/update-batch-id', {
         method: 'POST',
@@ -109,9 +109,10 @@ const App: React.FC = () => {
       await fetchInventory();
       setEditingBatchId(null);
       setEditedBatchId('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Update error:', err);
-      alert('Failed to update batch ID: ' + err.message);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      alert('Failed to update batch ID: ' + errorMessage);
     }
   };
 
@@ -195,7 +196,7 @@ const App: React.FC = () => {
       alert('Batch not found in Processing!');
       return;
     }
-    const sourceProof = sourceItem.proof;
+    const sourceProof = parseFloat(sourceItem.proof);  // Convert string to number
     const sourceVolume = sourceProofGallons / (sourceProof / 100);
     const targetVolume = sourceProofGallons / (targetProof / 100);
     const waterVolume = targetVolume - sourceVolume;
@@ -236,10 +237,10 @@ const App: React.FC = () => {
       console.log('Package response:', data);
       await fetchInventory();
       setPackageForm({ batchId: '', product: 'Old Black Bear Vodka', proofGallons: '', targetProof: '80' });
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
-      console.error('Package error:', error);
-      alert('Failed to package item: ' + error.message);
+    } catch (err: any) {
+      console.error('Package error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      alert('Failed to package item: ' + errorMessage);
     }
   };
 
@@ -495,114 +496,115 @@ const App: React.FC = () => {
             </div>
             <h2>Processing Inventory</h2>
 
-            <h3>Liquid in Processing</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Batch ID</th>
-                  <th>Type</th>
-                  <th>Quantity (WG)</th>
-                  <th>Proof</th>
-                  <th>Proof Gallons</th>
-                  <th>Date Received</th>
-                  <th>Source</th>
-                  <th>DSP Number</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inventory
-                  .filter(item => item.account === 'Processing' && item.barrelId.includes('-BATCH-'))
-                  .map(item => (
-                    <tr key={item.barrelId}>
-                      <td>
-                        {editingBatchId === item.barrelId ? (
-                          <input
-                            type="text"
-                            value={editedBatchId}
-                            onChange={e => setEditedBatchId(e.target.value)}
-                          />
-                        ) : (
-                          item.barrelId
-                        )}
-                      </td>
-                      <td>{item.type}</td>
-                      <td>{item.quantity}</td>
-                      <td>{item.proof}</td>
-                      <td>{item.proofGallons}</td>
-                      <td>{item.receivedDate}</td>
-                      <td>{item.source}</td>
-                      <td>{item.dspNumber}</td>
-                      <td>
-                        {editingBatchId === item.barrelId ? (
-                          <>
-                            <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
-                            <button onClick={() => setEditingBatchId(null)}>Cancel</button>
-                          </>
-                        ) : (
-                          <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
-                            Edit
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-            <h3>Bottled in Processing</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Batch ID</th>
-                  <th>Type</th>
-                  <th>Quantity (WG)</th>
-                  <th>Proof</th>
-                  <th>Proof Gallons</th>
-                  <th>Date Packaged</th>
-                  <th>Source</th>
-                  <th>DSP Number</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inventory
-                  .filter(item => item.account === 'Processing' && !item.barrelId.includes('-BATCH-'))
-                  .map(item => (
-                    <tr key={item.barrelId}>
-                      <td>
-                        {editingBatchId === item.barrelId ? (
-                          <input
-                            type="text"
-                            value={editedBatchId}
-                            onChange={e => setEditedBatchId(e.target.value)}
-                          />
-                        ) : (
-                          item.barrelId
-                        )}
-                      </td>
-                      <td>{item.type}</td>
-                      <td>{item.quantity}</td>
-                      <td>{item.proof}</td>
-                      <td>{item.proofGallons}</td>
-                      <td>{item.receivedDate}</td>
-                      <td>{item.source}</td>
-                      <td>{item.dspNumber}</td>
-                      <td>
-                        {editingBatchId === item.barrelId ? (
-                          <>
-                            <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
-                            <button onClick={() => setEditingBatchId(null)}>Cancel</button>
-                          </>
-                        ) : (
-                          <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
-                            Edit
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+<h3>Liquid in Processing</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Batch ID</th>
+      <th>Type</th>
+      <th>Quantity (WG)</th>
+      <th>Proof</th>
+      <th>Proof Gallons</th>
+      <th>Date Received</th>
+      <th>Source</th>
+      <th>DSP Number</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {inventory
+      .filter(item => item.account === 'Processing' && item.barrelId.includes('-BATCH-'))
+      .map(item => (
+        <tr key={item.barrelId}>
+          <td>
+            {editingBatchId === item.barrelId ? (
+              <input
+                type="text"
+                value={editedBatchId}
+                onChange={e => setEditedBatchId(e.target.value)}
+              />
+            ) : (
+              item.barrelId
+            )}
+          </td>
+          <td>{item.type}</td>
+          <td>{item.quantity}</td>
+          <td>{item.proof}</td>
+          <td>{item.proofGallons}</td>
+          <td>{item.receivedDate}</td>
+          <td>{item.source}</td>
+          <td>{item.dspNumber}</td>
+          <td>
+            {editingBatchId === item.barrelId ? (
+              <>
+                <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
+                <button onClick={() => setEditingBatchId(null)}>Cancel</button>
+              </>
+            ) : (
+              <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
+                Edit
+              </button>
+            )}
+          </td>
+        </tr>
+      ))}
+  </tbody>
+</table>
+
+<h3>Bottled in Processing</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Batch ID</th>
+      <th>Type</th>
+      <th>Quantity (WG)</th>
+      <th>Proof</th>
+      <th>Proof Gallons</th>
+      <th>Date Packaged</th>
+      <th>Source</th>
+      <th>DSP Number</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {inventory
+      .filter(item => item.account === 'Processing' && !item.barrelId.includes('-BATCH-'))
+      .map(item => (
+        <tr key={item.barrelId}>
+          <td>
+            {editingBatchId === item.barrelId ? (
+              <input
+                type="text"
+                value={editedBatchId}
+                onChange={e => setEditedBatchId(e.target.value)}
+              />
+            ) : (
+              item.barrelId
+            )}
+          </td>
+          <td>{item.type}</td>
+          <td>{item.quantity}</td>
+          <td>{item.proof}</td>
+          <td>{item.proofGallons}</td>
+          <td>{item.receivedDate}</td>
+          <td>{item.source}</td>
+          <td>{item.dspNumber}</td>
+          <td>
+            {editingBatchId === item.barrelId ? (
+              <>
+                <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
+                <button onClick={() => setEditingBatchId(null)}>Cancel</button>
+              </>
+            ) : (
+              <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
+                Edit
+              </button>
+            )}
+          </td>
+        </tr>
+      ))}
+  </tbody>
+</table>
           </div>
         );
       case 'Sales & Distribution':
