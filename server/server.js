@@ -238,6 +238,9 @@ app.post('/api/move', (req, res) => {
       } else {
         // Partial move: Create new records
         const remainingProofGallons = (originalProofGallons - movedProofGallons).toFixed(2);
+        const newBarrelId = toAccount === 'Processing'
+          ? `${barrelId}-BATCH-${new Date().toISOString().replace(/-/g, '').slice(2, 8)}`
+          : `${barrelId}-MOVED-${Date.now()}`;
         db.run(
           `UPDATE inventory SET proofGallons = ? WHERE barrelId = ?`,
           [remainingProofGallons, barrelId],
@@ -250,7 +253,17 @@ app.post('/api/move', (req, res) => {
             db.run(
               `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [`${barrelId}-MOVED-${Date.now()}`, toAccount, row.type, (parseFloat(row.quantity) * (movedProofGallons / originalProofGallons)).toFixed(2), row.proof, movedProofGallons.toFixed(2), new Date().toISOString().split('T')[0], row.source, row.dspNumber],
+              [
+                newBarrelId,
+                toAccount,
+                row.type,
+                (parseFloat(row.quantity) * (movedProofGallons / originalProofGallons)).toFixed(2),
+                row.proof,
+                movedProofGallons.toFixed(2),
+                new Date().toISOString().split('T')[0],
+                row.source,
+                row.dspNumber
+              ],
               (err) => {
                 if (err) {
                   console.error('Insert Moved Error:', err);
@@ -260,7 +273,15 @@ app.post('/api/move', (req, res) => {
                 db.run(
                   `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber, toAccount)
                    VALUES (?, ?, ?, ?, ?, 'Moved', ?, ?)`,
-                  [`${barrelId}-MOVED-${Date.now()}`, row.type, (parseFloat(row.quantity) * (movedProofGallons / originalProofGallons)).toFixed(2), movedProofGallons, new Date().toISOString().split('T')[0], row.dspNumber, toAccount],
+                  [
+                    newBarrelId,
+                    row.type,
+                    (parseFloat(row.quantity) * (movedProofGallons / originalProofGallons)).toFixed(2),
+                    movedProofGallons,
+                    new Date().toISOString().split('T')[0],
+                    row.dspNumber,
+                    toAccount
+                  ],
                   (err) => {
                     if (err) {
                       console.error('Transaction Insert Error:', err);
@@ -269,7 +290,7 @@ app.post('/api/move', (req, res) => {
                     }
                     db.run('COMMIT');
                     const tankSummary = {
-                      barrelId: `${barrelId}-MOVED-${Date.now()}`,
+                      barrelId: newBarrelId,
                       type: row.type,
                       proofGallons: movedProofGallons.toFixed(2),
                       proof: row.proof,
@@ -280,7 +301,7 @@ app.post('/api/move', (req, res) => {
                       serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
                     };
                     console.log('Partial move successful, tankSummary:', tankSummary);
-                    res.json({ message: 'Partial move successful', tankSummary });
+                    res.json({ message: 'Partial move successful', tankSummary, batchId: newBarrelId });
                   }
                 );
               }
