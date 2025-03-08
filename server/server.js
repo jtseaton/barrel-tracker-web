@@ -420,6 +420,63 @@ app.get('/api/report/tank-summary', (req, res) => {
   );
 });
 
+app.get('/api/daily-summary', (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  db.all(
+    `SELECT account, SUM(proofGallons) as totalProofGallons
+     FROM inventory
+     WHERE receivedDate <= ?
+     GROUP BY account`,
+    [today],
+    (err, rows) => {
+      if (err) {
+        console.error('Daily Summary Error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      console.log('Daily summary:', rows);
+      res.json(rows);
+    }
+  );
+});
+
+app.post('/api/physical-inventory', (req, res) => {
+  db.all('SELECT * FROM inventory', [], (err, rows) => {
+    if (err) {
+      console.error('Physical Inventory Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    const timestamp = new Date().toISOString();
+    console.log(`Physical inventory at ${timestamp}:`, rows);
+    res.json({ message: 'Physical inventory recorded', timestamp, inventory: rows });
+  });
+});
+
+app.post('/api/record-loss', (req, res) => {
+  const { barrelId, quantityLost, proofGallonsLost, reason, date } = req.body;
+  db.run(
+    `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, toAccount)
+     VALUES (?, ?, ?, ?, ?, 'Loss', 'Loss')`,
+    [barrelId, 'Spirits', quantityLost, proofGallonsLost, date, reason],
+    (err) => {
+      if (err) {
+        console.error('Loss Insert Error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      db.run(
+        `UPDATE inventory SET quantity = quantity - ?, proofGallons = proofGallons - ? WHERE barrelId = ?`,
+        [quantityLost, proofGallonsLost, barrelId],
+        (err) => {
+          if (err) {
+            console.error('Inventory Update Error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ message: 'Loss recorded' });
+        }
+      );
+    }
+  );
+});
+
 app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
 app.get('*', (req, res) => {
   const filePath = path.join(__dirname, '..', 'client', 'build', 'index.html');
