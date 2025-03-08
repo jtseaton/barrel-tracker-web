@@ -10,7 +10,6 @@ app.use(basicAuth({ users: { 'admin': 'yourpassword' }, challenge: true })); // 
 app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
 app.get('*', (req, res) => {
   const filePath = path.join(__dirname, '..', 'client', 'build', 'index.html');
-  console.log('Attempting to serve:', filePath);
   res.sendFile(filePath, (err) => {
     if (err) {
       console.error('Error serving index.html:', err);
@@ -351,6 +350,18 @@ app.get('/api/inventory', (req, res) => {
     }));
     console.log('Returning inventory:', formattedRows);
     res.json(formattedRows);
+  });
+});
+
+app.get('/api/debug-inventory', (req, res) => {
+  console.log('Received GET to /api/debug-inventory');
+  db.all('SELECT * FROM inventory', [], (err, rows) => {
+    if (err) {
+      console.error('DB Debug Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Raw DB inventory:', rows);
+    res.json(rows);
   });
 });
 
