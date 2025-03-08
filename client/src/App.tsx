@@ -100,6 +100,9 @@ const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showLossModal, setShowLossModal] = useState(false);
 
   // Fetch Data
   useEffect(() => {
@@ -194,6 +197,7 @@ const App: React.FC = () => {
         dspNumber: OUR_DSP,
         receivedDate: new Date().toISOString().split('T')[0]
       });
+      setShowReceiveModal(false);
     } catch (err: any) {
       console.error('Receive error:', err);
       alert('Failed to receive item: ' + err.message);
@@ -223,6 +227,7 @@ const App: React.FC = () => {
       await fetchInventory();
       if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
       setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
+      setShowMoveModal(false);
     } catch (err: any) {
       console.error('Move error:', err);
       alert('Failed to move item: ' + err.message);
@@ -320,6 +325,7 @@ const App: React.FC = () => {
         reason: '',
         date: new Date().toISOString().split('T')[0]
       });
+      setShowLossModal(false);
     } catch (err: any) {
       console.error('Record loss error:', err);
       alert('Failed to record loss: ' + err.message);
@@ -484,118 +490,139 @@ const App: React.FC = () => {
         return (
           <div>
             <h2>Inventory Management</h2>
-            <div>
-              <h3>Receive Inventory</h3>
-              <input
-                type="text"
-                placeholder="Barrel ID (e.g., GNS250329)"
-                value={receiveForm.barrelId}
-                onChange={e => setReceiveForm({ ...receiveForm, barrelId: e.target.value })}
-              />
-              <select value={receiveForm.account} onChange={e => setReceiveForm({ ...receiveForm, account: e.target.value })}>
-                <option value="Production">Production</option>
-                <option value="Storage">Storage</option>
-                <option value="Processing">Processing</option>
-              </select>
-              <select value={receiveForm.type} onChange={e => setReceiveForm({ ...receiveForm, type: e.target.value })}>
-                <option value="Cane Sugar">Cane Sugar</option>
-                <option value="Corn Sugar">Corn Sugar</option>
-                <option value="Agave Syrup">Agave Syrup</option>
-                <option value="Flaked Corn">Flaked Corn</option>
-                <option value="Rye Barley">Rye Barley</option>
-                <option value="Malted Barley">Malted Barley</option>
-                <option value="Spirits">Spirits</option>
-              </select>
-              <input
-                type="number"
-                placeholder="Quantity (WG)"
-                value={receiveForm.quantity}
-                onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
-                step="0.01"
-              />
-              <input
-                type="number"
-                placeholder="Proof (if Spirits)"
-                value={receiveForm.proof}
-                onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })}
-                step="0.01"
-              />
-              <input
-                type="text"
-                placeholder="Source"
-                value={receiveForm.source}
-                onChange={e => setReceiveForm({ ...receiveForm, source: e.target.value })}
-              />
-              <input
-                type="text"
-                placeholder="DSP Number"
-                value={receiveForm.dspNumber}
-                onChange={e => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
-              />
-              <input
-                type="date"
-                value={receiveForm.receivedDate}
-                onChange={e => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
-              />
-              <button onClick={handleReceive}>Receive</button>
+            <div style={{ marginBottom: '20px' }}>
+              <button onClick={() => setShowReceiveModal(true)}>Receive Inventory</button>
+              <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px' }}>Move Inventory</button>
+              <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px' }}>Record Loss</button>
             </div>
-            <div>
-              <h3>Move Inventory</h3>
-              <input
-                type="text"
-                placeholder="Barrel ID (e.g., GNS250329)"
-                value={moveForm.barrelId}
-                onChange={e => setMoveForm({ ...moveForm, barrelId: e.target.value })}
-              />
-              <select value={moveForm.toAccount} onChange={e => setMoveForm({ ...moveForm, toAccount: e.target.value })}>
-                <option value="Production">Production</option>
-                <option value="Storage">Storage</option>
-                <option value="Processing">Processing</option>
-              </select>
-              <input
-                type="number"
-                placeholder="Proof Gallons to Move"
-                value={moveForm.proofGallons}
-                onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
-                step="0.01"
-              />
-              <button onClick={handleMove}>Move</button>
-            </div>
-            <div>
-              <h3>Record Loss</h3>
-              <input
-                type="text"
-                placeholder="Barrel ID"
-                value={lossForm.barrelId}
-                onChange={e => setLossForm({ ...lossForm, barrelId: e.target.value })}
-              />
-              <input
-                type="number"
-                placeholder="Quantity Lost"
-                value={lossForm.quantityLost}
-                onChange={e => setLossForm({ ...lossForm, quantityLost: e.target.value })}
-                step="0.01"
-              />
-              <input
-                type="number"
-                placeholder="Proof Gallons Lost"
-                value={lossForm.proofGallonsLost}
-                onChange={e => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
-                step="0.01"
-              />
-              <input
-                type="text"
-                placeholder="Reason for Loss"
-                value={lossForm.reason}
-                onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
-              />
-              <input
-                type="date"
-                value={lossForm.date}
-                onChange={e => setLossForm({ ...lossForm, date: e.target.value })}
-              />
-              <button onClick={handleRecordLoss}>Record Loss</button>
-            </div>
+            {/* Modals */}
+            {showReceiveModal && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
+                  <h3>Receive Inventory</h3>
+                  <input
+                    type="text"
+                    placeholder="Barrel ID (e.g., GNS250329)"
+                    value={receiveForm.barrelId}
+                    onChange={e => setReceiveForm({ ...receiveForm, barrelId: e.target.value })}
+                  />
+                  <select value={receiveForm.account} onChange={e => setReceiveForm({ ...receiveForm, account: e.target.value })}>
+                    <option value="Production">Production</option>
+                    <option value="Storage">Storage</option>
+                    <option value="Processing">Processing</option>
+                  </select>
+                  <select value={receiveForm.type} onChange={e => setReceiveForm({ ...receiveForm, type: e.target.value })}>
+                    <option value="Cane Sugar">Cane Sugar</option>
+                    <option value="Corn Sugar">Corn Sugar</option>
+                    <option value="Agave Syrup">Agave Syrup</option>
+                    <option value="Flaked Corn">Flaked Corn</option>
+                    <option value="Rye Barley">Rye Barley</option>
+                    <option value="Malted Barley">Malted Barley</option>
+                    <option value="Spirits">Spirits</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Quantity (WG)"
+                    value={receiveForm.quantity}
+                    onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
+                    step="0.01"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Proof (if Spirits)"
+                    value={receiveForm.proof}
+                    onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })}
+                    step="0.01"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Source"
+                    value={receiveForm.source}
+                    onChange={e => setReceiveForm({ ...receiveForm, source: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="DSP Number"
+                    value={receiveForm.dspNumber}
+                    onChange={e => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+                  />
+                  <input
+                    type="date"
+                    value={receiveForm.receivedDate}
+                    onChange={e => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
+                  />
+                  <button onClick={handleReceive}>Submit</button>
+                  <button onClick={() => setShowReceiveModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {showMoveModal && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
+                  <h3>Move Inventory</h3>
+                  <input
+                    type="text"
+                    placeholder="Barrel ID (e.g., GNS250329)"
+                    value={moveForm.barrelId}
+                    onChange={e => setMoveForm({ ...moveForm, barrelId: e.target.value })}
+                  />
+                  <select value={moveForm.toAccount} onChange={e => setMoveForm({ ...moveForm, toAccount: e.target.value })}>
+                    <option value="Production">Production</option>
+                    <option value="Storage">Storage</option>
+                    <option value="Processing">Processing</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Proof Gallons to Move"
+                    value={moveForm.proofGallons}
+                    onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
+                    step="0.01"
+                  />
+                  <button onClick={handleMove}>Submit</button>
+                  <button onClick={() => setShowMoveModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {showLossModal && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
+                  <h3>Record Loss</h3>
+                  <input
+                    type="text"
+                    placeholder="Barrel ID"
+                    value={lossForm.barrelId}
+                    onChange={e => setLossForm({ ...lossForm, barrelId: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Quantity Lost"
+                    value={lossForm.quantityLost}
+                    onChange={e => setLossForm({ ...lossForm, quantityLost: e.target.value })}
+                    step="0.01"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Proof Gallons Lost"
+                    value={lossForm.proofGallonsLost}
+                    onChange={e => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
+                    step="0.01"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Reason for Loss"
+                    value={lossForm.reason}
+                    onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
+                  />
+                  <input
+                    type="date"
+                    value={lossForm.date}
+                    onChange={e => setLossForm({ ...lossForm, date: e.target.value })}
+                  />
+                  <button onClick={handleRecordLoss}>Submit</button>
+                  <button onClick={() => setShowLossModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+                </div>
+              </div>
+            )}
             <h2>Daily Summary (Proof Gallons)</h2>
             <table>
               <thead>
@@ -617,6 +644,35 @@ const App: React.FC = () => {
                     <td colSpan={2}>Loading summary...</td>
                   </tr>
                 )}
+              </tbody>
+            </table>
+            <h2>Storage Inventory</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Barrel ID</th>
+                  <th>Type</th>
+                  <th>Quantity</th>
+                  <th>Proof</th>
+                  <th>Proof Gallons</th>
+                  <th>Date Received</th>
+                  <th>Source</th>
+                  <th>DSP Number</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventory.filter(item => item.account === 'Storage').map(item => (
+                  <tr key={item.barrelId}>
+                    <td>{item.barrelId}</td>
+                    <td>{item.type}</td>
+                    <td>{item.quantity || '0.00'}</td>
+                    <td>{item.proof || '0.00'}</td>
+                    <td>{item.proofGallons || '0.00'}</td>
+                    <td>{item.receivedDate || 'N/A'}</td>
+                    <td>{item.source || 'N/A'}</td>
+                    <td>{item.dspNumber || 'N/A'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             <h2>Production Inventory</h2>
@@ -648,33 +704,35 @@ const App: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            <h2>Storage Inventory</h2>
+            <h2>Finished Packaged Inventory</h2>
             <table>
               <thead>
                 <tr>
-                  <th>Barrel ID</th>
+                  <th>Batch ID</th>
                   <th>Type</th>
-                  <th>Quantity</th>
+                  <th>Quantity (WG)</th>
                   <th>Proof</th>
                   <th>Proof Gallons</th>
-                  <th>Date Received</th>
+                  <th>Date Packaged</th>
                   <th>Source</th>
                   <th>DSP Number</th>
                 </tr>
               </thead>
               <tbody>
-                {inventory.filter(item => item.account === 'Storage').map(item => (
-                  <tr key={item.barrelId}>
-                    <td>{item.barrelId}</td>
-                    <td>{item.type}</td>
-                    <td>{item.quantity || '0.00'}</td>
-                    <td>{item.proof || '0.00'}</td>
-                    <td>{item.proofGallons || '0.00'}</td>
-                    <td>{item.receivedDate || 'N/A'}</td>
-                    <td>{item.source || 'N/A'}</td>
-                    <td>{item.dspNumber || 'N/A'}</td>
-                  </tr>
-                ))}
+                {inventory
+                  .filter(item => item.account === 'Processing' && !item.barrelId.includes('-BATCH-'))
+                  .map(item => (
+                    <tr key={item.barrelId}>
+                      <td>{item.barrelId}</td>
+                      <td>{item.type}</td>
+                      <td>{item.quantity || '0.00'}</td>
+                      <td>{item.proof || '0.00'}</td>
+                      <td>{item.proofGallons || '0.00'}</td>
+                      <td>{item.receivedDate || 'N/A'}</td>
+                      <td>{item.source || 'N/A'}</td>
+                      <td>{item.dspNumber || 'N/A'}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
