@@ -7,7 +7,17 @@ const app = express();
 
 app.use(express.json());
 app.use(basicAuth({ users: { 'admin': 'yourpassword' }, challenge: true })); // Replace 'yourpassword'
-app.use(express.static(path.join(__dirname, '../client/build')));
+app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
+app.get('*', (req, res) => {
+  const filePath = path.join(__dirname, '..', 'client', 'build', 'index.html');
+  console.log('Attempting to serve:', filePath);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      res.status(500).send('Server error: Unable to load the application');
+    }
+  });
+});
 
 const OUR_DSP = 'DSP-AL-20010';
 
