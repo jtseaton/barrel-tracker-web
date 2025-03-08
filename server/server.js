@@ -84,60 +84,34 @@ db.serialize(() => {
 });
 
 // Rest of the endpoints remain unchanged
-app.post('/api/receive', (req, res) => {
-  console.log('Received POST to /api/receive:', req.body);
-  const { barrelId, account, type, quantity, proof, source, dspNumber, receivedDate } = req.body;
-  const fixedQuantity = Number(quantity).toFixed(2);
-  const fixedProof = proof ? Number(proof).toFixed(2) : 0;
-  const proofGallons = type === 'Spirits' ? ((fixedQuantity * fixedProof) / 100).toFixed(2) : 0;
-  db.run(
-    `INSERT INTO inventory (barrelId, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [barrelId, account, type, fixedQuantity, fixedProof, proofGallons, receivedDate, source, dspNumber || OUR_DSP],
-    function (err) {
-      if (err) {
-        console.error('DB Insert Error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log('Inserted into inventory, barrelId:', barrelId);
-      db.run(
-        `INSERT INTO transactions (barrelId, type, quantity, proof, proofGallons, date, action, dspNumber, toAccount)
-         VALUES (?, ?, ?, ?, ?, ?, 'Received', ?, ?)`,
-        [barrelId, type, fixedQuantity, fixedProof, proofGallons, receivedDate, dspNumber || OUR_DSP, account],
-        (err) => {
-          if (err) {
-            console.error('Transaction Insert Error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          const dateStr = receivedDate.replace(/-/g, '').slice(2);
-          db.get(
-            `SELECT COUNT(*) as count FROM transactions WHERE date = ? AND action = 'Received'`,
-            [receivedDate],
-            (err, row) => {
-              if (err) {
-                console.error('Serial Number Count Error:', err);
-                return res.status(500).json({ error: err.message });
-              }
-              const serialSuffix = row.count > 0 ? `-${row.count}` : '';
-              const serialNumber = `${dateStr}${serialSuffix}`;
-              const tankSummary = {
-                barrelId,
-                type,
-                proofGallons,
-                proof: fixedProof,
-                totalProofGallonsLeft: proofGallons,
-                date: receivedDate,
-                toAccount: account,
-                serialNumber
-              };
-              console.log('Sending response with tankSummary:', tankSummary);
-              res.json({ barrelId, message: 'Item received', tankSummary });
-            }
-          );
+app.post('/api/update-batch-id', (req, res) => {
+  const { oldBatchId, newBatchId } = req.body;
+  console.log('Received batch ID update request:', { oldBatchId, newBatchId });
+
+  db.serialize(() => {
+    db.run(
+      `UPDATE inventory SET barrelId = ? WHERE barrelId = ?`,
+      [newBatchId, oldBatchId],
+      (err) => {
+        if (err) {
+          console.error('Inventory Batch ID Update Error:', err);
+          return res.status(500).json({ error: err.message });
         }
-      );
-    }
-  );
+        db.run(
+          `UPDATE transactions SET barrelId = ? WHERE barrelId = ?`,
+          [newBatchId, oldBatchId],
+          (err) => {
+            if (err) {
+              console.error('Transaction Batch ID Update Error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log('Batch ID updated from', oldBatchId, 'to', newBatchId);
+            res.json({ message: 'Batch ID updated', batchId: newBatchId });
+          }
+        );
+      }
+    );
+  });
 });
 
 app.post('/api/move', (req, res) => {
