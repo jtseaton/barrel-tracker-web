@@ -12,9 +12,8 @@ const db = new sqlite3.Database(':memory:', (err) => {
 });
 
 db.serialize(() => {
-  // Existing tables...
   db.run(`
-    CREATE TABLE inventory (
+    CREATE TABLE IF NOT EXISTS inventory (
       identifier TEXT,
       account TEXT,
       type TEXT,
@@ -30,7 +29,7 @@ db.serialize(() => {
     )
   `);
   db.run(`
-    CREATE TABLE transactions (
+    CREATE TABLE IF NOT EXISTS transactions (
       barrelId TEXT,
       type TEXT,
       quantity REAL,
@@ -41,20 +40,17 @@ db.serialize(() => {
       toAccount TEXT
     )
   `);
-  // New items table
   db.run(`
-    CREATE TABLE items (
+    CREATE TABLE IF NOT EXISTS items (
       name TEXT PRIMARY KEY
     )
   `);
-  // Seed some initial items
-  db.run('INSERT INTO items (name) VALUES (?)', ['GNS250329']);
-  db.run('INSERT INTO items (name) VALUES (?)', ['GrainBatch001']);
+  // Seed initial items (optional, remove if not needed)
+  db.run('INSERT OR IGNORE INTO items (name) VALUES (?)', ['GNS250329']);
+  db.run('INSERT OR IGNORE INTO items (name) VALUES (?)', ['GrainBatch001']);
 });
 
-// Existing endpoints...
-
-// New endpoints for items
+// GET all items
 app.get('/api/items', (req, res) => {
   db.all('SELECT name FROM items', (err, rows) => {
     if (err) {
@@ -65,12 +61,13 @@ app.get('/api/items', (req, res) => {
   });
 });
 
+// POST a new item
 app.post('/api/items', (req, res) => {
   const { name } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Item name is required' });
   }
-  db.run('INSERT INTO items (name) VALUES (?)', [name], (err) => {
+  db.run('INSERT OR IGNORE INTO items (name) VALUES (?)', [name], (err) => {
     if (err) {
       console.error('Insert Item Error:', err);
       return res.status(500).json({ error: err.message });
@@ -519,9 +516,7 @@ app.get('/api/report/daily', (req, res) => {
   );
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/build/index.html')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
