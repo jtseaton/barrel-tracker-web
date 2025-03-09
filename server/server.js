@@ -3,17 +3,8 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const app = express();
 
-const OUR_DSP = 'DSP-AL-20010';
-
-app.use(express.json({ limit: '10mb' })); // Increase payload limit
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../client/build')));
-
-// Middleware to log requests and increase header size limit
-app.use((req, res, next) => {
-  console.log(`Incoming request: ${req.method} ${req.url}`);
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Optional CORS for development
-  next();
-});
 
 const db = new sqlite3.Database(':memory:', (err) => {
   if (err) console.error('Database connection error:', err);
@@ -21,6 +12,7 @@ const db = new sqlite3.Database(':memory:', (err) => {
 });
 
 db.serialize(() => {
+  // Existing tables...
   db.run(`
     CREATE TABLE inventory (
       identifier TEXT,
@@ -49,10 +41,42 @@ db.serialize(() => {
       toAccount TEXT
     )
   `);
-  db.run(
-    'INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['47388958', 'Storage', 'Spirits', '55', 'gallons', '190', '104.50', '2025-03-08', 'DSP-KY-417', OUR_DSP, 'Received']
-  );
+  // New items table
+  db.run(`
+    CREATE TABLE items (
+      name TEXT PRIMARY KEY
+    )
+  `);
+  // Seed some initial items
+  db.run('INSERT INTO items (name) VALUES (?)', ['GNS250329']);
+  db.run('INSERT INTO items (name) VALUES (?)', ['GrainBatch001']);
+});
+
+// Existing endpoints...
+
+// New endpoints for items
+app.get('/api/items', (req, res) => {
+  db.all('SELECT name FROM items', (err, rows) => {
+    if (err) {
+      console.error('DB Select Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/items', (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Item name is required' });
+  }
+  db.run('INSERT INTO items (name) VALUES (?)', [name], (err) => {
+    if (err) {
+      console.error('Insert Item Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ message: 'Item created successfully', name });
+  });
 });
 
 app.get('/api/inventory', (req, res) => {
