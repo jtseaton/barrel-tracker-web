@@ -8,6 +8,8 @@ import Sales from './components/Sales';
 import Users from './components/Users';
 import Reporting from './components/Reporting';
 import ReceivePage from './components/ReceivePage';
+import Items from './components/Items'; // New component
+import ItemDetails from './components/ItemDetails'; // New component
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
@@ -71,11 +73,11 @@ const App: React.FC = () => {
                 { name: 'Receive Inventory', path: '/receive' },
                 { name: 'Transfers', action: () => setActiveSection('Transfers') },
                 { name: 'Inventory', action: () => setActiveSection('Inventory') },
-                { name: 'Items', action: () => setActiveSection('Inventory') },
+                { name: 'Items', path: '/items' }, // Link to new Items page
               ].map((item) => (
                 <li key={item.name}>
                   {item.path ? (
-                    <Link to={item.path} onClick={() => setActiveSection('Inventory')}>
+                    <Link to={item.path} onClick={() => setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name)}>
                       {item.name}
                     </Link>
                   ) : (
@@ -135,6 +137,8 @@ const App: React.FC = () => {
               path="/receive"
               element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
             />
+            <Route path="/items" element={<Items />} /> {/* New Items route */}
+            <Route path="/items/:name" element={<ItemDetails />} /> {/* New Item Details route */}
           </Routes>
         </div>
       </div>
