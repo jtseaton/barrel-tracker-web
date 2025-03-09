@@ -122,7 +122,6 @@ interface LossForm {
   date: string;
 }
 
-// Main App Component
 const App: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [moveForm, setMoveForm] = useState<MoveForm>({
@@ -163,9 +162,12 @@ const App: React.FC = () => {
 
   const fetchInventory = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inventory`);
+      const res = await fetch(`${API_BASE_URL}/api/inventory`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
+      console.log('Fetched inventory data:', data);
       setInventory(data);
     } catch (err: any) {
       console.error('Fetch inventory error:', err);
@@ -174,7 +176,9 @@ const App: React.FC = () => {
 
   const fetchDailySummary = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/daily-summary`);
+      const res = await fetch(`${API_BASE_URL}/api/daily-summary`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setDailySummary(data);
@@ -197,10 +201,12 @@ const App: React.FC = () => {
   }, [inventory]);
 
   const fetchMonthlyReport = async () => {
+    console.log('Fetching monthly report for:', reportMonth);
     try {
       const res = await fetch(`${API_BASE_URL}/api/report/monthly?month=${reportMonth}`);
       if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
       const data = await res.json();
+      console.log('Monthly report data:', data);
       setReport(data);
     } catch (err: any) {
       console.error('Report error:', err);
@@ -208,10 +214,12 @@ const App: React.FC = () => {
   };
 
   const fetchDailyReport = async () => {
+    console.log('Fetching daily report for:', reportDate);
     try {
       const res = await fetch(`${API_BASE_URL}/api/report/daily?date=${reportDate}`);
       if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
       const data = await res.json();
+      console.log('Daily report data:', data);
       setReport(data);
     } catch (err: any) {
       console.error('Daily report error:', err);
@@ -220,9 +228,11 @@ const App: React.FC = () => {
 
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
+      console.log('Invalid move request: missing identifier or proofGallons');
       setProductionError('Please fill in Identifier and Proof Gallons.');
       return;
     }
+    console.log('Sending move request:', moveForm);
     try {
       const res = await fetch(`${API_BASE_URL}/api/move`, {
         method: 'POST',
@@ -234,6 +244,7 @@ const App: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
+      console.log('Move response:', data);
       if (data.batchId) setPackageForm((prev) => ({ ...prev, batchId: data.batchId }));
       await fetchInventory();
       if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
@@ -255,6 +266,7 @@ const App: React.FC = () => {
       !packageForm.alcoholContent ||
       !packageForm.healthWarning
     ) {
+      console.log('Invalid package request:', packageForm);
       setProductionError('Please fill in all fields and confirm health warning.');
       return;
     }
@@ -266,6 +278,8 @@ const App: React.FC = () => {
       (item) => item.identifier === packageForm.batchId.trim() && item.account === 'Processing'
     );
     if (!sourceItem) {
+      console.log('Batch not found in Processing. Entered Batch ID:', packageForm.batchId);
+      console.log('Processing inventory:', inventory.filter((item) => item.account === 'Processing'));
       setProductionError('Batch not found in Processing!');
       return;
     }
@@ -278,6 +292,18 @@ const App: React.FC = () => {
     const bottleCount = Math.floor(finalVolume / bottleSizeGal);
     const finalProofGallons = bottleCount * bottleSizeGal * (targetProof / 100);
 
+    console.log('Packaging calc:', {
+      batchId: packageForm.batchId,
+      sourceProofGallons,
+      sourceProof,
+      targetProof,
+      sourceVolume,
+      targetVolume,
+      waterVolume,
+      finalVolume,
+      bottleCount,
+      finalProofGallons,
+    });
     try {
       const res = await fetch(`${API_BASE_URL}/api/package`, {
         method: 'POST',
@@ -298,6 +324,7 @@ const App: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
+      console.log('Package response:', data);
       await fetchInventory();
       setPackageForm({
         batchId: '',
@@ -400,6 +427,7 @@ const App: React.FC = () => {
   };
 
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
+    console.log('Starting exportTankSummaryToExcel with:', tankSummary);
     try {
       const wsData = [
         [`Tank Summary Report - ${tankSummary.serialNumber}`],
@@ -431,19 +459,51 @@ const App: React.FC = () => {
       ];
       labelCells.forEach((cell) => {
         if (ws[cell]) {
-          ws[cell].s = { font: { bold: true }, fill: { fgColor: { rgb: 'FFFF00' } } };
+          ws[cell].s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: 'FFFF00' } },
+            border: {
+              top: { style: 'thin', color: { rgb: '000000' } },
+              bottom: { style: 'thin', color: { rgb: '000000' } },
+              left: { style: 'thin', color: { rgb: '000000' } },
+              right: { style: 'thin', color: { rgb: '000000' } },
+            },
+          };
         }
       });
+      if (ws['A1']) {
+        ws['A1'].s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: 'FFFF00' } },
+          alignment: { horizontal: 'center' },
+          border: {
+            top: { style: 'thin', color: { rgb: '000000' } },
+            bottom: { style: 'thin', color: { rgb: '000000' } },
+            left: { style: 'thin', color: { rgb: '000000' } },
+            right: { style: 'thin', color: { rgb: '000000' } },
+          },
+        };
+      }
+      if (ws['A15']) {
+        ws['A15'].s = {
+          font: { bold: true },
+          alignment: { horizontal: 'left', wrapText: true },
+        };
+      }
       ws['!cols'] = [{ wch: 30 }, { wch: 35 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-      XLSX.writeFile(wb, `${tankSummary.barrelId}_Tank_Summary_${tankSummary.serialNumber}.xlsx`);
+      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.serialNumber}.xlsx`;
+      console.log('Writing file:', filename);
+      XLSX.writeFile(wb, filename);
+      console.log('Export successful:', filename);
     } catch (err: any) {
       console.error('Export failed:', err);
       alert('Failed to export tank summary: ' + err.message);
     }
   };
 
+  // Render Section Function
   const renderSection = () => {
     switch (activeSection) {
       case 'Home':
@@ -900,12 +960,8 @@ const App: React.FC = () => {
                 <h3>{report.month ? `Monthly Report: ${report.month}` : `Daily Report: ${report.date}`}</h3>
                 <p>Total Received: {Number(report.totalReceived).toFixed(2)} PG</p>
                 <p>Total Processed: {Number(report.totalProcessed).toFixed(2)} PG</p>
-                {report.totalMoved !== undefined && (
-                  <p>Total Moved: {Number(report.totalMoved).toFixed(2)} PG</p>
-                )}
-                {report.totalRemoved !== undefined && (
-                  <p>Total Removed: {Number(report.totalRemoved).toFixed(2)} PG</p>
-                )}
+                {report.totalMoved !== undefined && <p>Total Moved: {Number(report.totalMoved).toFixed(2)} PG</p>}
+                {report.totalRemoved !== undefined && <p>Total Removed: {Number(report.totalRemoved).toFixed(2)} PG</p>}
                 {report.byType && (
                   <div>
                     <h4>Processed by Type</h4>
@@ -966,37 +1022,79 @@ const App: React.FC = () => {
         <nav className={`menu ${menuOpen ? 'open' : ''}`}>
           <ul>
             <li>
-              <button onClick={() => { setActiveSection('Home'); setMenuOpen(false); }} className={activeSection === 'Home' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Home');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Home' ? 'active' : ''}
+              >
                 Home
               </button>
             </li>
             <li>
-              <button onClick={() => { setActiveSection('Production'); setMenuOpen(false); }} className={activeSection === 'Production' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Production');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Production' ? 'active' : ''}
+              >
                 Production
               </button>
             </li>
             <li>
-              <button onClick={() => { setActiveSection('Inventory'); setMenuOpen(false); }} className={activeSection === 'Inventory' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Inventory');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Inventory' ? 'active' : ''}
+              >
                 Inventory
               </button>
             </li>
             <li>
-              <button onClick={() => { setActiveSection('Processing'); setMenuOpen(false); }} className={activeSection === 'Processing' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Processing');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Processing' ? 'active' : ''}
+              >
                 Processing
               </button>
             </li>
             <li>
-              <button onClick={() => { setActiveSection('Sales & Distribution'); setMenuOpen(false); }} className={activeSection === 'Sales & Distribution' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Sales & Distribution');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Sales & Distribution' ? 'active' : ''}
+              >
                 Sales & Distribution
               </button>
             </li>
             <li>
-              <button onClick={() => { setActiveSection('Users'); setMenuOpen(false); }} className={activeSection === 'Users' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Users');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Users' ? 'active' : ''}
+              >
                 Users
               </button>
             </li>
             <li>
-              <button onClick={() => { setActiveSection('Reporting'); setMenuOpen(false); }} className={activeSection === 'Reporting' ? 'active' : ''}>
+              <button
+                onClick={() => {
+                  setActiveSection('Reporting');
+                  setMenuOpen(false);
+                }}
+                className={activeSection === 'Reporting' ? 'active' : ''}
+              >
                 Reporting
               </button>
             </li>
@@ -1006,7 +1104,10 @@ const App: React.FC = () => {
           <h1>Tilly - Distillery Dog</h1>
           <Routes>
             <Route path="/" element={renderSection()} />
-            <Route path="/receive" element={<ReceivePage fetchInventory={fetchInventory} />} />
+            <Route
+              path="/receive"
+              element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
+            />
           </Routes>
         </div>
       </div>
@@ -1014,8 +1115,11 @@ const App: React.FC = () => {
   );
 };
 
-// New Receive Page Component
-const ReceivePage: React.FC<{ fetchInventory: () => Promise<void> }> = ({ fetchInventory }) => {
+// Receive Page Component
+const ReceivePage: React.FC<{
+  fetchInventory: () => Promise<void>;
+  exportTankSummary: (tankSummary: TankSummary) => void;
+}> = ({ fetchInventory, exportTankSummary }) => {
   const navigate = useNavigate();
   const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
     identifier: '',
@@ -1075,11 +1179,8 @@ const ReceivePage: React.FC<{ fetchInventory: () => Promise<void> }> = ({ fetchI
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      if (data.tankSummary) {
-        // Assuming exportTankSummaryToExcel is available globally or passed as prop
-        // For simplicity, we'll log it here; adjust as needed
-        console.log('Tank Summary:', data.tankSummary);
-      }
+      console.log('Receive response:', data);
+      if (data.tankSummary) exportTankSummary(data.tankSummary);
       await fetchInventory();
       navigate('/');
     } catch (err: any) {
