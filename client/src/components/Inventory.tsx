@@ -5,7 +5,7 @@ import { fetchInventory, fetchDailySummary } from '../utils/fetchUtils';
 
 const OUR_DSP = 'DSP-AL-20010';
 
-const Inventory: React.FC = () => {
+const Inventory: React.FC<{ showItemsModalFromMenu?: boolean }> = ({ showItemsModalFromMenu }) => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummaryItem[]>([]);
   const [moveForm, setMoveForm] = useState<MoveForm>({ identifier: '', toAccount: 'Storage', proofGallons: '' });
@@ -22,13 +22,19 @@ const Inventory: React.FC = () => {
   const [items, setItems] = useState<string[]>([]);
   const [productionError, setProductionError] = useState<string | null>(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
-    fetchInventory().then(setInventory).catch((err) => console.error(err)); // Fixed syntax
+    fetchInventory().then(setInventory).catch((err) => console.error(err));
     fetchDailySummary().then(setDailySummary).catch((err) => console.error(err));
     fetchItems();
   }, []);
+
+  useEffect(() => {
+    if (showItemsModalFromMenu) {
+      setShowItemsModal(true);
+    }
+  }, [showItemsModalFromMenu]);
 
   const fetchItems = async () => {
     try {
