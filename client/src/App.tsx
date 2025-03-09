@@ -14,16 +14,23 @@ import './App.css';
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
-  const [menuOpen, setMenuOpen] = useState(true); // Menu is open by default
+  const [menuOpen, setMenuOpen] = useState(true); // Menu persistent by default
+  const [showInventorySubmenu, setShowInventorySubmenu] = useState(false); // Control Inventory submenu
   const [isLoading, setIsLoading] = useState(true);
 
   React.useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
-  const handleContentClick = () => {
-    if (menuOpen) {
-      setMenuOpen(false); // Close menu when clicking content
+  const handleInventoryClick = () => {
+    if (activeSection === 'Inventory' && showInventorySubmenu) {
+      // If already on Inventory submenu, go back to main menu
+      setShowInventorySubmenu(false);
+      setActiveSection('Home');
+    } else {
+      // Show Inventory submenu
+      setActiveSection('Inventory');
+      setShowInventorySubmenu(true);
     }
   };
 
@@ -54,61 +61,56 @@ const App: React.FC = () => {
         </button>
         <nav className={`menu ${menuOpen ? 'open' : ''}`}>
           <ul>
-            {[
-              { name: 'Home', subMenu: null },
-              { name: 'Production', subMenu: null },
-              {
-                name: 'Inventory',
-                subMenu: [
-                  { name: 'Receive Inventory', path: '/receive' },
-                  { name: 'Items', action: () => setActiveSection('Inventory') },
-                ],
-              },
-              { name: 'Processing', subMenu: null },
-              { name: 'Sales & Distribution', subMenu: null },
-              { name: 'Users', subMenu: null },
-              { name: 'Reporting', subMenu: null },
-            ].map((section) => (
-              <li key={section.name}>
-                <button
-                  onClick={() => {
-                    setActiveSection(section.name);
-                  }}
-                  className={activeSection === section.name ? 'active' : ''}
-                >
-                  {section.name}
-                </button>
-                {section.subMenu && menuOpen && (
-                  <ul className="submenu">
-                    {section.subMenu.map((subItem) => (
-                      <li key={subItem.name}>
-                        {subItem.path ? (
-                          <Link
-                            to={subItem.path}
-                            onClick={() => {
-                              setActiveSection(section.name);
-                            }}
-                          >
-                            {subItem.name}
-                          </Link>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              subItem.action?.();
-                            }}
-                          >
-                            {subItem.name}
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
+            {showInventorySubmenu ? (
+              // Inventory submenu options
+              [
+                { name: 'Vendors', action: () => setActiveSection('Vendors') },
+                { name: 'Receipts', path: '/receive' },
+                { name: 'Transfers', action: () => setActiveSection('Transfers') },
+                { name: 'Inventory', action: () => setActiveSection('Inventory') },
+                { name: 'Items', action: () => setActiveSection('Inventory') }, // Triggers items modal via prop
+              ].map((item) => (
+                <li key={item.name}>
+                  {item.path ? (
+                    <Link to={item.path} onClick={() => setActiveSection('Inventory')}>
+                      {item.name}
+                    </Link>
+                  ) : (
+                    <button onClick={item.action}>{item.name}</button>
+                  )}
+                </li>
+              ))
+            ) : (
+              // Main menu options
+              [
+                { name: 'Home', subMenu: null },
+                { name: 'Production', subMenu: null },
+                { name: 'Inventory', subMenu: true }, // Submenu exists but hidden until clicked
+                { name: 'Processing', subMenu: null },
+                { name: 'Sales & Distribution', subMenu: null },
+                { name: 'Users', subMenu: null },
+                { name: 'Reporting', subMenu: null },
+              ].map((section) => (
+                <li key={section.name}>
+                  <button
+                    onClick={() => {
+                      if (section.name === 'Inventory') {
+                        handleInventoryClick();
+                      } else {
+                        setActiveSection(section.name);
+                        setShowInventorySubmenu(false); // Reset submenu when switching sections
+                      }
+                    }}
+                    className={activeSection === section.name ? 'active' : ''}
+                  >
+                    {section.name}
+                  </button>
+                </li>
+              ))
+            )}
           </ul>
         </nav>
-        <div className="content" onClick={handleContentClick}>
+        <div className="content">
           <h1>Tilly - Distillery Dog</h1>
           <Routes>
             <Route
@@ -117,7 +119,9 @@ const App: React.FC = () => {
                 <>
                   {activeSection === 'Home' && <Home />}
                   {activeSection === 'Production' && <Production />}
-                  {activeSection === 'Inventory' && <Inventory showItemsModalFromMenu={activeSection === 'Inventory' && menuOpen} />}
+                  {activeSection === 'Inventory' && <Inventory showItemsModalFromMenu={activeSection === 'Inventory' && showInventorySubmenu && menuOpen} />}
+                  {activeSection === 'Vendors' && <div><h2>Vendors</h2><p>Vendors page coming soon</p></div>}
+                  {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                   {activeSection === 'Processing' && <Processing />}
                   {activeSection === 'Sales & Distribution' && <Sales />}
                   {activeSection === 'Users' && <Users />}
