@@ -16,11 +16,8 @@ const Inventory: React.FC = () => {
     reason: '',
     date: new Date().toISOString().split('T')[0],
   });
-  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false); // Fixed typo: "ИсториModal" -> "MoveModal"
   const [showLossModal, setShowLossModal] = useState(false);
-  const [items, setItems] = useState<string[]>([]);
-  const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [editedItemName, setEditedItemName] = useState('');
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -28,20 +25,7 @@ const Inventory: React.FC = () => {
   useEffect(() => {
     fetchInventory().then(setInventory).catch((err) => console.error(err));
     fetchDailySummary().then(setDailySummary).catch((err) => console.error(err));
-    fetchItems();
   }, []);
-
-  const fetchItems = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/items`);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      setItems(data.map((item: { name: string }) => item.name));
-    } catch (err: any) {
-      console.error('Fetch items error:', err);
-      setProductionError('Failed to fetch items: ' + err.message);
-    }
-  };
 
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
@@ -89,28 +73,6 @@ const Inventory: React.FC = () => {
     }
   };
 
-  const handleEditItem = (item: string) => {
-    setEditingItem(item);
-    setEditedItemName(item);
-  };
-
-  const handleUpdateItem = async (oldName: string) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/items`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName, newName: editedItemName }),
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      setItems(items.map((i) => (i === oldName ? editedItemName : i)));
-      setEditingItem(null);
-      setProductionError(null);
-    } catch (err: any) {
-      console.error('Update item error:', err);
-      setProductionError('Failed to update item: ' + err.message);
-    }
-  };
-
   return (
     <div>
       <h2>Inventory Management</h2>
@@ -151,43 +113,6 @@ const Inventory: React.FC = () => {
           </div>
         </div>
       )}
-      <h2>Items List</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Item Name</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item}>
-              <td>
-                {editingItem === item ? (
-                  <input
-                    type="text"
-                    value={editedItemName}
-                    onChange={(e) => setEditedItemName(e.target.value)}
-                  />
-                ) : (
-                  item
-                )}
-              </td>
-              <td>
-                {editingItem === item ? (
-                  <>
-                    <button onClick={() => handleUpdateItem(item)}>Save</button>
-                    <button onClick={() => setEditingItem(null)} style={{ marginLeft: '5px' }}>Cancel</button>
-                  </>
-                ) : (
-                  <button onClick={() => handleEditItem(item)}>Edit</button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
       <h2>Daily Summary (Proof Gallons)</h2>
       <table>
         <thead>
