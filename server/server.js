@@ -76,6 +76,20 @@ app.post('/api/items', (req, res) => {
   });
 });
 
+app.put('/api/items', (req, res) => {
+  const { oldName, newName } = req.body;
+  if (!oldName || !newName) {
+    return res.status(400).json({ error: 'Old and new item names are required' });
+  }
+  db.run('UPDATE items SET name = ? WHERE name = ?', [newName, oldName], (err) => {
+    if (err) {
+      console.error('Update Item Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ message: 'Item updated successfully', oldName, newName });
+  });
+});
+
 app.get('/api/inventory', (req, res) => {
   db.all('SELECT * FROM inventory', (err, rows) => {
     if (err) {
