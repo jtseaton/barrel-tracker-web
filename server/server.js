@@ -5,20 +5,19 @@ const app = express();
 
 const OUR_DSP = 'DSP-AL-20010';
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increase payload limit
 app.use(express.static(path.join(__dirname, '../client/build')));
 
+// Middleware to log requests and increase header size limit
 app.use((req, res, next) => {
   console.log(`Incoming request: ${req.method} ${req.url}`);
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Optional CORS for development
   next();
 });
 
 const db = new sqlite3.Database(':memory:', (err) => {
-  if (err) {
-    console.error('Database connection error:', err);
-  } else {
-    console.log('Connected to SQLite database');
-  }
+  if (err) console.error('Database connection error:', err);
+  else console.log('Connected to SQLite database');
 });
 
 db.serialize(() => {
@@ -35,7 +34,7 @@ db.serialize(() => {
       source TEXT,
       dspNumber TEXT,
       status TEXT,
-      description TEXT  -- Added
+      description TEXT
     )
   `);
   db.run(`
@@ -50,9 +49,10 @@ db.serialize(() => {
       toAccount TEXT
     )
   `);
-  db.run('INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-    '47388958', 'Storage', 'Spirits', '55', 'gallons', '190', '104.50', '2025-03-08', 'DSP-KY-417', OUR_DSP, 'Received'
-  ]);
+  db.run(
+    'INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ['47388958', 'Storage', 'Spirits', '55', 'gallons', '190', '104.50', '2025-03-08', 'DSP-KY-417', OUR_DSP, 'Received']
+  );
 });
 
 app.get('/api/inventory', (req, res) => {
@@ -66,6 +66,7 @@ app.get('/api/inventory', (req, res) => {
 });
 
 app.post('/api/receive', (req, res) => {
+  console.log('Received POST to /api/receive:', req.body);
   const {
     identifier,
     account,
@@ -81,7 +82,6 @@ app.post('/api/receive', (req, res) => {
     description, // Added
   } = req.body;
 
-  // Validation
   if (!account || !type || !quantity || !unit || !receivedDate || !dspNumber || !status) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -94,35 +94,34 @@ app.post('/api/receive', (req, res) => {
 
   const parsedQuantity = parseFloat(quantity);
   const parsedProof = proof ? parseFloat(proof) : null;
-  let finalProofGallons = '0.00';
-  if (type === 'Spirits') {
-    finalProofGallons = proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2);
+  if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0))) {
+    return res.status(400).json({ error: 'Invalid quantity or proof' });
   }
 
-  const inventoryItem = [
-    identifier || null,
-    account,
-    type,
-    parsedQuantity.toString(),
-    unit,
-    type === 'Spirits' ? parsedProof.toString() : null,
-    type === 'Spirits' ? finalProofGallons : null,
-    receivedDate,
-    source || 'Unknown',
-    dspNumber,
-    status,
-    description || null, // Added
-  ];
+  const finalProofGallons = type === 'Spirits' ? (proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2)) : '0.00';
 
   db.run(
     `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    inventoryItem,
-    function (err) {
+    [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber, status, description || null],
+    (err) => {
       if (err) {
+        console.error('Insert Receive Error:', err);
         return res.status(500).json({ error: err.message });
       }
-      // Rest of the endpoint logic (transactions, tankSummary, response) unchanged
+      const tankSummary = type === 'Spirits' ? {
+        barrelId: identifier || `LOT-${Date.now()}`,
+        type,
+        proofGallons: finalProofGallons,
+        proof: proof || '0.00',
+        totalProofGallonsLeft: finalProofGallons,
+        date: receivedDate,
+        fromAccount: 'External',
+        toAccount: account,
+        serialNumber: `${receivedDate.replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`,
+        producingDSP: dspNumber,
+      } : null;
+      res.json({ message: 'Receive successful', tankSummary });
     }
   );
 });
