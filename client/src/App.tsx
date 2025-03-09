@@ -32,6 +32,11 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBackClick = () => {
+    setShowInventorySubmenu(false);
+    setActiveSection('Home');
+  };
+
   if (isLoading) {
     return (
       <div
@@ -61,11 +66,12 @@ const App: React.FC = () => {
           <ul>
             {showInventorySubmenu ? (
               [
+                { name: 'Back', action: handleBackClick },
                 { name: 'Vendors', action: () => setActiveSection('Vendors') },
-                { name: 'Receive Inventory', path: '/receive' }, // Renamed back to "Receive Inventory"
+                { name: 'Receive Inventory', path: '/receive' },
                 { name: 'Transfers', action: () => setActiveSection('Transfers') },
                 { name: 'Inventory', action: () => setActiveSection('Inventory') },
-                { name: 'Items', action: () => setActiveSection('Inventory') }, // No modal trigger here
+                { name: 'Items', action: () => setActiveSection('Inventory') },
               ].map((item) => (
                 <li key={item.name}>
                   {item.path ? (
@@ -115,7 +121,7 @@ const App: React.FC = () => {
                 <>
                   {activeSection === 'Home' && <Home />}
                   {activeSection === 'Production' && <Production />}
-                  {activeSection === 'Inventory' && <Inventory />} {/* Removed showItemsModalFromMenu */}
+                  {activeSection === 'Inventory' && <Inventory />}
                   {activeSection === 'Vendors' && <div><h2>Vendors</h2><p>Vendors page coming soon</p></div>}
                   {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                   {activeSection === 'Processing' && <Processing />}
