@@ -1,20 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import './App.css';
 
 const OUR_DSP = 'DSP-AL-20010';
 
+// Enums
+enum Status {
+  Received = 'Received',
+  Stored = 'Stored',
+  Processing = 'Processing',
+  Packaged = 'Packaged',
+}
+
+enum Unit {
+  Pounds = 'lbs',
+  Gallons = 'gallons',
+  Count = 'count', // Added for bottles, labels, etc.
+}
+
+enum MaterialType {
+  Grain = 'Grain',
+  Yeast = 'Yeast',
+  Spirits = 'Spirits',
+  Bottles = 'Bottles',
+  Labels = 'Labels',
+  Caps = 'Caps',
+  Other = 'Other',
+}
+
 // Interfaces
 interface InventoryItem {
-  barrelId: string;
+  identifier?: string;
   account: string;
-  type: string;
+  type: MaterialType;
   quantity: string;
-  proof: string;
-  proofGallons: string;
+  unit: string; // Added
+  proof?: string;
+  proofGallons?: string;
   receivedDate: string;
   source: string;
   dspNumber: string;
+  status: Status;
 }
 
 interface Transaction {
@@ -57,52 +83,76 @@ interface DailySummaryItem {
   totalProofGallons: string;
 }
 
-interface ProductionForm {
-  barrelId: string;
-  proof: string;
+interface ReceiveForm {
+  identifier?: string;
+  account: string;
+  materialType: MaterialType;
   quantity: string;
+  unit: Unit;
+  proof?: string;
+  source: string;
+  dspNumber: string;
+  receivedDate: string;
 }
 
-interface ProductionRecord {
-  barrelId: string;
-  type: string;
+interface MoveForm {
+  identifier: string;
+  toAccount: string;
   proofGallons: string;
+}
+
+interface PackageForm {
+  batchId: string;
+  product: string;
+  proofGallons: string;
+  targetProof: string;
+  netContents: string;
+  alcoholContent: string;
+  healthWarning: boolean;
+}
+
+interface LossForm {
+  identifier: string;
+  quantityLost: string;
+  proofGallonsLost: string;
+  reason: string;
   date: string;
 }
 
 const App: React.FC = () => {
   // State Management
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [receiveForm, setReceiveForm] = useState({
-    barrelId: '',
+  const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
+    identifier: '',
     account: 'Storage',
-    type: 'Spirits',
+    materialType: MaterialType.Grain,
     quantity: '',
+    unit: Unit.Pounds,
     proof: '',
     source: '',
     dspNumber: OUR_DSP,
-    receivedDate: new Date().toISOString().split('T')[0]
+    receivedDate: new Date().toISOString().split('T')[0],
   });
-  const [moveForm, setMoveForm] = useState({
-    barrelId: '',
+  const [moveForm, setMoveForm] = useState<MoveForm>({
+    identifier: '',
     toAccount: 'Storage',
-    proofGallons: ''
+    proofGallons: '',
   });
-  const [packageForm, setPackageForm] = useState({
+  const [packageForm, setPackageForm] = useState<PackageForm>({
     batchId: '',
     product: 'Old Black Bear Vodka',
     proofGallons: '',
     targetProof: '80',
     netContents: '',
     alcoholContent: '',
-    healthWarning: false
+    healthWarning: false,
   });
-  const [lossForm, setLossForm] = useState({
-    barrelId: '',
+  const [lossForm, setLossForm] = useState<LossForm>({
+    identifier: '',
     quantityLost: '',
     proofGallonsLost: '',
     reason: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
   });
   const [report, setReport] = useState<ReportData | null>(null);
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -116,68 +166,14 @@ const App: React.FC = () => {
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
-  const [productionForm, setProductionForm] = useState<ProductionForm>({
-    barrelId: '',
-    proof: '',
-    quantity: ''
-  });
-  const [productionRecords, setProductionRecords] = useState<ProductionRecord[]>([]);
   const [productionError, setProductionError] = useState<string | null>(null);
-  
-  const handleProductionGauge = async () => {
-    if (!productionForm.barrelId || !productionForm.proof || !productionForm.quantity) {
-      setProductionError('All fields are required');
-      return;
-    }
-    const proof = parseFloat(productionForm.proof);
-    const quantity = parseFloat(productionForm.quantity);
-    if (isNaN(proof) || isNaN(quantity) || proof > 200 || quantity <= 0) {
-      setProductionError('Invalid proof or quantity');
-      return;
-    }
-    const proofGallons = (quantity * (proof / 100)).toFixed(2);
-    const newRecord: ProductionRecord = {
-      barrelId: productionForm.barrelId,
-      type: 'Spirits', // Default type; adjust if multiple types are needed
-      proofGallons,
-      date: new Date().toISOString().split('T')[0]
-    };
+
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+
+  // Memoized Fetch Functions
+  const fetchInventory = useCallback(async () => {
     try {
-      const res = await fetch('/api/produce', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRecord)
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      console.log('Production gauge response:', data);
-      setProductionRecords([...productionRecords, newRecord]);
-      setProductionForm({ barrelId: '', proof: '', quantity: '' });
-      setProductionError(null);
-      await fetchInventory(); // Update inventory state
-    } catch (err: any) {
-      console.error('Production gauge error:', err);
-      setProductionError(err.message);
-    }
-  };
-
-  // Fetch Data
-  useEffect(() => {
-    fetchInventory();
-    fetchDailySummary();
-  }, []);
-
-  useEffect(() => {
-    setTimeout(() => setIsLoading(false), 4000);
-  }, []);
-
-  useEffect(() => {
-    console.log('Inventory state updated:', inventory);
-  }, [inventory]);
-
-  const fetchInventory = async () => {
-    try {
-      const res = await fetch('/api/inventory');
+      const res = await fetch(`${API_BASE_URL}/api/inventory`);
       console.log('Fetch inventory status:', res.status, res.statusText);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const text = await res.text();
@@ -191,23 +187,37 @@ const App: React.FC = () => {
         console.error('Server returned HTML instead of JSON');
       }
     }
-  };
+  }, [API_BASE_URL]);
 
-  const fetchDailySummary = async () => {
+  const fetchDailySummary = useCallback(async () => {
     try {
-      const res = await fetch('/api/daily-summary');
+      const res = await fetch(`${API_BASE_URL}/api/daily-summary`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setDailySummary(data);
     } catch (err: any) {
       console.error('Fetch daily summary error:', err);
     }
-  };
+  }, [API_BASE_URL]);
+
+  // Fetch Data on Mount
+  useEffect(() => {
+    fetchInventory();
+    fetchDailySummary();
+  }, [fetchInventory, fetchDailySummary]);
+
+  useEffect(() => {
+    setTimeout(() => setIsLoading(false), 4000);
+  }, []);
+
+  useEffect(() => {
+    console.log('Inventory state updated:', inventory);
+  }, [inventory]);
 
   const fetchMonthlyReport = async () => {
     console.log('Fetching monthly report for:', reportMonth);
     try {
-      const res = await fetch(`/api/report/monthly?month=${reportMonth}`);
+      const res = await fetch(`${API_BASE_URL}/api/report/monthly?month=${reportMonth}`);
       if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
       const data = await res.json();
       console.log('Monthly report data:', data);
@@ -220,7 +230,7 @@ const App: React.FC = () => {
   const fetchDailyReport = async () => {
     console.log('Fetching daily report for:', reportDate);
     try {
-      const res = await fetch(`/api/report/daily?date=${reportDate}`);
+      const res = await fetch(`${API_BASE_URL}/api/report/daily?date=${reportDate}`);
       if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
       const data = await res.json();
       console.log('Daily report data:', data);
@@ -232,83 +242,122 @@ const App: React.FC = () => {
 
   // Handlers
   const handleReceive = async () => {
-    console.log('Sending receive request:', receiveForm);
+    if (!receiveForm.account || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
+      setProductionError('All required fields must be filled');
+      return;
+    }
+    if (receiveForm.materialType === MaterialType.Spirits && (!receiveForm.identifier || !receiveForm.proof)) {
+      setProductionError('Spirits require an identifier and proof');
+      return;
+    }
+    const quantity = parseFloat(receiveForm.quantity);
+    const proof = receiveForm.proof ? parseFloat(receiveForm.proof) : undefined;
+    if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0))) {
+      setProductionError('Invalid quantity or proof');
+      return;
+    }
+    const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
+    const newItem: InventoryItem = {
+      identifier: receiveForm.identifier,
+      account: receiveForm.account,
+      type: receiveForm.materialType,
+      quantity: receiveForm.quantity,
+      unit: receiveForm.unit,
+      proof: receiveForm.proof || undefined,
+      proofGallons: proofGallons,
+      receivedDate: receiveForm.receivedDate,
+      source: receiveForm.source,
+      dspNumber: receiveForm.dspNumber,
+      status: Status.Received,
+    };
     try {
-      const res = await fetch('/api/receive', {
+      const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(receiveForm)
+        body: JSON.stringify(newItem),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Receive response:', data);
-      await fetchInventory();
       if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
       setReceiveForm({
-        barrelId: '',
+        identifier: '',
         account: 'Storage',
-        type: 'Spirits',
+        materialType: MaterialType.Grain,
         quantity: '',
+        unit: Unit.Pounds,
         proof: '',
         source: '',
         dspNumber: OUR_DSP,
-        receivedDate: new Date().toISOString().split('T')[0]
+        receivedDate: new Date().toISOString().split('T')[0],
       });
       setShowReceiveModal(false);
+      setProductionError(null);
+      await fetchInventory();
     } catch (err: any) {
       console.error('Receive error:', err);
-      alert('Failed to receive item: ' + err.message);
+      setProductionError(err.message);
     }
   };
 
   const handleMove = async () => {
-    if (!moveForm.barrelId || !moveForm.proofGallons) {
-      console.log('Invalid move request: missing barrelId or proofGallons');
-      alert('Please fill in Barrel ID and Proof Gallons.');
+    if (!moveForm.identifier || !moveForm.proofGallons) {
+      console.log('Invalid move request: missing identifier or proofGallons');
+      setProductionError('Please fill in Identifier and Proof Gallons.');
       return;
     }
     console.log('Sending move request:', moveForm);
     try {
-      const res = await fetch('/api/move', {
+      const res = await fetch(`${API_BASE_URL}/api/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...moveForm,
-          proofGallons: parseFloat(moveForm.proofGallons)
-        })
+          proofGallons: parseFloat(moveForm.proofGallons),
+        }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       console.log('Move response:', data);
-      if (data.batchId) setPackageForm(prev => ({ ...prev, batchId: data.batchId }));
+      if (data.batchId) setPackageForm((prev) => ({ ...prev, batchId: data.batchId }));
       await fetchInventory();
       if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
-      setMoveForm({ barrelId: '', toAccount: 'Storage', proofGallons: '' });
+      setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
+      setProductionError(null);
     } catch (err: any) {
       console.error('Move error:', err);
-      alert('Failed to move item: ' + err.message);
+      setProductionError('Failed to move item: ' + err.message);
     }
   };
 
   const handlePackage = async () => {
-    if (!packageForm.batchId || !packageForm.proofGallons || !packageForm.targetProof || !packageForm.netContents || !packageForm.alcoholContent || !packageForm.healthWarning) {
+    if (
+      !packageForm.batchId ||
+      !packageForm.proofGallons ||
+      !packageForm.targetProof ||
+      !packageForm.netContents ||
+      !packageForm.alcoholContent ||
+      !packageForm.healthWarning
+    ) {
       console.log('Invalid package request:', packageForm);
-      alert('Please fill in all fields and confirm health warning.');
+      setProductionError('Please fill in all fields and confirm health warning.');
       return;
     }
     const sourceProofGallons = parseFloat(packageForm.proofGallons);
     const targetProof = parseFloat(packageForm.targetProof);
     const bottleSizeGal = 0.198129;
 
-    const sourceItem = inventory.find(item => item.barrelId === packageForm.batchId.trim() && item.account === 'Processing');
+    const sourceItem = inventory.find(
+      (item) => item.identifier === packageForm.batchId.trim() && item.account === 'Processing'
+    );
     if (!sourceItem) {
       console.log('Batch not found in Processing. Entered Batch ID:', packageForm.batchId);
-      console.log('Processing inventory:', inventory.filter(item => item.account === 'Processing'));
-      alert('Batch not found in Processing!');
+      console.log('Processing inventory:', inventory.filter((item) => item.account === 'Processing'));
+      setProductionError('Batch not found in Processing!');
       return;
     }
-    const sourceProof = parseFloat(sourceItem.proof);
+    const sourceProof = parseFloat(sourceItem.proof || '0');
     const sourceVolume = sourceProofGallons / (sourceProof / 100);
     const targetVolume = sourceProofGallons / (targetProof / 100);
     const waterVolume = targetVolume - sourceVolume;
@@ -327,10 +376,10 @@ const App: React.FC = () => {
       waterVolume,
       finalVolume,
       bottleCount,
-      finalProofGallons
+      finalProofGallons,
     });
     try {
-      const res = await fetch('/api/package', {
+      const res = await fetch(`${API_BASE_URL}/api/package`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -344,8 +393,8 @@ const App: React.FC = () => {
           alcoholContent: packageForm.alcoholContent,
           healthWarning: packageForm.healthWarning,
           toAccount: 'Processing',
-          date: new Date().toISOString().split('T')[0]
-        })
+          date: new Date().toISOString().split('T')[0],
+        }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
@@ -358,57 +407,60 @@ const App: React.FC = () => {
         targetProof: '80',
         netContents: '',
         alcoholContent: '',
-        healthWarning: false
+        healthWarning: false,
       });
+      setProductionError(null);
     } catch (err: any) {
       console.error('Package error:', err);
-      alert('Failed to package item: ' + err.message);
+      setProductionError('Failed to package item: ' + err.message);
     }
   };
 
   const handleRecordLoss = async () => {
     try {
-      const res = await fetch('/api/record-loss', {
+      const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lossForm)
+        body: JSON.stringify(lossForm),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       await fetchInventory();
       setLossForm({
-        barrelId: '',
+        identifier: '',
         quantityLost: '',
         proofGallonsLost: '',
         reason: '',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
       });
       setShowLossModal(false);
+      setProductionError(null);
     } catch (err: any) {
       console.error('Record loss error:', err);
-      alert('Failed to record loss: ' + err.message);
+      setProductionError('Failed to record loss: ' + err.message);
     }
   };
 
   const handleBatchIdUpdate = async (oldBatchId: string) => {
     try {
-      const res = await fetch('/api/update-batch-id', {
+      const res = await fetch(`${API_BASE_URL}/api/update-batch-id`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldBatchId, newBatchId: editedBatchId })
+        body: JSON.stringify({ oldBatchId, newBatchId: editedBatchId }),
       });
       if (!res.ok) throw new Error('Failed to update batch ID');
       await fetchInventory();
       setEditingBatchId(null);
       setEditedBatchId('');
+      setProductionError(null);
     } catch (err: any) {
       console.error('Update error:', err);
-      alert('Failed to update batch ID: ' + err.message);
+      setProductionError('Failed to update batch ID: ' + err.message);
     }
   };
 
   const handlePhysicalInventory = async () => {
     try {
-      const res = await fetch('/api/physical-inventory', { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/api/physical-inventory`, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       alert(`Physical inventory recorded at ${data.timestamp}`);
@@ -440,8 +492,8 @@ const App: React.FC = () => {
         t.type,
         t.date,
         t.barrelId || 'N/A',
-        t.toAccount || 'N/A'
-      ])
+        t.toAccount || 'N/A',
+      ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -470,7 +522,7 @@ const App: React.FC = () => {
         [''],
         ['I certify under penalty of perjury that the information provided is true and correct.'],
         ['Signature:', '____________________'],
-        ['Date:', '____________________']
+        ['Date:', '____________________'],
       ];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       const labelCells = [
@@ -478,9 +530,9 @@ const App: React.FC = () => {
         ...(tankSummary.fromAccount ? ['A11'] : []),
         ...(tankSummary.waterVolume ? ['A12'] : []),
         ...(tankSummary.bottleCount ? ['A13'] : []),
-        'A15', 'A16'
+        'A15', 'A16',
       ];
-      labelCells.forEach(cell => {
+      labelCells.forEach((cell) => {
         if (ws[cell]) {
           ws[cell].s = {
             font: { bold: true },
@@ -489,8 +541,8 @@ const App: React.FC = () => {
               top: { style: 'thin', color: { rgb: '000000' } },
               bottom: { style: 'thin', color: { rgb: '000000' } },
               left: { style: 'thin', color: { rgb: '000000' } },
-              right: { style: 'thin', color: { rgb: '000000' } }
-            }
+              right: { style: 'thin', color: { rgb: '000000' } },
+            },
           };
         }
       });
@@ -503,14 +555,14 @@ const App: React.FC = () => {
             top: { style: 'thin', color: { rgb: '000000' } },
             bottom: { style: 'thin', color: { rgb: '000000' } },
             left: { style: 'thin', color: { rgb: '000000' } },
-            right: { style: 'thin', color: { rgb: '000000' } }
-          }
+            right: { style: 'thin', color: { rgb: '000000' } },
+          },
         };
       }
       if (ws['A15']) {
         ws['A15'].s = {
           font: { bold: true },
-          alignment: { horizontal: 'left', wrapText: true }
+          alignment: { horizontal: 'left', wrapText: true },
         };
       }
       ws['!cols'] = [{ wch: 30 }, { wch: 35 }];
@@ -536,148 +588,141 @@ const App: React.FC = () => {
             <p>Select a section to manage your distillery operations.</p>
           </div>
         );
-        case 'Production':
-  return (
-    <div>
-      <h2>Production</h2>
-      <div>
-        <h3>Production Gauge</h3>
-        <input
-          type="text"
-          placeholder="Barrel ID"
-          value={productionForm.barrelId}
-          onChange={(e) => setProductionForm({ ...productionForm, barrelId: e.target.value })}
-        />
-        <input
-          type="number"
-          placeholder="Proof"
-          value={productionForm.proof}
-          onChange={(e) => setProductionForm({ ...productionForm, proof: e.target.value })}
-          step="0.1"
-          min="0"
-          max="200"
-        />
-        <input
-          type="number"
-          placeholder="Quantity (Gallons)"
-          value={productionForm.quantity}
-          onChange={(e) => setProductionForm({ ...productionForm, quantity: e.target.value })}
-          step="0.01"
-          min="0"
-        />
-        <button onClick={handleProductionGauge}>Gauge Production</button>
-        {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
-      </div>
-      <h3>Daily Production Records</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Barrel ID</th>
-            <th>Type</th>
-            <th>Proof Gallons</th>
-            <th>Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {productionRecords.length > 0 ? (
-            productionRecords.map((record) => (
-              <tr key={record.barrelId}>
-                <td>{record.barrelId}</td>
-                <td>{record.type}</td>
-                <td>{record.proofGallons}</td>
-                <td>{record.date}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={4}>No production records yet</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+      case 'Production':
+        return (
+          <div>
+            <h2>Production</h2>
+            <p>Production features coming soon.</p>
+          </div>
+        );
       case 'Inventory':
         return (
           <div>
             <h2>Inventory Management</h2>
             <div style={{ marginBottom: '20px' }}>
               <button onClick={() => setShowReceiveModal(true)}>Receive Inventory</button>
-              <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px' }}>Move Inventory</button>
-              <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px' }}>Record Loss</button>
+              <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px' }}>
+                Move Inventory
+              </button>
+              <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px' }}>
+                Record Loss
+              </button>
             </div>
-            {/* Modals */}
             {showReceiveModal && (
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
                 <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
                   <h3>Receive Inventory</h3>
                   <input
                     type="text"
-                    placeholder="Barrel ID (e.g., GNS250329)"
-                    value={receiveForm.barrelId}
-                    onChange={e => setReceiveForm({ ...receiveForm, barrelId: e.target.value })}
+                    placeholder="Identifier (required for Spirits)"
+                    value={receiveForm.identifier || ''}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value || undefined })}
                   />
-                  <select value={receiveForm.account} onChange={e => setReceiveForm({ ...receiveForm, account: e.target.value })}>
+                  <select
+                    value={receiveForm.materialType}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
+                  >
+                    {Object.values(MaterialType).map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Quantity"
+                    value={receiveForm.quantity}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
+                    step="0.01"
+                  />
+                  <select
+                    value={receiveForm.unit}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
+                  >
+                    {Object.values(Unit).map((unit) => (
+                      <option key={unit} value={unit}>
+                        {unit}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Proof (Spirits only)"
+                    value={receiveForm.proof || ''}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value || '' })}
+                    step="0.01"
+                  />
+                  <select
+                    value={receiveForm.account}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+                  >
                     <option value="Production">Production</option>
                     <option value="Storage">Storage</option>
                     <option value="Processing">Processing</option>
                   </select>
-                  <select value={receiveForm.type} onChange={e => setReceiveForm({ ...receiveForm, type: e.target.value })}>
-                    <option value="Cane Sugar">Cane Sugar</option>
-                    <option value="Corn Sugar">Corn Sugar</option>
-                    <option value="Agave Syrup">Agave Syrup</option>
-                    <option value="Flaked Corn">Flaked Corn</option>
-                    <option value="Rye Barley">Rye Barley</option>
-                    <option value="Malted Barley">Malted Barley</option>
-                    <option value="Spirits">Spirits</option>
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Quantity (WG)"
-                    value={receiveForm.quantity}
-                    onChange={e => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
-                    step="0.01"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Proof (if Spirits)"
-                    value={receiveForm.proof}
-                    onChange={e => setReceiveForm({ ...receiveForm, proof: e.target.value })}
-                    step="0.01"
-                  />
                   <input
                     type="text"
                     placeholder="Source"
                     value={receiveForm.source}
-                    onChange={e => setReceiveForm({ ...receiveForm, source: e.target.value })}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, source: e.target.value })}
                   />
                   <input
                     type="text"
                     placeholder="DSP Number"
                     value={receiveForm.dspNumber}
-                    onChange={e => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
                   />
                   <input
                     type="date"
                     value={receiveForm.receivedDate}
-                    onChange={e => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
                   />
                   <button onClick={handleReceive}>Submit</button>
-                  <button onClick={() => setShowReceiveModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+                  <button onClick={() => setShowReceiveModal(false)} style={{ marginLeft: '10px' }}>
+                    Cancel
+                  </button>
+                  {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
                 </div>
               </div>
             )}
             {showMoveModal && (
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
                 <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
                   <h3>Move Inventory</h3>
                   <input
                     type="text"
-                    placeholder="Barrel ID (e.g., GNS250329)"
-                    value={moveForm.barrelId}
-                    onChange={e => setMoveForm({ ...moveForm, barrelId: e.target.value })}
+                    placeholder="Identifier (e.g., GNS250329)"
+                    value={moveForm.identifier}
+                    onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
                   />
-                  <select value={moveForm.toAccount} onChange={e => setMoveForm({ ...moveForm, toAccount: e.target.value })}>
+                  <select
+                    value={moveForm.toAccount}
+                    onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })}
+                  >
                     <option value="Production">Production</option>
                     <option value="Storage">Storage</option>
                     <option value="Processing">Processing</option>
@@ -686,51 +731,69 @@ const App: React.FC = () => {
                     type="number"
                     placeholder="Proof Gallons to Move"
                     value={moveForm.proofGallons}
-                    onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
+                    onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
                     step="0.01"
                   />
                   <button onClick={handleMove}>Submit</button>
-                  <button onClick={() => setShowMoveModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+                  <button onClick={() => setShowMoveModal(false)} style={{ marginLeft: '10px' }}>
+                    Cancel
+                  </button>
+                  {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
                 </div>
               </div>
             )}
             {showLossModal && (
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
                 <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
                   <h3>Record Loss</h3>
                   <input
                     type="text"
-                    placeholder="Barrel ID"
-                    value={lossForm.barrelId}
-                    onChange={e => setLossForm({ ...lossForm, barrelId: e.target.value })}
+                    placeholder="Identifier"
+                    value={lossForm.identifier}
+                    onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
                   />
                   <input
                     type="number"
                     placeholder="Quantity Lost"
                     value={lossForm.quantityLost}
-                    onChange={e => setLossForm({ ...lossForm, quantityLost: e.target.value })}
+                    onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
                     step="0.01"
                   />
                   <input
                     type="number"
                     placeholder="Proof Gallons Lost"
                     value={lossForm.proofGallonsLost}
-                    onChange={e => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
+                    onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
                     step="0.01"
                   />
                   <input
                     type="text"
                     placeholder="Reason for Loss"
                     value={lossForm.reason}
-                    onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
+                    onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
                   />
                   <input
                     type="date"
                     value={lossForm.date}
-                    onChange={e => setLossForm({ ...lossForm, date: e.target.value })}
+                    onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
                   />
                   <button onClick={handleRecordLoss}>Submit</button>
-                  <button onClick={() => setShowLossModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+                  <button onClick={() => setShowLossModal(false)} style={{ marginLeft: '10px' }}>
+                    Cancel
+                  </button>
+                  {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
                 </div>
               </div>
             )}
@@ -744,7 +807,7 @@ const App: React.FC = () => {
               </thead>
               <tbody>
                 {dailySummary.length > 0 ? (
-                  dailySummary.map(item => (
+                  dailySummary.map((item) => (
                     <tr key={item.account}>
                       <td>{item.account}</td>
                       <td>{item.totalProofGallons || '0.00'}</td>
@@ -757,69 +820,46 @@ const App: React.FC = () => {
                 )}
               </tbody>
             </table>
-            <h2>Storage Inventory</h2>
+            <h2>Received/Stored Inventory</h2>
             <table>
               <thead>
                 <tr>
-                  <th>Barrel ID</th>
+                  <th>Identifier</th>
                   <th>Type</th>
                   <th>Quantity</th>
+                  <th>Unit</th>
                   <th>Proof</th>
                   <th>Proof Gallons</th>
                   <th>Date Received</th>
                   <th>Source</th>
                   <th>DSP Number</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {inventory.filter(item => item.account === 'Storage').map(item => (
-                  <tr key={item.barrelId}>
-                    <td>{item.barrelId}</td>
-                    <td>{item.type}</td>
-                    <td>{item.quantity || '0.00'}</td>
-                    <td>{item.proof || '0.00'}</td>
-                    <td>{item.proofGallons || '0.00'}</td>
-                    <td>{item.receivedDate || 'N/A'}</td>
-                    <td>{item.source || 'N/A'}</td>
-                    <td>{item.dspNumber || 'N/A'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <h2>Production Inventory</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Barrel ID</th>
-                  <th>Type</th>
-                  <th>Quantity</th>
-                  <th>Proof</th>
-                  <th>Proof Gallons</th>
-                  <th>Date Received</th>
-                  <th>Source</th>
-                  <th>DSP Number</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inventory.filter(item => item.account === 'Production').map(item => (
-                  <tr key={item.barrelId}>
-                    <td>{item.barrelId}</td>
-                    <td>{item.type}</td>
-                    <td>{item.quantity || '0.00'}</td>
-                    <td>{item.proof || '0.00'}</td>
-                    <td>{item.proofGallons || '0.00'}</td>
-                    <td>{item.receivedDate || 'N/A'}</td>
-                    <td>{item.source || 'N/A'}</td>
-                    <td>{item.dspNumber || 'N/A'}</td>
-                  </tr>
-                ))}
+                {inventory
+                  .filter((item) => ['Received', 'Stored'].includes(item.status))
+                  .map((item) => (
+                    <tr key={item.identifier}>
+                      <td>{item.identifier || 'N/A'}</td>
+                      <td>{item.type}</td>
+                      <td>{item.quantity || '0.00'}</td>
+                      <td>{item.unit || 'N/A'}</td>
+                      <td>{item.proof || 'N/A'}</td>
+                      <td>{item.proofGallons || '0.00'}</td>
+                      <td>{item.receivedDate || 'N/A'}</td>
+                      <td>{item.source || 'N/A'}</td>
+                      <td>{item.dspNumber || 'N/A'}</td>
+                      <td>{item.status}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
             <h2>Finished Packaged Inventory</h2>
             <table>
               <thead>
                 <tr>
-                  <th>Batch ID</th>
+                  <th>Identifier</th>
                   <th>Type</th>
                   <th>Quantity (WG)</th>
                   <th>Proof</th>
@@ -831,10 +871,10 @@ const App: React.FC = () => {
               </thead>
               <tbody>
                 {inventory
-                  .filter(item => item.account === 'Processing' && !item.barrelId.includes('-BATCH-'))
-                  .map(item => (
-                    <tr key={item.barrelId}>
-                      <td>{item.barrelId}</td>
+                  .filter((item) => item.account === 'Processing' && item.status === 'Packaged')
+                  .map((item) => (
+                    <tr key={item.identifier}>
+                      <td>{item.identifier || 'N/A'}</td>
                       <td>{item.type}</td>
                       <td>{item.quantity || '0.00'}</td>
                       <td>{item.proof || '0.00'}</td>
@@ -858,9 +898,12 @@ const App: React.FC = () => {
                 type="text"
                 placeholder="Batch ID in Processing"
                 value={packageForm.batchId}
-                onChange={e => setPackageForm({ ...packageForm, batchId: e.target.value })}
+                onChange={(e) => setPackageForm({ ...packageForm, batchId: e.target.value })}
               />
-              <select value={packageForm.product} onChange={e => setPackageForm({ ...packageForm, product: e.target.value })}>
+              <select
+                value={packageForm.product}
+                onChange={(e) => setPackageForm({ ...packageForm, product: e.target.value })}
+              >
                 <option value="Old Black Bear Vodka">Old Black Bear Vodka (Vodka)</option>
                 <option value="Old Black Bear Gin">Old Black Bear Gin (Gin)</option>
                 <option value="Old Black Bear Rum">Old Black Bear Rum (Rum)</option>
@@ -870,37 +913,38 @@ const App: React.FC = () => {
                 type="number"
                 placeholder="Proof Gallons to Package"
                 value={packageForm.proofGallons}
-                onChange={e => setPackageForm({ ...packageForm, proofGallons: e.target.value })}
+                onChange={(e) => setPackageForm({ ...packageForm, proofGallons: e.target.value })}
                 step="0.01"
               />
               <input
                 type="number"
                 placeholder="Target Proof (e.g., 80)"
                 value={packageForm.targetProof}
-                onChange={e => setPackageForm({ ...packageForm, targetProof: e.target.value })}
+                onChange={(e) => setPackageForm({ ...packageForm, targetProof: e.target.value })}
                 step="0.01"
               />
               <input
                 type="text"
                 placeholder="Net Contents (e.g., 750ml)"
                 value={packageForm.netContents}
-                onChange={e => setPackageForm({ ...packageForm, netContents: e.target.value })}
+                onChange={(e) => setPackageForm({ ...packageForm, netContents: e.target.value })}
               />
               <input
                 type="text"
                 placeholder="Alcohol Content (e.g., 40% ABV)"
                 value={packageForm.alcoholContent}
-                onChange={e => setPackageForm({ ...packageForm, alcoholContent: e.target.value })}
+                onChange={(e) => setPackageForm({ ...packageForm, alcoholContent: e.target.value })}
               />
               <label>
                 <input
                   type="checkbox"
                   checked={packageForm.healthWarning}
-                  onChange={e => setPackageForm({ ...packageForm, healthWarning: e.target.checked })}
+                  onChange={(e) => setPackageForm({ ...packageForm, healthWarning: e.target.checked })}
                 />
                 Include Health Warning (Required)
               </label>
               <button onClick={handlePackage}>Complete Packaging</button>
+              {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
             </div>
             <h2>Processing Inventory</h2>
             <h3>Liquid in Processing</h3>
@@ -920,18 +964,18 @@ const App: React.FC = () => {
               </thead>
               <tbody>
                 {inventory
-                  .filter(item => item.account === 'Processing' && item.barrelId.includes('-BATCH-'))
-                  .map(item => (
-                    <tr key={item.barrelId}>
+                  .filter((item) => item.account === 'Processing' && item.status === 'Processing')
+                  .map((item) => (
+                    <tr key={item.identifier}>
                       <td>
-                        {editingBatchId === item.barrelId ? (
+                        {editingBatchId === item.identifier ? (
                           <input
                             type="text"
                             value={editedBatchId}
-                            onChange={e => setEditedBatchId(e.target.value)}
+                            onChange={(e) => setEditedBatchId(e.target.value)}
                           />
                         ) : (
-                          item.barrelId
+                          item.identifier
                         )}
                       </td>
                       <td>{item.type}</td>
@@ -942,13 +986,18 @@ const App: React.FC = () => {
                       <td>{item.source || 'N/A'}</td>
                       <td>{item.dspNumber || 'N/A'}</td>
                       <td>
-                        {editingBatchId === item.barrelId ? (
+                        {editingBatchId === item.identifier ? (
                           <>
-                            <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
+                            <button onClick={() => handleBatchIdUpdate(item.identifier!)}>Save</button>
                             <button onClick={() => setEditingBatchId(null)}>Cancel</button>
                           </>
                         ) : (
-                          <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
+                          <button
+                            onClick={() => {
+                              setEditingBatchId(item.identifier!);
+                              setEditedBatchId(item.identifier!);
+                            }}
+                          >
                             Edit
                           </button>
                         )}
@@ -974,18 +1023,18 @@ const App: React.FC = () => {
               </thead>
               <tbody>
                 {inventory
-                  .filter(item => item.account === 'Processing' && !item.barrelId.includes('-BATCH-'))
-                  .map(item => (
-                    <tr key={item.barrelId}>
+                  .filter((item) => item.account === 'Processing' && item.status === 'Packaged')
+                  .map((item) => (
+                    <tr key={item.identifier}>
                       <td>
-                        {editingBatchId === item.barrelId ? (
+                        {editingBatchId === item.identifier ? (
                           <input
                             type="text"
                             value={editedBatchId}
-                            onChange={e => setEditedBatchId(e.target.value)}
+                            onChange={(e) => setEditedBatchId(e.target.value)}
                           />
                         ) : (
-                          item.barrelId
+                          item.identifier
                         )}
                       </td>
                       <td>{item.type}</td>
@@ -996,13 +1045,18 @@ const App: React.FC = () => {
                       <td>{item.source || 'N/A'}</td>
                       <td>{item.dspNumber || 'N/A'}</td>
                       <td>
-                        {editingBatchId === item.barrelId ? (
+                        {editingBatchId === item.identifier ? (
                           <>
-                            <button onClick={() => handleBatchIdUpdate(item.barrelId)}>Save</button>
+                            <button onClick={() => handleBatchIdUpdate(item.identifier!)}>Save</button>
                             <button onClick={() => setEditingBatchId(null)}>Cancel</button>
                           </>
                         ) : (
-                          <button onClick={() => { setEditingBatchId(item.barrelId); setEditedBatchId(item.barrelId); }}>
+                          <button
+                            onClick={() => {
+                              setEditingBatchId(item.identifier!);
+                              setEditedBatchId(item.identifier!);
+                            }}
+                          >
                             Edit
                           </button>
                         )}
@@ -1032,12 +1086,12 @@ const App: React.FC = () => {
           <div>
             <h2>Reporting</h2>
             <div>
-              <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} />
+              <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} />
               <button onClick={fetchMonthlyReport}>Fetch Monthly Report</button>
               {report && report.month && <button onClick={exportToExcel}>Export to Excel</button>}
             </div>
             <div>
-              <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
+              <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
               <button onClick={fetchDailyReport}>Fetch Daily Report</button>
             </div>
             <div>
@@ -1054,7 +1108,7 @@ const App: React.FC = () => {
                     fromAccount: 'Storage',
                     toAccount: 'Processing',
                     serialNumber: '250307',
-                    producingDSP: 'DSP-KY-417'
+                    producingDSP: 'DSP-KY-417',
                   })
                 }
               >
@@ -1066,8 +1120,12 @@ const App: React.FC = () => {
                 <h3>{report.month ? `Monthly Report: ${report.month}` : `Daily Report: ${report.date}`}</h3>
                 <p>Total Received: {Number(report.totalReceived).toFixed(2)} PG</p>
                 <p>Total Processed: {Number(report.totalProcessed).toFixed(2)} PG</p>
-                {report.totalMoved !== undefined && <p>Total Moved: {Number(report.totalMoved).toFixed(2)} PG</p>}
-                {report.totalRemoved !== undefined && <p>Total Removed: {Number(report.totalRemoved).toFixed(2)} PG</p>}
+                {report.totalMoved !== undefined && (
+                  <p>Total Moved: {Number(report.totalMoved).toFixed(2)} PG</p>
+                )}
+                {report.totalRemoved !== undefined && (
+                  <p>Total Removed: {Number(report.totalRemoved).toFixed(2)} PG</p>
+                )}
                 {report.byType && (
                   <div>
                     <h4>Processed by Type</h4>
@@ -1082,7 +1140,9 @@ const App: React.FC = () => {
                   <ul>
                     {report.transactions.map((t: Transaction, i) => (
                       <li key={i}>
-                        {`${t.action}: ${Number(t.proofGallons).toFixed(2)} PG (${t.type}) on ${t.date} ${t.barrelId ? `(Barrel: ${t.barrelId})` : ''} ${t.toAccount ? `to ${t.toAccount}` : ''}`}
+                        {`${t.action}: ${Number(t.proofGallons).toFixed(2)} PG (${t.type}) on ${t.date} ${
+                          t.barrelId ? `(Barrel: ${t.barrelId})` : ''
+                        } ${t.toAccount ? `to ${t.toAccount}` : ''}`}
                       </li>
                     ))}
                   </ul>
@@ -1100,7 +1160,16 @@ const App: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f5f5f5' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          backgroundColor: '#f5f5f5',
+        }}
+      >
         <img src="/tilly-logo.png" alt="Tilly Logo" style={{ maxWidth: '80%', maxHeight: '60vh' }} />
         <h1 style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>Tilly</h1>
         <p style={{ fontFamily: 'Arial, sans-serif', color: '#666' }}>Powered by Paws & Pours</p>
@@ -1115,13 +1184,83 @@ const App: React.FC = () => {
       </button>
       <nav className={`menu ${menuOpen ? 'open' : ''}`}>
         <ul>
-          <li><button onClick={() => { setActiveSection('Home'); setMenuOpen(false); }} className={activeSection === 'Home' ? 'active' : ''}>Home</button></li>
-          <li><button onClick={() => { setActiveSection('Production'); setMenuOpen(false); }} className={activeSection === 'Production' ? 'active' : ''}>Production</button></li>
-          <li><button onClick={() => { setActiveSection('Inventory'); setMenuOpen(false); }} className={activeSection === 'Inventory' ? 'active' : ''}>Inventory</button></li>
-          <li><button onClick={() => { setActiveSection('Processing'); setMenuOpen(false); }} className={activeSection === 'Processing' ? 'active' : ''}>Processing</button></li>
-          <li><button onClick={() => { setActiveSection('Sales & Distribution'); setMenuOpen(false); }} className={activeSection === 'Sales & Distribution' ? 'active' : ''}>Sales & Distribution</button></li>
-          <li><button onClick={() => { setActiveSection('Users'); setMenuOpen(false); }} className={activeSection === 'Users' ? 'active' : ''}>Users</button></li>
-          <li><button onClick={() => { setActiveSection('Reporting'); setMenuOpen(false); }} className={activeSection === 'Reporting' ? 'active' : ''}>Reporting</button></li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Home');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Home' ? 'active' : ''}
+            >
+              Home
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Production');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Production' ? 'active' : ''}
+            >
+              Production
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Inventory');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Inventory' ? 'active' : ''}
+            >
+              Inventory
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Processing');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Processing' ? 'active' : ''}
+            >
+              Processing
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Sales & Distribution');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Sales & Distribution' ? 'active' : ''}
+            >
+              Sales & Distribution
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Users');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Users' ? 'active' : ''}
+            >
+              Users
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                setActiveSection('Reporting');
+                setMenuOpen(false);
+              }}
+              className={activeSection === 'Reporting' ? 'active' : ''}
+            >
+              Reporting
+            </button>
+          </li>
         </ul>
       </nav>
       <div className="content">
