@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter as Router, Route, Routes, Link, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import './App.css';
 
@@ -15,7 +16,7 @@ enum Status {
 enum Unit {
   Pounds = 'lbs',
   Gallons = 'gallons',
-  Count = 'count', // Added for bottles, labels, etc.
+  Count = 'count',
 }
 
 enum MaterialType {
@@ -34,13 +35,14 @@ interface InventoryItem {
   account: string;
   type: MaterialType;
   quantity: string;
-  unit: string; // Added
+  unit: string;
   proof?: string;
   proofGallons?: string;
   receivedDate: string;
   source: string;
   dspNumber: string;
   status: Status;
+  description?: string; // Added for "Other" type
 }
 
 interface Transaction {
@@ -93,6 +95,7 @@ interface ReceiveForm {
   source: string;
   dspNumber: string;
   receivedDate: string;
+  description?: string; // Added for "Other" type
 }
 
 interface MoveForm {
@@ -119,20 +122,9 @@ interface LossForm {
   date: string;
 }
 
+// Main App Component
 const App: React.FC = () => {
-  // State Management
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
-    identifier: '',
-    account: 'Storage',
-    materialType: MaterialType.Grain,
-    quantity: '',
-    unit: Unit.Pounds,
-    proof: '',
-    source: '',
-    dspNumber: OUR_DSP,
-    receivedDate: new Date().toISOString().split('T')[0],
-  });
   const [moveForm, setMoveForm] = useState<MoveForm>({
     identifier: '',
     toAccount: 'Storage',
@@ -163,29 +155,20 @@ const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
-  // Memoized Fetch Functions
   const fetchInventory = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/inventory`);
-      console.log('Fetch inventory status:', res.status, res.statusText);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const text = await res.text();
-      console.log('Raw fetch response:', text);
-      const data = JSON.parse(text);
-      console.log('Fetched inventory data:', data);
+      const data = await res.json();
       setInventory(data);
     } catch (err: any) {
       console.error('Fetch inventory error:', err);
-      if (err.message.includes('Unexpected token')) {
-        console.error('Server returned HTML instead of JSON');
-      }
     }
   }, [API_BASE_URL]);
 
@@ -200,7 +183,6 @@ const App: React.FC = () => {
     }
   }, [API_BASE_URL]);
 
-  // Fetch Data on Mount
   useEffect(() => {
     fetchInventory();
     fetchDailySummary();
@@ -215,12 +197,10 @@ const App: React.FC = () => {
   }, [inventory]);
 
   const fetchMonthlyReport = async () => {
-    console.log('Fetching monthly report for:', reportMonth);
     try {
       const res = await fetch(`${API_BASE_URL}/api/report/monthly?month=${reportMonth}`);
       if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
       const data = await res.json();
-      console.log('Monthly report data:', data);
       setReport(data);
     } catch (err: any) {
       console.error('Report error:', err);
@@ -228,85 +208,21 @@ const App: React.FC = () => {
   };
 
   const fetchDailyReport = async () => {
-    console.log('Fetching daily report for:', reportDate);
     try {
       const res = await fetch(`${API_BASE_URL}/api/report/daily?date=${reportDate}`);
       if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
       const data = await res.json();
-      console.log('Daily report data:', data);
       setReport(data);
     } catch (err: any) {
       console.error('Daily report error:', err);
     }
   };
 
-  // Handlers
-  const handleReceive = async () => {
-    if (!receiveForm.account || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
-      setProductionError('All required fields must be filled');
-      return;
-    }
-    if (receiveForm.materialType === MaterialType.Spirits && (!receiveForm.identifier || !receiveForm.proof)) {
-      setProductionError('Spirits require an identifier and proof');
-      return;
-    }
-    const quantity = parseFloat(receiveForm.quantity);
-    const proof = receiveForm.proof ? parseFloat(receiveForm.proof) : undefined;
-    if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0))) {
-      setProductionError('Invalid quantity or proof');
-      return;
-    }
-    const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
-    const newItem: InventoryItem = {
-      identifier: receiveForm.identifier,
-      account: receiveForm.account,
-      type: receiveForm.materialType,
-      quantity: receiveForm.quantity,
-      unit: receiveForm.unit,
-      proof: receiveForm.proof || undefined,
-      proofGallons: proofGallons,
-      receivedDate: receiveForm.receivedDate,
-      source: receiveForm.source,
-      dspNumber: receiveForm.dspNumber,
-      status: Status.Received,
-    };
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/receive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newItem),
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      console.log('Receive response:', data);
-      if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
-      setReceiveForm({
-        identifier: '',
-        account: 'Storage',
-        materialType: MaterialType.Grain,
-        quantity: '',
-        unit: Unit.Pounds,
-        proof: '',
-        source: '',
-        dspNumber: OUR_DSP,
-        receivedDate: new Date().toISOString().split('T')[0],
-      });
-      setShowReceiveModal(false);
-      setProductionError(null);
-      await fetchInventory();
-    } catch (err: any) {
-      console.error('Receive error:', err);
-      setProductionError(err.message);
-    }
-  };
-
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
-      console.log('Invalid move request: missing identifier or proofGallons');
       setProductionError('Please fill in Identifier and Proof Gallons.');
       return;
     }
-    console.log('Sending move request:', moveForm);
     try {
       const res = await fetch(`${API_BASE_URL}/api/move`, {
         method: 'POST',
@@ -318,7 +234,6 @@ const App: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      console.log('Move response:', data);
       if (data.batchId) setPackageForm((prev) => ({ ...prev, batchId: data.batchId }));
       await fetchInventory();
       if (data.tankSummary) exportTankSummaryToExcel(data.tankSummary);
@@ -340,7 +255,6 @@ const App: React.FC = () => {
       !packageForm.alcoholContent ||
       !packageForm.healthWarning
     ) {
-      console.log('Invalid package request:', packageForm);
       setProductionError('Please fill in all fields and confirm health warning.');
       return;
     }
@@ -352,8 +266,6 @@ const App: React.FC = () => {
       (item) => item.identifier === packageForm.batchId.trim() && item.account === 'Processing'
     );
     if (!sourceItem) {
-      console.log('Batch not found in Processing. Entered Batch ID:', packageForm.batchId);
-      console.log('Processing inventory:', inventory.filter((item) => item.account === 'Processing'));
       setProductionError('Batch not found in Processing!');
       return;
     }
@@ -366,18 +278,6 @@ const App: React.FC = () => {
     const bottleCount = Math.floor(finalVolume / bottleSizeGal);
     const finalProofGallons = bottleCount * bottleSizeGal * (targetProof / 100);
 
-    console.log('Packaging calc:', {
-      batchId: packageForm.batchId,
-      sourceProofGallons,
-      sourceProof,
-      targetProof,
-      sourceVolume,
-      targetVolume,
-      waterVolume,
-      finalVolume,
-      bottleCount,
-      finalProofGallons,
-    });
     try {
       const res = await fetch(`${API_BASE_URL}/api/package`, {
         method: 'POST',
@@ -398,7 +298,6 @@ const App: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      console.log('Package response:', data);
       await fetchInventory();
       setPackageForm({
         batchId: '',
@@ -470,7 +369,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Exports
   const exportToExcel = () => {
     if (!report || !report.month) return;
     const wsData = [
@@ -502,7 +400,6 @@ const App: React.FC = () => {
   };
 
   const exportTankSummaryToExcel = (tankSummary: TankSummary) => {
-    console.log('Starting exportTankSummaryToExcel with:', tankSummary);
     try {
       const wsData = [
         [`Tank Summary Report - ${tankSummary.serialNumber}`],
@@ -534,51 +431,19 @@ const App: React.FC = () => {
       ];
       labelCells.forEach((cell) => {
         if (ws[cell]) {
-          ws[cell].s = {
-            font: { bold: true },
-            fill: { fgColor: { rgb: 'FFFF00' } },
-            border: {
-              top: { style: 'thin', color: { rgb: '000000' } },
-              bottom: { style: 'thin', color: { rgb: '000000' } },
-              left: { style: 'thin', color: { rgb: '000000' } },
-              right: { style: 'thin', color: { rgb: '000000' } },
-            },
-          };
+          ws[cell].s = { font: { bold: true }, fill: { fgColor: { rgb: 'FFFF00' } } };
         }
       });
-      if (ws['A1']) {
-        ws['A1'].s = {
-          font: { bold: true },
-          fill: { fgColor: { rgb: 'FFFF00' } },
-          alignment: { horizontal: 'center' },
-          border: {
-            top: { style: 'thin', color: { rgb: '000000' } },
-            bottom: { style: 'thin', color: { rgb: '000000' } },
-            left: { style: 'thin', color: { rgb: '000000' } },
-            right: { style: 'thin', color: { rgb: '000000' } },
-          },
-        };
-      }
-      if (ws['A15']) {
-        ws['A15'].s = {
-          font: { bold: true },
-          alignment: { horizontal: 'left', wrapText: true },
-        };
-      }
       ws['!cols'] = [{ wch: 30 }, { wch: 35 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Tank Summary');
-      const filename = `${tankSummary.barrelId}_Tank_Summary_${tankSummary.serialNumber}.xlsx`;
-      console.log('Writing file:', filename);
-      XLSX.writeFile(wb, filename);
-      console.log('Export successful:', filename);
+      XLSX.writeFile(wb, `${tankSummary.barrelId}_Tank_Summary_${tankSummary.serialNumber}.xlsx`);
     } catch (err: any) {
       console.error('Export failed:', err);
       alert('Failed to export tank summary: ' + err.message);
     }
   };
 
-  // Render
   const renderSection = () => {
     switch (activeSection) {
       case 'Home':
@@ -600,7 +465,9 @@ const App: React.FC = () => {
           <div>
             <h2>Inventory Management</h2>
             <div style={{ marginBottom: '20px' }}>
-              <button onClick={() => setShowReceiveModal(true)}>Receive Inventory</button>
+              <Link to="/receive">
+                <button>Receive Inventory</button>
+              </Link>
               <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px' }}>
                 Move Inventory
               </button>
@@ -608,95 +475,6 @@ const App: React.FC = () => {
                 Record Loss
               </button>
             </div>
-            {showReceiveModal && (
-              <div
-                style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(0,0,0,0.5)',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
-                  <h3>Receive Inventory</h3>
-                  <input
-                    type="text"
-                    placeholder="Identifier (required for Spirits)"
-                    value={receiveForm.identifier || ''}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value || undefined })}
-                  />
-                  <select
-                    value={receiveForm.materialType}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
-                  >
-                    {Object.values(MaterialType).map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Quantity"
-                    value={receiveForm.quantity}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
-                    step="0.01"
-                  />
-                  <select
-                    value={receiveForm.unit}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
-                  >
-                    {Object.values(Unit).map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Proof (Spirits only)"
-                    value={receiveForm.proof || ''}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value || '' })}
-                    step="0.01"
-                  />
-                  <select
-                    value={receiveForm.account}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
-                  >
-                    <option value="Production">Production</option>
-                    <option value="Storage">Storage</option>
-                    <option value="Processing">Processing</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="Source"
-                    value={receiveForm.source}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, source: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    placeholder="DSP Number"
-                    value={receiveForm.dspNumber}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
-                  />
-                  <input
-                    type="date"
-                    value={receiveForm.receivedDate}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
-                  />
-                  <button onClick={handleReceive}>Submit</button>
-                  <button onClick={() => setShowReceiveModal(false)} style={{ marginLeft: '10px' }}>
-                    Cancel
-                  </button>
-                  {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
-                </div>
-              </div>
-            )}
             {showMoveModal && (
               <div
                 style={{
@@ -826,6 +604,7 @@ const App: React.FC = () => {
                 <tr>
                   <th>Identifier</th>
                   <th>Type</th>
+                  <th>Description</th>
                   <th>Quantity</th>
                   <th>Unit</th>
                   <th>Proof</th>
@@ -843,6 +622,7 @@ const App: React.FC = () => {
                     <tr key={item.identifier}>
                       <td>{item.identifier || 'N/A'}</td>
                       <td>{item.type}</td>
+                      <td>{item.description || 'N/A'}</td>
                       <td>{item.quantity || '0.00'}</td>
                       <td>{item.unit || 'N/A'}</td>
                       <td>{item.proof || 'N/A'}</td>
@@ -1178,95 +958,261 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="App">
-      <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
-        ☰
-      </button>
-      <nav className={`menu ${menuOpen ? 'open' : ''}`}>
-        <ul>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Home');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Home' ? 'active' : ''}
-            >
-              Home
-            </button>
-          </li>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Production');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Production' ? 'active' : ''}
-            >
-              Production
-            </button>
-          </li>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Inventory');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Inventory' ? 'active' : ''}
-            >
-              Inventory
-            </button>
-          </li>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Processing');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Processing' ? 'active' : ''}
-            >
-              Processing
-            </button>
-          </li>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Sales & Distribution');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Sales & Distribution' ? 'active' : ''}
-            >
-              Sales & Distribution
-            </button>
-          </li>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Users');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Users' ? 'active' : ''}
-            >
-              Users
-            </button>
-          </li>
-          <li>
-            <button
-              onClick={() => {
-                setActiveSection('Reporting');
-                setMenuOpen(false);
-              }}
-              className={activeSection === 'Reporting' ? 'active' : ''}
-            >
-              Reporting
-            </button>
-          </li>
-        </ul>
-      </nav>
-      <div className="content">
-        <h1>Tilly - Distillery Dog</h1>
-        {renderSection()}
+    <Router>
+      <div className="App">
+        <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
+          ☰
+        </button>
+        <nav className={`menu ${menuOpen ? 'open' : ''}`}>
+          <ul>
+            <li>
+              <button onClick={() => { setActiveSection('Home'); setMenuOpen(false); }} className={activeSection === 'Home' ? 'active' : ''}>
+                Home
+              </button>
+            </li>
+            <li>
+              <button onClick={() => { setActiveSection('Production'); setMenuOpen(false); }} className={activeSection === 'Production' ? 'active' : ''}>
+                Production
+              </button>
+            </li>
+            <li>
+              <button onClick={() => { setActiveSection('Inventory'); setMenuOpen(false); }} className={activeSection === 'Inventory' ? 'active' : ''}>
+                Inventory
+              </button>
+            </li>
+            <li>
+              <button onClick={() => { setActiveSection('Processing'); setMenuOpen(false); }} className={activeSection === 'Processing' ? 'active' : ''}>
+                Processing
+              </button>
+            </li>
+            <li>
+              <button onClick={() => { setActiveSection('Sales & Distribution'); setMenuOpen(false); }} className={activeSection === 'Sales & Distribution' ? 'active' : ''}>
+                Sales & Distribution
+              </button>
+            </li>
+            <li>
+              <button onClick={() => { setActiveSection('Users'); setMenuOpen(false); }} className={activeSection === 'Users' ? 'active' : ''}>
+                Users
+              </button>
+            </li>
+            <li>
+              <button onClick={() => { setActiveSection('Reporting'); setMenuOpen(false); }} className={activeSection === 'Reporting' ? 'active' : ''}>
+                Reporting
+              </button>
+            </li>
+          </ul>
+        </nav>
+        <div className="content">
+          <h1>Tilly - Distillery Dog</h1>
+          <Routes>
+            <Route path="/" element={renderSection()} />
+            <Route path="/receive" element={<ReceivePage fetchInventory={fetchInventory} />} />
+          </Routes>
+        </div>
       </div>
+    </Router>
+  );
+};
+
+// New Receive Page Component
+const ReceivePage: React.FC<{ fetchInventory: () => Promise<void> }> = ({ fetchInventory }) => {
+  const navigate = useNavigate();
+  const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
+    identifier: '',
+    account: 'Storage',
+    materialType: MaterialType.Grain,
+    quantity: '',
+    unit: Unit.Pounds,
+    proof: '',
+    source: '',
+    dspNumber: OUR_DSP,
+    receivedDate: new Date().toISOString().split('T')[0],
+    description: '',
+  });
+  const [productionError, setProductionError] = useState<string | null>(null);
+
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+
+  const handleReceive = async () => {
+    if (!receiveForm.account || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
+      setProductionError('All required fields must be filled');
+      return;
+    }
+    if (receiveForm.materialType === MaterialType.Spirits && (!receiveForm.identifier || !receiveForm.proof)) {
+      setProductionError('Spirits require an identifier and proof');
+      return;
+    }
+    if (receiveForm.materialType === MaterialType.Other && !receiveForm.description) {
+      setProductionError('Description is required for Other material type');
+      return;
+    }
+    const quantity = parseFloat(receiveForm.quantity);
+    const proof = receiveForm.proof ? parseFloat(receiveForm.proof) : undefined;
+    if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0))) {
+      setProductionError('Invalid quantity or proof');
+      return;
+    }
+    const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
+    const newItem: InventoryItem = {
+      identifier: receiveForm.identifier,
+      account: receiveForm.account,
+      type: receiveForm.materialType,
+      quantity: receiveForm.quantity,
+      unit: receiveForm.unit,
+      proof: receiveForm.proof || undefined,
+      proofGallons: proofGallons,
+      receivedDate: receiveForm.receivedDate,
+      source: receiveForm.source,
+      dspNumber: receiveForm.dspNumber,
+      status: Status.Received,
+      description: receiveForm.description,
+    };
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem),
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (data.tankSummary) {
+        // Assuming exportTankSummaryToExcel is available globally or passed as prop
+        // For simplicity, we'll log it here; adjust as needed
+        console.log('Tank Summary:', data.tankSummary);
+      }
+      await fetchInventory();
+      navigate('/');
+    } catch (err: any) {
+      console.error('Receive error:', err);
+      setProductionError(err.message);
+    }
+  };
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+      <h2>Receive Inventory</h2>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleReceive();
+        }}
+        style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
+      >
+        <label>
+          Identifier (required for Spirits):
+          <input
+            type="text"
+            value={receiveForm.identifier || ''}
+            onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value || undefined })}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label>
+          Material Type:
+          <select
+            value={receiveForm.materialType}
+            onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
+            style={{ width: '100%' }}
+          >
+            {Object.values(MaterialType).map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </label>
+        {receiveForm.materialType === MaterialType.Other && (
+          <label>
+            Description (e.g., Case Boxes, Activated Carbon):
+            <input
+              type="text"
+              value={receiveForm.description || ''}
+              onChange={(e) => setReceiveForm({ ...receiveForm, description: e.target.value || undefined })}
+              style={{ width: '100%' }}
+            />
+          </label>
+        )}
+        <label>
+          Quantity:
+          <input
+            type="number"
+            value={receiveForm.quantity}
+            onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
+            step="0.01"
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label>
+          Unit:
+          <select
+            value={receiveForm.unit}
+            onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
+            style={{ width: '100%' }}
+          >
+            {Object.values(Unit).map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Proof (Spirits only):
+          <input
+            type="number"
+            value={receiveForm.proof || ''}
+            onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value || '' })}
+            step="0.01"
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label>
+          Account:
+          <select
+            value={receiveForm.account}
+            onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+            style={{ width: '100%' }}
+          >
+            <option value="Production">Production</option>
+            <option value="Storage">Storage</option>
+            <option value="Processing">Processing</option>
+          </select>
+        </label>
+        <label>
+          Source:
+          <input
+            type="text"
+            value={receiveForm.source}
+            onChange={(e) => setReceiveForm({ ...receiveForm, source: e.target.value })}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label>
+          DSP Number:
+          <input
+            type="text"
+            value={receiveForm.dspNumber}
+            onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label>
+          Received Date:
+          <input
+            type="date"
+            value={receiveForm.receivedDate}
+            onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button type="submit">Submit</button>
+          <button type="button" onClick={() => navigate('/')}>
+            Cancel
+          </button>
+        </div>
+        {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
+      </form>
     </div>
   );
 };
