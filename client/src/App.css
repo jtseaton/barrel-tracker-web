@@ -10,18 +10,18 @@
   position: fixed;
   top: 10px;
   left: 10px;
-  z-index: 1000;
+  z-index: 1001;
 }
 
 .menu {
-  position: fixed;
-  top: 0;
-  left: -250px;
   width: 250px;
   height: 100%;
   background-color: #333;
+  position: fixed;
+  top: 0;
+  left: -250px;
   transition: left 0.3s ease;
-  z-index: 999;
+  z-index: 1000;
 }
 
 .menu.open {
@@ -47,9 +47,10 @@
   cursor: pointer;
   width: 100%;
   text-align: left;
-  padding: 5px 0; /* Consistent padding */
-  display: block; /* Ensure full width */
-  text-decoration: none; /* No underline for links */
+  padding: 10px 15px; /* Increased padding for consistency */
+  display: block;
+  text-decoration: none;
+  box-sizing: border-box; /* Ensure padding doesn’t affect width */
 }
 
 .menu button.active {
@@ -62,24 +63,17 @@
 }
 
 .content {
-  flex-grow: 1;
+  flex: 1;
   padding: 20px;
+  margin-left: 0;
   transition: margin-left 0.3s ease;
+}
+
+.menu.open + .content {
   margin-left: 250px;
 }
 
-.menu:not(.open) + .content {
-  margin-left: 0;
-}
-
 /* Content Styling */
-.content {
-  flex: 1;
-  background-color: #f9f9f9;
-  padding: 20px;
-  margin-left: 0; /* No offset since menu slides */
-  overflow-y: auto;
-}
 
 h1 {
   text-align: center;
