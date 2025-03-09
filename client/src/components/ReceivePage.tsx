@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ReceiveForm, InventoryItem, TankSummary } from '../types/interfaces';
 import { MaterialType, Unit, Status } from '../types/enums';
@@ -22,17 +22,58 @@ const ReceivePage: React.FC<{
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
   });
+  const [items, setItems] = useState<string[]>([]); // List of existing item names
+  const [newItem, setNewItem] = useState(''); // For creating new items
+  const [showNewItemInput, setShowNewItemInput] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
-  const handleReceive = async () => {
-    if (!receiveForm.account || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
-      setProductionError('All required fields must be filled');
+  // Fetch existing items on mount
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/items`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        setItems(data.map((item: { name: string }) => item.name));
+      } catch (err: any) {
+        console.error('Fetch items error:', err);
+      }
+    };
+    fetchItems();
+  }, [API_BASE_URL]);
+
+  const handleCreateItem = async () => {
+    if (!newItem) {
+      setProductionError('New item name is required');
       return;
     }
-    if (receiveForm.materialType === MaterialType.Spirits && (!receiveForm.identifier || !receiveForm.proof)) {
-      setProductionError('Spirits require an identifier and proof');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newItem }),
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      setItems([...items, newItem]);
+      setReceiveForm({ ...receiveForm, identifier: newItem });
+      setNewItem('');
+      setShowNewItemInput(false);
+      setProductionError(null);
+    } catch (err: any) {
+      console.error('Create item error:', err);
+      setProductionError('Failed to create item: ' + err.message);
+    }
+  };
+
+  const handleReceive = async () => {
+    if (!receiveForm.identifier || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
+      setProductionError('Item, Material Type, Quantity, and Unit are required');
+      return;
+    }
+    if (receiveForm.materialType === MaterialType.Spirits && !receiveForm.proof) {
+      setProductionError('Proof is required for Spirits');
       return;
     }
     if (receiveForm.materialType === MaterialType.Other && !receiveForm.description) {
@@ -48,7 +89,7 @@ const ReceivePage: React.FC<{
     const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
     const newItem: InventoryItem = {
       identifier: receiveForm.identifier,
-      account: receiveForm.account,
+      account: receiveForm.materialType === MaterialType.Spirits ? receiveForm.account : 'Storage', // Default to Storage unless Spirits
       type: receiveForm.materialType,
       quantity: receiveForm.quantity,
       unit: receiveForm.unit,
@@ -88,14 +129,35 @@ const ReceivePage: React.FC<{
         style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
       >
         <label>
-          Identifier (required for Spirits):
-          <input
-            type="text"
+          Item:
+          <select
             value={receiveForm.identifier || ''}
             onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value || undefined })}
             style={{ width: '100%' }}
-          />
+          >
+            <option value="">Select an item</option>
+            {items.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+            <option value="new">Create New Item</option>
+          </select>
         </label>
+        {receiveForm.identifier === 'new' && (
+          <div>
+            <input
+              type="text"
+              placeholder="New Item Name"
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              style={{ width: '100%' }}
+            />
+            <button type="button" onClick={handleCreateItem} style={{ marginTop: '10px' }}>
+              Create Item
+            </button>
+          </div>
+        )}
         <label>
           Material Type:
           <select
@@ -145,28 +207,32 @@ const ReceivePage: React.FC<{
             ))}
           </select>
         </label>
-        <label>
-          Proof (Spirits only):
-          <input
-            type="number"
-            value={receiveForm.proof || ''}
-            onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value || '' })}
-            step="0.01"
-            style={{ width: '100%' }}
-          />
-        </label>
-        <label>
-          Account:
-          <select
-            value={receiveForm.account}
-            onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
-            style={{ width: '100%' }}
-          >
-            <option value="Production">Production</option>
-            <option value="Storage">Storage</option>
-            <option value="Processing">Processing</option>
-          </select>
-        </label>
+        {receiveForm.materialType === MaterialType.Spirits && (
+          <>
+            <label>
+              Proof:
+              <input
+                type="number"
+                value={receiveForm.proof || ''}
+                onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value || '' })}
+                step="0.01"
+                style={{ width: '100%' }}
+              />
+            </label>
+            <label>
+              Account:
+              <select
+                value={receiveForm.account}
+                onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+                style={{ width: '100%' }}
+              >
+                <option value="Production">Production</option>
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
+              </select>
+            </label>
+          </>
+        )}
         <label>
           Source:
           <input

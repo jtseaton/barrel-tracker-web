@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, DailySummaryItem } from '../types/interfaces';
-import { MaterialType } from '../types/enums'; // If used
 import { fetchInventory, fetchDailySummary } from '../utils/fetchUtils';
 
 const OUR_DSP = 'DSP-AL-20010';
@@ -19,14 +18,28 @@ const Inventory: React.FC = () => {
   });
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
+  const [showItemsModal, setShowItemsModal] = useState(false);
+  const [items, setItems] = useState<string[]>([]);
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
   useEffect(() => {
-    fetchInventory().then(setInventory).catch((err) => console.error(err));
+    fetchInventory().then(setInventory).catch((err) => console.error(err)); // Fixed syntax
     fetchDailySummary().then(setDailySummary).catch((err) => console.error(err));
+    fetchItems();
   }, []);
+
+  const fetchItems = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/items`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setItems(data.map((item: { name: string }) => item.name));
+    } catch (err: any) {
+      console.error('Fetch items error:', err);
+    }
+  };
 
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
@@ -40,7 +53,6 @@ const Inventory: React.FC = () => {
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
       await fetchInventory().then(setInventory);
       setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
@@ -82,7 +94,21 @@ const Inventory: React.FC = () => {
         <Link to="/receive"><button>Receive Inventory</button></Link>
         <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px' }}>Move Inventory</button>
         <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px' }}>Record Loss</button>
+        <button onClick={() => setShowItemsModal(true)} style={{ marginLeft: '10px' }}>Items</button>
       </div>
+      {showItemsModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
+            <h3>Items List</h3>
+            <ul>
+              {items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <button onClick={() => setShowItemsModal(false)}>Close</button>
+          </div>
+        </div>
+      )}
       {showMoveModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
