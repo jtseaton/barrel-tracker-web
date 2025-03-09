@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom'; // Added Link to imports
 import Home from './components/Home';
 import Production from './components/Production';
 import Inventory from './components/Inventory';
@@ -15,11 +15,23 @@ import './App.css';
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isMenuPersistent, setIsMenuPersistent] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   React.useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
+
+  const toggleMenuPersistence = () => {
+    setIsMenuPersistent(!isMenuPersistent);
+    if (!isMenuPersistent) setMenuOpen(true);
+  };
+
+  const handleContentClick = () => {
+    if (!isMenuPersistent && menuOpen) {
+      setMenuOpen(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -46,38 +58,91 @@ const App: React.FC = () => {
         <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
           ☰
         </button>
-        <nav className={`menu ${menuOpen ? 'open' : ''}`}>
-          <ul>
-            {['Home', 'Production', 'Inventory', 'Processing', 'Sales & Distribution', 'Users', 'Reporting'].map((section) => (
-              <li key={section}>
-                <button
-                  onClick={() => {
-                    setActiveSection(section);
-                    setMenuOpen(false);
-                  }}
-                  className={activeSection === section ? 'active' : ''}
-                >
-                  {section}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="content">
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button onClick={toggleMenuPersistence} style={{ marginLeft: '10px' }}>
+            {isMenuPersistent ? '<' : '>'}
+          </button>
+          <nav className={`menu ${menuOpen || isMenuPersistent ? 'open' : ''}`}>
+            <ul>
+              {[
+                { name: 'Home', subMenu: null },
+                { name: 'Production', subMenu: null },
+                {
+                  name: 'Inventory',
+                  subMenu: [
+                    { name: 'Receive Inventory', path: '/receive' },
+                    { name: 'Items', action: () => setActiveSection('Inventory') },
+                  ],
+                },
+                { name: 'Processing', subMenu: null },
+                { name: 'Sales & Distribution', subMenu: null },
+                { name: 'Users', subMenu: null },
+                { name: 'Reporting', subMenu: null },
+              ].map((section) => (
+                <li key={section.name}>
+                  <button
+                    onClick={() => {
+                      setActiveSection(section.name);
+                      if (!isMenuPersistent) setMenuOpen(false);
+                    }}
+                    className={activeSection === section.name ? 'active' : ''}
+                  >
+                    {section.name}
+                  </button>
+                  {section.subMenu && (menuOpen || isMenuPersistent) && (
+                    <ul className="submenu">
+                      {section.subMenu.map((subItem) => (
+                        <li key={subItem.name}>
+                          {subItem.path ? (
+                            <Link
+                              to={subItem.path}
+                              onClick={() => {
+                                setActiveSection(section.name);
+                                if (!isMenuPersistent) setMenuOpen(false);
+                              }}
+                            >
+                              {subItem.name}
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                subItem.action?.();
+                                if (!isMenuPersistent) setMenuOpen(false);
+                              }}
+                            >
+                              {subItem.name}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+        <div className="content" onClick={handleContentClick}>
           <h1>Tilly - Distillery Dog</h1>
           <Routes>
-            <Route path="/" element={
-              <>
-                {activeSection === 'Home' && <Home />}
-                {activeSection === 'Production' && <Production />}
-                {activeSection === 'Inventory' && <Inventory />}
-                {activeSection === 'Processing' && <Processing />}
-                {activeSection === 'Sales & Distribution' && <Sales />}
-                {activeSection === 'Users' && <Users />}
-                {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
-              </>
-            } />
-            <Route path="/receive" element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />} />
+            <Route
+              path="/"
+              element={
+                <>
+                  {activeSection === 'Home' && <Home />}
+                  {activeSection === 'Production' && <Production />}
+                  {activeSection === 'Inventory' && <Inventory showItemsModalFromMenu={activeSection === 'Inventory' && menuOpen} />}
+                  {activeSection === 'Processing' && <Processing />}
+                  {activeSection === 'Sales & Distribution' && <Sales />}
+                  {activeSection === 'Users' && <Users />}
+                  {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
+                </>
+              }
+            />
+            <Route
+              path="/receive"
+              element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
+            />
           </Routes>
         </div>
       </div>
