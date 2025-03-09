@@ -57,6 +57,19 @@ interface DailySummaryItem {
   totalProofGallons: string;
 }
 
+interface ProductionForm {
+  barrelId: string;
+  proof: string;
+  quantity: string;
+}
+
+interface ProductionRecord {
+  barrelId: string;
+  type: string;
+  proofGallons: string;
+  date: string;
+}
+
 const App: React.FC = () => {
   // State Management
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -103,6 +116,50 @@ const App: React.FC = () => {
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
+  const [productionForm, setProductionForm] = useState<ProductionForm>({
+    barrelId: '',
+    proof: '',
+    quantity: ''
+  });
+  const [productionRecords, setProductionRecords] = useState<ProductionRecord[]>([]);
+  const [productionError, setProductionError] = useState<string | null>(null);
+  
+  const handleProductionGauge = async () => {
+    if (!productionForm.barrelId || !productionForm.proof || !productionForm.quantity) {
+      setProductionError('All fields are required');
+      return;
+    }
+    const proof = parseFloat(productionForm.proof);
+    const quantity = parseFloat(productionForm.quantity);
+    if (isNaN(proof) || isNaN(quantity) || proof > 200 || quantity <= 0) {
+      setProductionError('Invalid proof or quantity');
+      return;
+    }
+    const proofGallons = (quantity * (proof / 100)).toFixed(2);
+    const newRecord: ProductionRecord = {
+      barrelId: productionForm.barrelId,
+      type: 'Spirits', // Default type; adjust if multiple types are needed
+      proofGallons,
+      date: new Date().toISOString().split('T')[0]
+    };
+    try {
+      const res = await fetch('/api/produce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord)
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      console.log('Production gauge response:', data);
+      setProductionRecords([...productionRecords, newRecord]);
+      setProductionForm({ barrelId: '', proof: '', quantity: '' });
+      setProductionError(null);
+      await fetchInventory(); // Update inventory state
+    } catch (err: any) {
+      console.error('Production gauge error:', err);
+      setProductionError(err.message);
+    }
+  };
 
   // Fetch Data
   useEffect(() => {
@@ -479,13 +536,67 @@ const App: React.FC = () => {
             <p>Select a section to manage your distillery operations.</p>
           </div>
         );
-      case 'Production':
-        return (
-          <div>
-            <h2>Production</h2>
-            <p>Production features coming soon.</p>
-          </div>
-        );
+        case 'Production':
+  return (
+    <div>
+      <h2>Production</h2>
+      <div>
+        <h3>Production Gauge</h3>
+        <input
+          type="text"
+          placeholder="Barrel ID"
+          value={productionForm.barrelId}
+          onChange={(e) => setProductionForm({ ...productionForm, barrelId: e.target.value })}
+        />
+        <input
+          type="number"
+          placeholder="Proof"
+          value={productionForm.proof}
+          onChange={(e) => setProductionForm({ ...productionForm, proof: e.target.value })}
+          step="0.1"
+          min="0"
+          max="200"
+        />
+        <input
+          type="number"
+          placeholder="Quantity (Gallons)"
+          value={productionForm.quantity}
+          onChange={(e) => setProductionForm({ ...productionForm, quantity: e.target.value })}
+          step="0.01"
+          min="0"
+        />
+        <button onClick={handleProductionGauge}>Gauge Production</button>
+        {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
+      </div>
+      <h3>Daily Production Records</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Barrel ID</th>
+            <th>Type</th>
+            <th>Proof Gallons</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productionRecords.length > 0 ? (
+            productionRecords.map((record) => (
+              <tr key={record.barrelId}>
+                <td>{record.barrelId}</td>
+                <td>{record.type}</td>
+                <td>{record.proofGallons}</td>
+                <td>{record.date}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={4}>No production records yet</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
       case 'Inventory':
         return (
           <div>
