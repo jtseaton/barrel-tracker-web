@@ -14,8 +14,8 @@ import './App.css';
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
-  const [menuOpen, setMenuOpen] = useState(true); // Menu persistent by default
-  const [showInventorySubmenu, setShowInventorySubmenu] = useState(false); // Control Inventory submenu
+  const [menuOpen, setMenuOpen] = useState(true);
+  const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   React.useEffect(() => {
@@ -24,11 +24,9 @@ const App: React.FC = () => {
 
   const handleInventoryClick = () => {
     if (activeSection === 'Inventory' && showInventorySubmenu) {
-      // If already on Inventory submenu, go back to main menu
       setShowInventorySubmenu(false);
       setActiveSection('Home');
     } else {
-      // Show Inventory submenu
       setActiveSection('Inventory');
       setShowInventorySubmenu(true);
     }
@@ -62,13 +60,12 @@ const App: React.FC = () => {
         <nav className={`menu ${menuOpen ? 'open' : ''}`}>
           <ul>
             {showInventorySubmenu ? (
-              // Inventory submenu options
               [
                 { name: 'Vendors', action: () => setActiveSection('Vendors') },
-                { name: 'Receipts', path: '/receive' },
+                { name: 'Receive Inventory', path: '/receive' }, // Renamed back to "Receive Inventory"
                 { name: 'Transfers', action: () => setActiveSection('Transfers') },
                 { name: 'Inventory', action: () => setActiveSection('Inventory') },
-                { name: 'Items', action: () => setActiveSection('Inventory') }, // Triggers items modal via prop
+                { name: 'Items', action: () => setActiveSection('Inventory') }, // No modal trigger here
               ].map((item) => (
                 <li key={item.name}>
                   {item.path ? (
@@ -81,11 +78,10 @@ const App: React.FC = () => {
                 </li>
               ))
             ) : (
-              // Main menu options
               [
                 { name: 'Home', subMenu: null },
                 { name: 'Production', subMenu: null },
-                { name: 'Inventory', subMenu: true }, // Submenu exists but hidden until clicked
+                { name: 'Inventory', subMenu: true },
                 { name: 'Processing', subMenu: null },
                 { name: 'Sales & Distribution', subMenu: null },
                 { name: 'Users', subMenu: null },
@@ -98,7 +94,7 @@ const App: React.FC = () => {
                         handleInventoryClick();
                       } else {
                         setActiveSection(section.name);
-                        setShowInventorySubmenu(false); // Reset submenu when switching sections
+                        setShowInventorySubmenu(false);
                       }
                     }}
                     className={activeSection === section.name ? 'active' : ''}
@@ -119,7 +115,7 @@ const App: React.FC = () => {
                 <>
                   {activeSection === 'Home' && <Home />}
                   {activeSection === 'Production' && <Production />}
-                  {activeSection === 'Inventory' && <Inventory showItemsModalFromMenu={activeSection === 'Inventory' && showInventorySubmenu && menuOpen} />}
+                  {activeSection === 'Inventory' && <Inventory />} {/* Removed showItemsModalFromMenu */}
                   {activeSection === 'Vendors' && <div><h2>Vendors</h2><p>Vendors page coming soon</p></div>}
                   {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                   {activeSection === 'Processing' && <Processing />}
