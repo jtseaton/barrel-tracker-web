@@ -22,14 +22,14 @@ const ReceivePage: React.FC<{
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
   });
-  const [items, setItems] = useState<string[]>([]); // List of existing item names
-  const [newItem, setNewItem] = useState(''); // For creating new items
+  const [items, setItems] = useState<string[]>([]);
+  const [newItem, setNewItem] = useState('');
   const [showNewItemInput, setShowNewItemInput] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+  // Use Render URL or empty string for relative paths
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || ''; // Adjust to your Render URL if needed
 
-  // Fetch existing items on mount
   useEffect(() => {
     const fetchItems = async () => {
       try {
@@ -39,6 +39,7 @@ const ReceivePage: React.FC<{
         setItems(data.map((item: { name: string }) => item.name));
       } catch (err: any) {
         console.error('Fetch items error:', err);
+        setProductionError('Failed to fetch items: ' + err.message);
       }
     };
     fetchItems();
@@ -55,7 +56,11 @@ const ReceivePage: React.FC<{
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newItem }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+      }
+      const data = await res.json();
       setItems([...items, newItem]);
       setReceiveForm({ ...receiveForm, identifier: newItem });
       setNewItem('');
@@ -89,7 +94,7 @@ const ReceivePage: React.FC<{
     const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
     const newItem: InventoryItem = {
       identifier: receiveForm.identifier,
-      account: receiveForm.materialType === MaterialType.Spirits ? receiveForm.account : 'Storage', // Default to Storage unless Spirits
+      account: receiveForm.materialType === MaterialType.Spirits ? receiveForm.account : 'Storage',
       type: receiveForm.materialType,
       quantity: receiveForm.quantity,
       unit: receiveForm.unit,
@@ -117,6 +122,8 @@ const ReceivePage: React.FC<{
       setProductionError(err.message);
     }
   };
+
+  // ... (rest of the JSX remains unchanged, see previous version for full form) ...
 
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>

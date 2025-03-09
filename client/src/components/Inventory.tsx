@@ -38,6 +38,7 @@ const Inventory: React.FC = () => {
       setItems(data.map((item: { name: string }) => item.name));
     } catch (err: any) {
       console.error('Fetch items error:', err);
+      setProductionError('Failed to fetch items: ' + err.message);
     }
   };
 
