@@ -170,6 +170,44 @@ app.post('/api/update-batch-id', (req, res) => {
   });
 });
 
+app.post('/api/produce', (req, res) => {
+  console.log('Received POST to /api/produce:', req.body);
+  const { barrelId, type, proofGallons, date } = req.body;
+
+  if (!barrelId || !type || !proofGallons || !date) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const parsedProofGallons = parseFloat(proofGallons);
+  if (isNaN(parsedProofGallons) || parsedProofGallons <= 0) {
+    return res.status(400).json({ error: 'Invalid proof gallons' });
+  }
+
+  db.run(
+    `INSERT INTO inventory (barrelId, account, type, proof, proofGallons, receivedDate, source, dspNumber)
+     VALUES (?, 'Production', ?, '100', ?, ?, 'N/A', ?)`,
+    [barrelId, type, proofGallons, date, OUR_DSP],
+    (err) => {
+      if (err) {
+        console.error('Insert Production Error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      db.run(
+        `INSERT INTO transactions (barrelId, type, proofGallons, date, action, dspNumber)
+         VALUES (?, ?, ?, ?, 'Produced', ?)`,
+        [barrelId, type, proofGallons, date, OUR_DSP],
+        (err) => {
+          if (err) {
+            console.error('Transaction Insert Error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ message: 'Production gauged successfully', barrelId });
+        }
+      );
+    }
+  );
+});
+
 app.post('/api/move', (req, res) => {
   console.log('Received POST to /api/move:', req.body);
   const { barrelId, toAccount, proofGallons } = req.body;
