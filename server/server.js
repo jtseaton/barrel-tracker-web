@@ -85,7 +85,7 @@ db.serialize(() => {
 });
 
 const loadItemsFromXML = () => {
-  fs.readFile(path.join(__dirname, '../items.xml'), 'utf8', (err, data) => {
+  fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading items.xml:', err);
       return;
