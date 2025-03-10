@@ -138,7 +138,7 @@ const AppContent: React.FC = () => {
         </ul>
       </nav>
       <div className="content">
-        <h1>Tilly - Distillery Dog</h1>
+        <h1>TILLY</h1>
         <Routes>
           <Route
             path="/"
