@@ -26,12 +26,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-  // Log inventory prop to see what we're getting
   useEffect(() => {
     console.log('Inventory prop received:', inventory);
+    const receivedStored = inventory.filter((item) => ['Received', 'Stored'].includes(item.status));
+    console.log('Filtered Received/Stored:', receivedStored);
   }, [inventory]);
 
-  // Fetch daily summary on mount (since we removed inventory fetch)
   useEffect(() => {
     fetchDailySummary()
       .then((data) => {
@@ -53,7 +53,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const responseData = await res.json();
+      console.log('Move response:', responseData);
       await refreshInventory();
+      console.log('Inventory after move:', inventory);
       setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
       setProductionError(null);
@@ -64,13 +67,20 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   };
 
   const handleRecordLoss = async () => {
+    if (!lossForm.identifier || !lossForm.quantityLost || !lossForm.proofGallonsLost || !lossForm.reason) {
+      setProductionError('Please fill in all fields.');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lossForm),
+        body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }), // Add dspNumber
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorData}`);
+      }
       await refreshInventory();
       setLossForm({
         identifier: '',
