@@ -10,8 +10,8 @@ import Reporting from './components/Reporting';
 import ReceivePage from './components/ReceivePage';
 import Items from './components/Items';
 import ItemDetails from './components/ItemDetails';
-import Vendors from './components/Vendors'; // New
-import VendorDetails from './components/VendorDetails'; // New
+import Vendors from './components/Vendors';
+import VendorDetails from './components/VendorDetails';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
@@ -34,13 +34,13 @@ const AppContent: React.FC = () => {
     } else if (path === '/receive') {
       setActiveSection('Inventory');
       setShowInventorySubmenu(true);
-    } else if (path === '/items') {
+    } else if (path === '/items' || path === '/items/new') {
       setActiveSection('Items');
       setShowInventorySubmenu(true);
     } else if (path.startsWith('/items/')) {
       setActiveSection('Items');
       setShowInventorySubmenu(true);
-    } else if (path === '/vendors') {
+    } else if (path === '/vendors' || path === '/vendors/new') {
       setActiveSection('Vendors');
       setShowInventorySubmenu(true);
     } else if (path.startsWith('/vendors/')) {
@@ -95,7 +95,7 @@ const AppContent: React.FC = () => {
           {showInventorySubmenu ? (
             [
               { name: 'Back', action: handleBackClick },
-              { name: 'Vendors', path: '/vendors' }, // Updated to link
+              { name: 'Vendors', path: '/vendors' },
               { name: 'Receive Inventory', path: '/receive' },
               { name: 'Transfers', action: () => setActiveSection('Transfers') },
               { name: 'Inventory', action: () => setActiveSection('Inventory') },

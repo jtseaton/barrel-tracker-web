@@ -1,6 +1,6 @@
 // client/src/components/Items.tsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface Item {
   name: string;
@@ -10,8 +10,8 @@ interface Item {
 const Items: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [newItemName, setNewItemName] = useState('');
   const [productionError, setProductionError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
@@ -31,25 +31,8 @@ const Items: React.FC = () => {
     }
   };
 
-  const handleAddItem = async () => {
-    if (!newItemName) {
-      setProductionError('Item name is required');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newItemName }),
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      setNewItemName('');
-      fetchItems(); // Refresh list
-      setProductionError(null);
-    } catch (err: any) {
-      console.error('Add item error:', err);
-      setProductionError('Failed to add item: ' + err.message);
-    }
+  const handleAddItem = () => {
+    navigate('/items/new');
   };
 
   const handleDeleteItems = async () => {
@@ -65,7 +48,7 @@ const Items: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       setSelectedItems([]);
-      fetchItems(); // Refresh list
+      fetchItems();
       setProductionError(null);
     } catch (err: any) {
       console.error('Delete items error:', err);
@@ -86,7 +69,7 @@ const Items: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       setSelectedItems([]);
-      fetchItems(); // Refresh list
+      fetchItems();
       setProductionError(null);
     } catch (err: any) {
       console.error('Toggle enable error:', err);
@@ -103,15 +86,8 @@ const Items: React.FC = () => {
   return (
     <div>
       <h2>Items List</h2>
-      {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
+      {productionError && <p style={{ color: '#F86752' }}>{productionError}</p>}
       <div style={{ marginBottom: '20px' }}>
-        <input
-          type="text"
-          value={newItemName}
-          onChange={(e) => setNewItemName(e.target.value)}
-          placeholder="New Item Name"
-          style={{ marginRight: '10px' }}
-        />
         <button onClick={handleAddItem}>Add Item</button>
         <button onClick={handleDeleteItems} style={{ marginLeft: '10px' }}>Delete Item</button>
         <button onClick={() => handleToggleEnable(true)} style={{ marginLeft: '10px' }}>Enable Item</button>
