@@ -56,17 +56,44 @@ db.serialize(() => {
       phone TEXT
     )
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS purchase_orders (
+      poNumber TEXT PRIMARY KEY,
+      site TEXT,
+      poDate TEXT,
+      supplier TEXT,
+      supplierAddress TEXT,
+      supplierCity TEXT,
+      supplierState TEXT,
+      supplierZip TEXT,
+      comments TEXT,
+      shipToName TEXT,
+      shipToAddress TEXT,
+      shipToCity TEXT,
+      shipToState TEXT,
+      shipToZip TEXT
+    )
+  `);
   db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)', ['GNS250329', 1]);
   db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)', ['GrainBatch001', 1]);
   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
 });
 
-// Items endpoints (unchanged)
+// Items endpoints
 app.get('/api/items', (req, res) => {
   db.all('SELECT name, enabled FROM items', (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
+  });
+});
+
+app.get('/api/items/:name', (req, res) => {
+  const { name } = req.params;
+  db.get('SELECT name, enabled FROM items WHERE name = ?', [name], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Item not found' });
+    res.json(row);
   });
 });
 
@@ -169,6 +196,30 @@ app.patch('/api/vendors', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: `Vendors ${enabled ? 'enabled' : 'disabled'} successfully`, updated: names });
   });
+});
+
+// Purchase Orders endpoints
+app.get('/api/purchase-orders', (req, res) => {
+  const { supplier } = req.query;
+  if (!supplier) return res.status(400).json({ error: 'Supplier is required' });
+  db.all('SELECT * FROM purchase_orders WHERE supplier = ?', [supplier], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/purchase-orders', (req, res) => {
+  const { poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip } = req.body;
+  if (!poNumber) return res.status(400).json({ error: 'PO Number is required' });
+  db.run(
+    `INSERT INTO purchase_orders (poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Purchase order created successfully', poNumber });
+    }
+  );
 });
 
 app.get('/api/inventory', (req, res) => {
