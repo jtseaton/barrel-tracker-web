@@ -232,6 +232,24 @@ app.get('/api/inventory', (req, res) => {
   });
 });
 
+// Add after other endpoints
+app.get('/api/inventory', (req, res) => {
+  const { source } = req.query;
+  let query = 'SELECT identifier, type, quantity, receivedDate, status FROM inventory';
+  let params = [];
+  if (source) {
+    query += ' WHERE source = ?';
+    params.push(source);
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('Fetch inventory error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
 app.post('/api/receive', (req, res) => {
   console.log('Received POST to /api/receive:', req.body);
   const {
