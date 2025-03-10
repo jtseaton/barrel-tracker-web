@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom'; // Added useNavigate
+import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import Home from './components/Home';
 import Production from './components/Production';
 import Inventory from './components/Inventory';
@@ -23,26 +23,25 @@ const AppContent: React.FC = () => {
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
-  const navigate = useNavigate(); // Added to enable navigation
+  const navigate = useNavigate();
 
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
   useEffect(() => {
+    console.log('Path changed to', location.pathname);
     const path = location.pathname;
     if (path === '/' || path === '/production' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting') {
       setShowInventorySubmenu(false);
-      setActiveSection(path === '/' ? activeSection : path.slice(1).replace('-', ' & ').replace(/(^\w|\s\w)/g, m => m.toUpperCase()));
-    } else if (path === '/receive') {
-      setActiveSection('Inventory');
+      setActiveSection(path === '/' ? 'Home' : path.slice(1).replace('-', ' & ').replace(/(^\w|\s\w)/g, m => m.toUpperCase()));
+    } else if (path === '/inventory' || path === '/receive' || path === '/transfers' || path === '/items' || path.startsWith('/items/') || path.startsWith('/vendors/')) {
       setShowInventorySubmenu(true);
-    } else if (path === '/items' || path === '/items/new' || path.startsWith('/items/')) {
-      setActiveSection('Items');
-      setShowInventorySubmenu(true);
-    } else if (path === '/vendors' || path === '/vendors/new' || path.startsWith('/vendors/')) {
-      setActiveSection('Vendors');
-      setShowInventorySubmenu(true);
+      if (path === '/inventory') setActiveSection('Inventory');
+      else if (path === '/receive') setActiveSection('Inventory');
+      else if (path === '/transfers') setActiveSection('Transfers');
+      else if (path === '/items' || path.startsWith('/items/')) setActiveSection('Items');
+      else if (path === '/vendors' || path.startsWith('/vendors/')) setActiveSection('Vendors');
     }
   }, [location.pathname]);
 
@@ -50,30 +49,23 @@ const AppContent: React.FC = () => {
     if (activeSection === 'Inventory' && showInventorySubmenu) {
       setShowInventorySubmenu(false);
       setActiveSection('Home');
+      navigate('/');
     } else {
       setActiveSection('Inventory');
       setShowInventorySubmenu(true);
+      navigate('/inventory');
     }
   };
 
   const handleBackClick = () => {
     setShowInventorySubmenu(false);
     setActiveSection('Home');
-    navigate('/'); // Ensure navigation resets to home
+    navigate('/');
   };
 
   if (isLoading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          backgroundColor: '#f5f5f5',
-        }}
-      >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f5f5f5' }}>
         <img src="/tilly-logo.png" alt="Tilly Logo" style={{ maxWidth: '80%', maxHeight: '60vh' }} />
         <h1 style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>Tilly</h1>
         <p style={{ fontFamily: 'Arial, sans-serif', color: '#666' }}>Powered by Paws & Pours</p>
@@ -83,9 +75,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="App">
-      <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
-        ☰
-      </button>
+      <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>☰</button>
       <nav className={`menu ${menuOpen ? 'open' : ''}`}>
         <ul>
           {showInventorySubmenu ? (
@@ -93,13 +83,16 @@ const AppContent: React.FC = () => {
               { name: 'Back', action: handleBackClick },
               { name: 'Vendors', path: '/vendors' },
               { name: 'Receive Inventory', path: '/receive' },
-              { name: 'Transfers', action: () => setActiveSection('Transfers') },
-              { name: 'Inventory', action: () => setActiveSection('Inventory') },
+              { name: 'Transfers', path: '/transfers' },
+              { name: 'Inventory', path: '/inventory' },
               { name: 'Items', path: '/items' },
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
-                  <Link to={item.path} onClick={() => setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name)}>
+                  <Link to={item.path} onClick={() => {
+                    console.log('Clicked', item.name);
+                    setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name);
+                  }}>
                     {item.name}
                   </Link>
                 ) : (
@@ -138,7 +131,7 @@ const AppContent: React.FC = () => {
         </ul>
       </nav>
       <div className="content">
-        <h1>TILLY</h1>
+        <h1>Tilly - Distillery Dog</h1>
         <Routes>
           <Route
             path="/"
@@ -156,10 +149,9 @@ const AppContent: React.FC = () => {
               </>
             }
           />
-          <Route
-            path="/receive"
-            element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
-          />
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
+          <Route path="/receive" element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
           <Route path="/vendors" element={<Vendors />} />
