@@ -54,7 +54,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         const res = await fetch(`${API_BASE_URL}/api/items`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        console.log('Fetched items:', data); // Debug fetch
+        console.log('Fetched items:', data);
         setItems(data);
         setFilteredItems(data);
       } catch (err: any) {
@@ -96,8 +96,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   };
 
   const handleItemSelect = (item: Item) => {
-    console.log('Selected item:', item); // Debug selection
-    const materialType = item.type in MaterialType ? item.type as MaterialType : MaterialType.Other; // Fallback to Other if not in enum
+    console.log('Selected item:', item);
+    const materialType = Object.values(MaterialType).includes(item.type as MaterialType)
+      ? item.type as MaterialType
+      : MaterialType.Other;
+    console.log('Setting materialType to:', materialType); // Debug type
     setReceiveForm({ ...receiveForm, identifier: item.name, materialType });
     setShowItemSuggestions(false);
   };
@@ -157,7 +160,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   };
 
   const handleReceive = async () => {
-    console.log('handleReceive triggered, form:', receiveForm); // Debug start
+    console.log('handleReceive triggered, form:', receiveForm);
     if (!receiveForm.identifier || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
       setProductionError('Item, Material Type, Quantity, and Unit are required');
       console.log('Validation failed: missing fields');
@@ -168,7 +171,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       console.log('Validation failed: missing proof');
       return;
     }
-    if (receiveForm.materialType === MaterialType.Other && !receiveForm.description) {
+    if (receiveForm.materialType === MaterialType.Other && !(receiveForm.description || '').trim()) {
       setProductionError('Description is required for Other material type');
       console.log('Validation failed: missing description');
       return;
@@ -197,7 +200,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       description: receiveForm.description,
       cost: receiveForm.cost || undefined,
     };
-    console.log('Submitting item:', newItem); // Debug before fetch
+    console.log('Submitting item:', newItem);
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
@@ -205,7 +208,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         body: JSON.stringify(newItem),
       });
       const responseData = await res.json();
-      console.log('Receive response:', responseData); // Debug response
+      console.log('Receive response:', responseData);
       if (!res.ok) {
         throw new Error(responseData.error || `HTTP error! status: ${res.status}`);
       }
@@ -225,7 +228,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          console.log('Form submitted'); // Debug form submit
+          console.log('Form submitted');
           handleReceive();
         }}
         style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
