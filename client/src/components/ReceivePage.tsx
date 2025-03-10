@@ -48,14 +48,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-  // Fetch items and vendors on mount
   useEffect(() => {
     const fetchItems = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/items`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        console.log('Fetched items:', data); // Debug fetch result
+        console.log('Fetched items:', data); // Debug fetch
         setItems(data);
         setFilteredItems(data);
       } catch (err: any) {
@@ -68,7 +67,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         const res = await fetch(`${API_BASE_URL}/api/vendors`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        console.log('Fetched vendors:', data); // Debug fetch result
+        console.log('Fetched vendors:', data);
         setVendors(data);
         setFilteredVendors(data);
       } catch (err: any) {
@@ -98,14 +97,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
 
   const handleItemSelect = (item: Item) => {
     console.log('Selected item:', item); // Debug selection
-    setReceiveForm({ ...receiveForm, identifier: item.name, materialType: item.type as MaterialType });
+    const materialType = item.type in MaterialType ? item.type as MaterialType : MaterialType.Other; // Fallback to Other if not in enum
+    setReceiveForm({ ...receiveForm, identifier: item.name, materialType });
     setShowItemSuggestions(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && filteredItems.length > 0) {
       e.preventDefault();
-      handleItemSelect(filteredItems[0]); // Select first item on Enter
+      handleItemSelect(filteredItems[0]);
     }
   };
 
@@ -157,16 +157,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   };
 
   const handleReceive = async () => {
+    console.log('handleReceive triggered, form:', receiveForm); // Debug start
     if (!receiveForm.identifier || !receiveForm.materialType || !receiveForm.quantity || !receiveForm.unit) {
       setProductionError('Item, Material Type, Quantity, and Unit are required');
+      console.log('Validation failed: missing fields');
       return;
     }
     if (receiveForm.materialType === MaterialType.Spirits && !receiveForm.proof) {
       setProductionError('Proof is required for Spirits');
+      console.log('Validation failed: missing proof');
       return;
     }
     if (receiveForm.materialType === MaterialType.Other && !receiveForm.description) {
       setProductionError('Description is required for Other material type');
+      console.log('Validation failed: missing description');
       return;
     }
     const quantity = parseFloat(receiveForm.quantity);
@@ -174,6 +178,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     const cost = receiveForm.cost ? parseFloat(receiveForm.cost) : undefined;
     if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0)) || (cost && (isNaN(cost) || cost < 0))) {
       setProductionError('Invalid quantity, proof, or cost');
+      console.log('Validation failed: invalid numbers');
       return;
     }
     const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
@@ -192,15 +197,17 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       description: receiveForm.description,
       cost: receiveForm.cost || undefined,
     };
+    console.log('Submitting item:', newItem); // Debug before fetch
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem),
       });
+      const responseData = await res.json();
+      console.log('Receive response:', responseData); // Debug response
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+        throw new Error(responseData.error || `HTTP error! status: ${res.status}`);
       }
       console.log('Receive successful, refreshing inventory');
       await refreshInventory();
@@ -218,6 +225,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          console.log('Form submitted'); // Debug form submit
           handleReceive();
         }}
         style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
@@ -228,10 +236,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             type="text"
             value={receiveForm.identifier}
             onChange={handleItemInputChange}
-            onKeyDown={handleKeyDown} // Add Enter support
+            onKeyDown={handleKeyDown}
             placeholder="Type to search items"
             onFocus={() => setShowItemSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)} // Increased delay
+            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
             style={{ width: '100%' }}
           />
           {showItemSuggestions && (
@@ -253,11 +261,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 filteredItems.map((item) => (
                   <li
                     key={item.name}
-                    onClick={() => handleItemSelect(item)}
                     onMouseDown={(e) => {
-                      e.preventDefault(); // Prevent blur before click
+                      e.preventDefault();
                       handleItemSelect(item);
-                    }} // Use onMouseDown instead
+                    }}
                     style={{
                       padding: '5px 10px',
                       cursor: 'pointer',
@@ -313,7 +320,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             </button>
           </div>
         )}
-        {/* ... (rest of the form unchanged) */}
         <label>
           Material Type:
           <select
@@ -391,7 +397,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             onChange={handleVendorInputChange}
             placeholder="Type to search vendors"
             onFocus={() => setShowVendorSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 200)}
+            onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
             style={{ width: '100%' }}
           />
           {showVendorSuggestions && (
@@ -412,7 +418,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               {filteredVendors.map((vendor) => (
                 <li
                   key={vendor.name}
-                  onClick={() => handleVendorSelect(vendor)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleVendorSelect(vendor);
+                  }}
                   style={{
                     padding: '5px 10px',
                     cursor: 'pointer',
@@ -446,7 +455,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         </label>
         {receiveForm.materialType === MaterialType.Other && (
           <label>
-            Description:
+            Description (Optional):
             <input
               type="text"
               value={receiveForm.description}
