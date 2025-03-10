@@ -499,39 +499,79 @@ app.post('/api/package', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  // Generate a new batch ID for the packaged product
+  const newBatchId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`;
+
+  // Find the source batch to get its details
   db.get('SELECT * FROM inventory WHERE identifier = ?', [batchId], (err, row) => {
     if (err) {
       console.error('DB Select Error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!row) {
-      return res.status(404).json({ error: 'Batch not found' });
+      console.error('Batch not found:', batchId);
+      return res.status(404).json({ error: 'Source batch not found' });
     }
 
-    const newBatchId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}`;
-    db.run(
-      `INSERT INTO inventory (identifier, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Packaged')`,
-      [newBatchId, toAccount, product, bottleCount, targetProof, proofGallons, date, row.source, row.dspNumber],
-      (err) => {
-        if (err) {
-          console.error('Insert Package Error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        db.run(
-          `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
-           VALUES (?, ?, ?, ?, ?, 'Packaged', ?)`,
-          [newBatchId, product, bottleCount, proofGallons, date, row.dspNumber],
-          (err) => {
-            if (err) {
-              console.error('Transaction Insert Error:', err);
-              return res.status(500).json({ error: err.message });
-            }
-            res.json({ message: 'Package successful' });
+    // Check if there's enough proof gallons
+    const sourceProofGallons = parseFloat(row.proofGallons);
+    const requestedProofGallons = parseFloat(proofGallons);
+    if (sourceProofGallons < requestedProofGallons) {
+      return res.status(400).json({ error: 'Not enough proof gallons available' });
+    }
+
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+
+      // Insert the new packaged item
+      db.run(
+        `INSERT INTO inventory (identifier, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Packaged')`,
+        [newBatchId, toAccount, product, bottleCount, targetProof, proofGallons, date, row.source, row.dspNumber],
+        (err) => {
+          if (err) {
+            console.error('Insert Package Error:', err);
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: err.message });
           }
-        );
-      }
-    );
+
+          // Update the source batch by reducing proof gallons and quantity
+          const remainingProofGallons = (sourceProofGallons - requestedProofGallons).toFixed(2);
+          const originalQuantity = parseFloat(row.quantity);
+          const usedQuantity = (originalQuantity * (requestedProofGallons / sourceProofGallons)).toFixed(2);
+          const remainingQuantity = (originalQuantity - parseFloat(usedQuantity)).toFixed(2);
+
+          db.run(
+            `UPDATE inventory SET proofGallons = ?, quantity = ? WHERE identifier = ?`,
+            [remainingProofGallons, remainingQuantity, batchId],
+            (err) => {
+              if (err) {
+                console.error('Update Source Error:', err);
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err.message });
+              }
+
+              // Record the transaction
+              db.run(
+                `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
+                 VALUES (?, ?, ?, ?, ?, 'Packaged', ?)`,
+                [newBatchId, product, bottleCount, proofGallons, date, row.dspNumber],
+                (err) => {
+                  if (err) {
+                    console.error('Transaction Insert Error:', err);
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: err.message });
+                  }
+                  db.run('COMMIT');
+                  console.log('Package successful, newBatchId:', newBatchId);
+                  res.json({ message: 'Package successful', newBatchId });
+                }
+              );
+            }
+          );
+        }
+      );
+    });
   });
 });
 
