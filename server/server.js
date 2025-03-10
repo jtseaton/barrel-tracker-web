@@ -285,31 +285,28 @@ app.post('/api/receive', (req, res) => {
 
   const finalProofGallons = type === 'Spirits' ? (proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2)) : '0.00';
 
-  db.run(
-    `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber, status, description || null],
-    (err) => {
-      if (err) {
-        console.error('Insert Receive Error:', err);
-        return res.status(500).json({ error: err.message });
+    db.run(
+      `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber, status, description || null],
+      (err) => {
+        if (err) {
+          console.error('Insert Receive Error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        // Add this to verify
+        db.all('SELECT * FROM inventory', (err, rows) => {
+          if (err) {
+            console.error('Fetch after insert error:', err);
+          } else {
+            console.log('Inventory after insert:', rows);
+          }
+        });
+        const tankSummary = type === 'Spirits' ? { /* ... */ } : null;
+        res.json({ message: 'Receive successful', tankSummary });
       }
-      const tankSummary = type === 'Spirits' ? {
-        barrelId: identifier || `LOT-${Date.now()}`,
-        type,
-        proofGallons: finalProofGallons,
-        proof: proof || '0.00',
-        totalProofGallonsLeft: finalProofGallons,
-        date: receivedDate,
-        fromAccount: 'External',
-        toAccount: account,
-        serialNumber: `${receivedDate.replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`,
-        producingDSP: dspNumber,
-      } : null;
-      res.json({ message: 'Receive successful', tankSummary });
-    }
-  );
-});
+    );
+  });
 
 app.post('/api/produce', (req, res) => {
   console.log('Received POST to /api/produce:', req.body);

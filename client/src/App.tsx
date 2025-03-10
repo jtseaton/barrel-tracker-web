@@ -15,6 +15,7 @@ import VendorDetails from './components/VendorDetails';
 import PurchaseOrderForm from './components/PurchaseOrderForm';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
+import { InventoryItem } from './types/interfaces'; // Assuming InventoryItem type is defined here
 import './App.css';
 
 const AppContent: React.FC = () => {
@@ -22,15 +23,17 @@ const AppContent: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]); // Inventory state typed as InventoryItem[]
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Simulate loading screen
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
+  // Update active section based on route
   useEffect(() => {
-    console.log('Path changed to', location.pathname);
     const path = location.pathname;
     if (path === '/' || path === '/production' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting') {
       setShowInventorySubmenu(false);
@@ -44,6 +47,21 @@ const AppContent: React.FC = () => {
       else if (path === '/vendors' || path.startsWith('/vendors/')) setActiveSection('Vendors');
     }
   }, [location.pathname]);
+
+  // Function to fetch and refresh inventory
+  const refreshInventory = async () => {
+    try {
+      const data = await fetchInventory(); // Assuming fetchInventory returns InventoryItem[]
+      setInventory(data);
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+    }
+  };
+
+  // Fetch inventory when the component mounts
+  useEffect(() => {
+    refreshInventory();
+  }, []);
 
   const handleInventoryClick = () => {
     if (activeSection === 'Inventory' && showInventorySubmenu) {
@@ -89,10 +107,7 @@ const AppContent: React.FC = () => {
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
-                  <Link to={item.path} onClick={() => {
-                    console.log('Clicked', item.name);
-                    setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name);
-                  }}>
+                  <Link to={item.path} onClick={() => setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name)}>
                     {item.name}
                   </Link>
                 ) : (
@@ -139,7 +154,7 @@ const AppContent: React.FC = () => {
               <>
                 {activeSection === 'Home' && <Home />}
                 {activeSection === 'Production' && <Production />}
-                {activeSection === 'Inventory' && <Inventory />}
+                {activeSection === 'Inventory' && <Inventory inventory={inventory} />}
                 {activeSection === 'Vendors' && <Vendors />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing />}
@@ -149,9 +164,9 @@ const AppContent: React.FC = () => {
               </>
             }
           />
-          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/inventory" element={<Inventory inventory={inventory} />} />
           <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
-          <Route path="/receive" element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />} />
+          <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} />} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
           <Route path="/vendors" element={<Vendors />} />
