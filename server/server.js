@@ -1,8 +1,9 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
+const xml2js = require('xml2js');
 const app = express();
-const OUR_DSP = 'DSP-AL-20010'; // Add this near the top, after const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../client/build')));
@@ -11,6 +12,8 @@ const db = new sqlite3.Database(':memory:', (err) => {
   if (err) console.error('Database connection error:', err);
   else console.log('Connected to SQLite database');
 });
+
+const OUR_DSP = 'DSP-AL-20010'; // Already added, just confirming
 
 db.serialize(() => {
   db.run(`
@@ -75,11 +78,39 @@ db.serialize(() => {
       shipToZip TEXT
     )
   `);
-  db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)', ['GNS250329', 1]);
-  db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)', ['GrainBatch001', 1]);
-  db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
-    ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
+   ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
 });
+
+const loadItemsFromXML = () => {
+  fs.readFile(path.join(__dirname, 'items.xml'), 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading items.xml:', err);
+      return;
+    }
+    xml2js.parseString(data, (err, result) => {
+      if (err) {
+        console.error('Error parsing items.xml:', err);
+        return;
+      }
+      const items = result.items.item || [];
+      items.forEach(item => {
+        const name = item.$.name;
+        const enabled = parseInt(item.$.enabled || '1');
+        db.run(
+          'INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)',
+          [name, enabled],
+          (err) => {
+            if (err) console.error(`Error inserting item ${name}:`, err);
+          }
+        );
+      });
+      console.log('Items loaded from XML:', items.length);
+    });
+  });
+};
+
+loadItemsFromXML();
 
 // Items endpoints
 app.get('/api/items', (req, res) => {
