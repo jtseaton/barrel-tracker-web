@@ -111,9 +111,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      await refreshInventory(); // Refresh inventory after successful POST
-      navigate('/');
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+      }
+      console.log('Receive successful, refreshing inventory'); // Debug log
+      await refreshInventory(); // Trigger refresh
+      navigate('/inventory'); // Go to inventory page
     } catch (err: any) {
       console.error('Receive error:', err);
       setProductionError(err.message);
