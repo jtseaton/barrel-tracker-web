@@ -33,7 +33,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     dspNumber: OUR_DSP,
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
-    cost: '', // Added
+    cost: '',
   });
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
@@ -48,25 +48,65 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-  // ... (useEffect unchanged)
+  // Fetch items and vendors on mount
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/items`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        console.log('Fetched items:', data); // Debug fetch result
+        setItems(data);
+        setFilteredItems(data);
+      } catch (err: any) {
+        console.error('Fetch items error:', err);
+        setProductionError('Failed to fetch items: ' + err.message);
+      }
+    };
+    const fetchVendors = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/vendors`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        console.log('Fetched vendors:', data); // Debug fetch result
+        setVendors(data);
+        setFilteredVendors(data);
+      } catch (err: any) {
+        console.error('Fetch vendors error:', err);
+        setProductionError('Failed to fetch vendors: ' + err.message);
+      }
+    };
+    fetchItems();
+    fetchVendors();
+  }, [API_BASE_URL]);
 
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setReceiveForm({ ...receiveForm, identifier: value });
     setShowItemSuggestions(true);
+    console.log('Input value:', value);
     if (value.trim() === '') {
       setFilteredItems(items);
     } else {
       const filtered = items.filter(item =>
         item.name.toLowerCase().includes(value.toLowerCase())
       );
+      console.log('Filtered items:', filtered);
       setFilteredItems(filtered);
     }
   };
 
   const handleItemSelect = (item: Item) => {
+    console.log('Selected item:', item); // Debug selection
     setReceiveForm({ ...receiveForm, identifier: item.name, materialType: item.type as MaterialType });
     setShowItemSuggestions(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && filteredItems.length > 0) {
+      e.preventDefault();
+      handleItemSelect(filteredItems[0]); // Select first item on Enter
+    }
   };
 
   const handleCreateItem = async () => {
@@ -150,7 +190,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       dspNumber: receiveForm.materialType === MaterialType.Spirits ? receiveForm.dspNumber : undefined,
       status: Status.Received,
       description: receiveForm.description,
-      cost: receiveForm.cost || undefined, // Added
+      cost: receiveForm.cost || undefined,
     };
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
@@ -188,9 +228,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             type="text"
             value={receiveForm.identifier}
             onChange={handleItemInputChange}
+            onKeyDown={handleKeyDown} // Add Enter support
             placeholder="Type to search items"
             onFocus={() => setShowItemSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 200)}
+            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)} // Increased delay
             style={{ width: '100%' }}
           />
           {showItemSuggestions && (
@@ -205,35 +246,43 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 listStyle: 'none',
                 padding: 0,
                 margin: 0,
+                zIndex: 1000,
               }}
             >
-              {filteredItems.map((item) => (
-                <li
-                  key={item.name}
-                  onClick={() => handleItemSelect(item)}
-                  style={{
-                    padding: '5px 10px',
-                    cursor: 'pointer',
-                    backgroundColor: receiveForm.identifier === item.name ? '#e0e0e0' : '#fff',
-                  }}
-                >
-                  {item.name}
-                </li>
-              ))}
-              {filteredItems.length === 0 && receiveForm.identifier && (
-                <li style={{ padding: '5px 10px' }}>
-                  No matches found.{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewItem(receiveForm.identifier || '');
-                      setShowNewItemInput(true);
-                      setShowItemSuggestions(false);
+              {filteredItems.length > 0 ? (
+                filteredItems.map((item) => (
+                  <li
+                    key={item.name}
+                    onClick={() => handleItemSelect(item)}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevent blur before click
+                      handleItemSelect(item);
+                    }} // Use onMouseDown instead
+                    style={{
+                      padding: '5px 10px',
+                      cursor: 'pointer',
+                      backgroundColor: receiveForm.identifier === item.name ? '#e0e0e0' : '#fff',
                     }}
                   >
-                    Create "{receiveForm.identifier}"
-                  </button>
-                </li>
+                    {item.name}
+                  </li>
+                ))
+              ) : (
+                receiveForm.identifier && (
+                  <li style={{ padding: '5px 10px' }}>
+                    No matches found.{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewItem(receiveForm.identifier || '');
+                        setShowNewItemInput(true);
+                        setShowItemSuggestions(false);
+                      }}
+                    >
+                      Create "{receiveForm.identifier}"
+                    </button>
+                  </li>
+                )
               )}
             </ul>
           )}
@@ -264,6 +313,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             </button>
           </div>
         )}
+        {/* ... (rest of the form unchanged) */}
         <label>
           Material Type:
           <select
@@ -356,6 +406,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 listStyle: 'none',
                 padding: 0,
                 margin: 0,
+                zIndex: 1000,
               }}
             >
               {filteredVendors.map((vendor) => (
