@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, DailySummaryItem } from '../types/interfaces';
+import { fetchDailySummary } from '../utils/fetchUtils';
 
 const OUR_DSP = 'DSP-AL-20010';
 
@@ -25,6 +26,21 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
+  // Log inventory prop to see what we're getting
+  useEffect(() => {
+    console.log('Inventory prop received:', inventory);
+  }, [inventory]);
+
+  // Fetch daily summary on mount (since we removed inventory fetch)
+  useEffect(() => {
+    fetchDailySummary()
+      .then((data) => {
+        console.log('Daily summary fetched:', data);
+        setDailySummary(data);
+      })
+      .catch((err) => console.error('Daily summary error:', err));
+  }, []);
+
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
       setProductionError('Please fill in Identifier and Proof Gallons.');
@@ -37,7 +53,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      await refreshInventory(); // Use parent's refresh function
+      await refreshInventory();
       setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
       setProductionError(null);
@@ -55,7 +71,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         body: JSON.stringify(lossForm),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      await refreshInventory(); // Use parent's refresh function
+      await refreshInventory();
       setLossForm({
         identifier: '',
         quantityLost: '',
