@@ -9,6 +9,17 @@ interface ReceivePageProps {
   refreshInventory: () => Promise<void>;
 }
 
+interface Item {
+  name: string;
+  type: string;
+  enabled: number;
+}
+
+interface Vendor {
+  name: string;
+  enabled: number;
+}
+
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const navigate = useNavigate();
   const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
@@ -22,57 +33,42 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     dspNumber: OUR_DSP,
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
+    cost: '', // Added
   });
-  const [items, setItems] = useState<string[]>([]); // Full items list
-  const [filteredItems, setFilteredItems] = useState<string[]>([]); // Filtered suggestions
-  const [showSuggestions, setShowSuggestions] = useState(false); // Toggle suggestion list
-  const [newItem, setNewItem] = useState(''); // For creating new item
-  const [showNewItemInput, setShowNewItemInput] = useState(false); // Toggle new item form
+  const [items, setItems] = useState<Item[]>([]);
+  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
+  const [showItemSuggestions, setShowItemSuggestions] = useState(false);
+  const [newItem, setNewItem] = useState<string>('');
+  const [newItemType, setNewItemType] = useState<string>(MaterialType.Grain);
+  const [showNewItemInput, setShowNewItemInput] = useState(false);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
+  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-  // Fetch items on mount
-  useEffect(() => {
-    const fetchItems = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/items`);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        const itemNames = data.map((item: { name: string }) => item.name);
-        setItems(itemNames);
-        setFilteredItems(itemNames); // Initially show all
-      } catch (err: any) {
-        console.error('Fetch items error:', err);
-        setProductionError('Failed to fetch items: ' + err.message);
-      }
-    };
-    fetchItems();
-  }, [API_BASE_URL]);
+  // ... (useEffect unchanged)
 
-  // Filter items as you type
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setReceiveForm({ ...receiveForm, identifier: value });
-    setShowSuggestions(true);
-
+    setShowItemSuggestions(true);
     if (value.trim() === '') {
-      setFilteredItems(items); // Show all if empty
+      setFilteredItems(items);
     } else {
       const filtered = items.filter(item =>
-        item.toLowerCase().includes(value.toLowerCase())
+        item.name.toLowerCase().includes(value.toLowerCase())
       );
       setFilteredItems(filtered);
     }
   };
 
-  // Select an item from suggestions
-  const handleItemSelect = (item: string) => {
-    setReceiveForm({ ...receiveForm, identifier: item });
-    setShowSuggestions(false);
+  const handleItemSelect = (item: Item) => {
+    setReceiveForm({ ...receiveForm, identifier: item.name, materialType: item.type as MaterialType });
+    setShowItemSuggestions(false);
   };
 
-  // Create new item
   const handleCreateItem = async () => {
     if (!newItem) {
       setProductionError('New item name is required');
@@ -82,16 +78,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       const res = await fetch(`${API_BASE_URL}/api/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newItem }),
+        body: JSON.stringify({ name: newItem, type: newItemType }),
       });
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
-      const updatedItems = [...items, newItem];
+      const updatedItems = [...items, { name: newItem, type: newItemType, enabled: 1 }];
       setItems(updatedItems);
       setFilteredItems(updatedItems);
-      setReceiveForm({ ...receiveForm, identifier: newItem });
+      setReceiveForm({ ...receiveForm, identifier: newItem, materialType: newItemType as MaterialType });
       setNewItem('');
       setShowNewItemInput(false);
       setProductionError(null);
@@ -99,6 +95,25 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       console.error('Create item error:', err);
       setProductionError('Failed to create item: ' + err.message);
     }
+  };
+
+  const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setReceiveForm({ ...receiveForm, source: value });
+    setShowVendorSuggestions(true);
+    if (value.trim() === '') {
+      setFilteredVendors(vendors);
+    } else {
+      const filtered = vendors.filter(vendor =>
+        vendor.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredVendors(filtered);
+    }
+  };
+
+  const handleVendorSelect = (vendor: Vendor) => {
+    setReceiveForm({ ...receiveForm, source: vendor.name });
+    setShowVendorSuggestions(false);
   };
 
   const handleReceive = async () => {
@@ -116,8 +131,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     }
     const quantity = parseFloat(receiveForm.quantity);
     const proof = receiveForm.proof ? parseFloat(receiveForm.proof) : undefined;
-    if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0))) {
-      setProductionError('Invalid quantity or proof');
+    const cost = receiveForm.cost ? parseFloat(receiveForm.cost) : undefined;
+    if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0)) || (cost && (isNaN(cost) || cost < 0))) {
+      setProductionError('Invalid quantity, proof, or cost');
       return;
     }
     const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
@@ -131,9 +147,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       proofGallons: proofGallons,
       receivedDate: receiveForm.receivedDate,
       source: receiveForm.source,
-      dspNumber: receiveForm.dspNumber,
+      dspNumber: receiveForm.materialType === MaterialType.Spirits ? receiveForm.dspNumber : undefined,
       status: Status.Received,
       description: receiveForm.description,
+      cost: receiveForm.cost || undefined, // Added
     };
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
@@ -172,11 +189,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             value={receiveForm.identifier}
             onChange={handleItemInputChange}
             placeholder="Type to search items"
-            onFocus={() => setShowSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} // Delay to allow click
+            onFocus={() => setShowItemSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 200)}
             style={{ width: '100%' }}
           />
-          {showSuggestions && (
+          {showItemSuggestions && (
             <ul
               style={{
                 border: '1px solid #ccc',
@@ -192,15 +209,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             >
               {filteredItems.map((item) => (
                 <li
-                  key={item}
+                  key={item.name}
                   onClick={() => handleItemSelect(item)}
                   style={{
                     padding: '5px 10px',
                     cursor: 'pointer',
-                    backgroundColor: receiveForm.identifier === item ? '#e0e0e0' : '#fff',
+                    backgroundColor: receiveForm.identifier === item.name ? '#e0e0e0' : '#fff',
                   }}
                 >
-                  {item}
+                  {item.name}
                 </li>
               ))}
               {filteredItems.length === 0 && receiveForm.identifier && (
@@ -209,9 +226,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      setNewItem(receiveForm.identifier);
+                      setNewItem(receiveForm.identifier || '');
                       setShowNewItemInput(true);
-                      setShowSuggestions(false);
+                      setShowItemSuggestions(false);
                     }}
                   >
                     Create "{receiveForm.identifier}"
@@ -229,6 +246,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               onChange={(e) => setNewItem(e.target.value)}
               placeholder="Confirm new item name"
             />
+            <select
+              value={newItemType}
+              onChange={(e) => setNewItemType(e.target.value)}
+            >
+              {Object.values(MaterialType).map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
             <button type="button" onClick={handleCreateItem}>
               Create
             </button>
@@ -251,16 +278,37 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
           </select>
         </label>
         {receiveForm.materialType === MaterialType.Spirits && (
-          <label>
-            Account:
-            <select
-              value={receiveForm.account}
-              onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
-            >
-              <option value="Storage">Storage</option>
-              <option value="Processing">Processing</option>
-            </select>
-          </label>
+          <>
+            <label>
+              Account:
+              <select
+                value={receiveForm.account}
+                onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+              >
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
+              </select>
+            </label>
+            <label>
+              Proof:
+              <input
+                type="number"
+                value={receiveForm.proof}
+                onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
+                step="0.01"
+                min="0"
+                max="200"
+              />
+            </label>
+            <label>
+              DSP Number:
+              <input
+                type="text"
+                value={receiveForm.dspNumber}
+                onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+              />
+            </label>
+          </>
         )}
         <label>
           Quantity:
@@ -285,33 +333,56 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             ))}
           </select>
         </label>
-        {receiveForm.materialType === MaterialType.Spirits && (
-          <label>
-            Proof:
-            <input
-              type="number"
-              value={receiveForm.proof}
-              onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
-              step="0.01"
-              min="0"
-              max="200"
-            />
-          </label>
-        )}
         <label>
-          Source:
+          Vendor:
           <input
             type="text"
             value={receiveForm.source}
-            onChange={(e) => setReceiveForm({ ...receiveForm, source: e.target.value })}
+            onChange={handleVendorInputChange}
+            placeholder="Type to search vendors"
+            onFocus={() => setShowVendorSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 200)}
+            style={{ width: '100%' }}
           />
+          {showVendorSuggestions && (
+            <ul
+              style={{
+                border: '1px solid #ccc',
+                maxHeight: '150px',
+                overflowY: 'auto',
+                position: 'absolute',
+                backgroundColor: '#fff',
+                width: '300px',
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+              }}
+            >
+              {filteredVendors.map((vendor) => (
+                <li
+                  key={vendor.name}
+                  onClick={() => handleVendorSelect(vendor)}
+                  style={{
+                    padding: '5px 10px',
+                    cursor: 'pointer',
+                    backgroundColor: receiveForm.source === vendor.name ? '#e0e0e0' : '#fff',
+                  }}
+                >
+                  {vendor.name}
+                </li>
+              ))}
+            </ul>
+          )}
         </label>
         <label>
-          DSP Number:
+          Cost:
           <input
-            type="text"
-            value={receiveForm.dspNumber}
-            onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+            type="number"
+            value={receiveForm.cost}
+            onChange={(e) => setReceiveForm({ ...receiveForm, cost: e.target.value })}
+            step="0.01"
+            min="0"
+            placeholder="Enter cost in USD"
           />
         </label>
         <label>

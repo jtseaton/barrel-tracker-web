@@ -1,20 +1,5 @@
 import { Status, Unit, MaterialType } from './enums';
 
-export interface InventoryItem {
-  identifier?: string;
-  account: string;
-  type: MaterialType;
-  quantity: string;
-  unit: string;
-  proof?: string;
-  proofGallons?: string;
-  receivedDate: string;
-  source: string;
-  dspNumber: string;
-  status: Status;
-  description?: string;
-}
-
 export interface Transaction {
   action: string;
   proofGallons: number;
@@ -55,8 +40,24 @@ export interface DailySummaryItem {
   totalProofGallons: string;
 }
 
+export interface InventoryItem {
+  identifier: string;
+  account: string;
+  type: string; // Or MaterialType if you prefer
+  quantity: string;
+  unit: string;
+  proof?: string;
+  proofGallons?: string;
+  receivedDate: string;
+  source: string;
+  dspNumber?: string; // Changed from string to optional
+  status: string;
+  description?: string;
+  cost?: string; // Added for new Cost field
+}
+
 export interface ReceiveForm {
-  identifier?: string;
+  identifier: string;
   account: string;
   materialType: MaterialType;
   quantity: string;
@@ -66,6 +67,7 @@ export interface ReceiveForm {
   dspNumber: string;
   receivedDate: string;
   description?: string;
+  cost?: string; // Added for new Cost field
 }
 
 export interface MoveForm {
