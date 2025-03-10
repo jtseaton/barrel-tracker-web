@@ -10,17 +10,18 @@ import Reporting from './components/Reporting';
 import ReceivePage from './components/ReceivePage';
 import Items from './components/Items';
 import ItemDetails from './components/ItemDetails';
+import Vendors from './components/Vendors'; // New
+import VendorDetails from './components/VendorDetails'; // New
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
 
-// Inner component to use useLocation
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const location = useLocation(); // Now safe inside Router context
+  const location = useLocation();
 
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
@@ -38,6 +39,12 @@ const AppContent: React.FC = () => {
       setShowInventorySubmenu(true);
     } else if (path.startsWith('/items/')) {
       setActiveSection('Items');
+      setShowInventorySubmenu(true);
+    } else if (path === '/vendors') {
+      setActiveSection('Vendors');
+      setShowInventorySubmenu(true);
+    } else if (path.startsWith('/vendors/')) {
+      setActiveSection('Vendors');
       setShowInventorySubmenu(true);
     } else {
       setShowInventorySubmenu(false);
@@ -88,7 +95,7 @@ const AppContent: React.FC = () => {
           {showInventorySubmenu ? (
             [
               { name: 'Back', action: handleBackClick },
-              { name: 'Vendors', action: () => setActiveSection('Vendors') },
+              { name: 'Vendors', path: '/vendors' }, // Updated to link
               { name: 'Receive Inventory', path: '/receive' },
               { name: 'Transfers', action: () => setActiveSection('Transfers') },
               { name: 'Inventory', action: () => setActiveSection('Inventory') },
@@ -143,7 +150,7 @@ const AppContent: React.FC = () => {
                 {activeSection === 'Home' && <Home />}
                 {activeSection === 'Production' && <Production />}
                 {activeSection === 'Inventory' && <Inventory />}
-                {activeSection === 'Vendors' && <div><h2>Vendors</h2><p>Vendors page coming soon</p></div>}
+                {activeSection === 'Vendors' && <Vendors />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing />}
                 {activeSection === 'Sales & Distribution' && <Sales />}
@@ -158,13 +165,14 @@ const AppContent: React.FC = () => {
           />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
+          <Route path="/vendors" element={<Vendors />} />
+          <Route path="/vendors/:name" element={<VendorDetails />} />
         </Routes>
       </div>
     </div>
   );
 };
 
-// Outer wrapper with Router
 const App: React.FC = () => {
   return (
     <Router>
