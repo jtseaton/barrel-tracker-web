@@ -42,17 +42,17 @@ db.serialize(() => {
   `);
   db.run(`
     CREATE TABLE IF NOT EXISTS items (
-      name TEXT PRIMARY KEY
+      name TEXT PRIMARY KEY,
+      enabled INTEGER DEFAULT 1  -- 1 for enabled, 0 for disabled
     )
   `);
-  // Seed initial items (optional, remove if not needed)
-  db.run('INSERT OR IGNORE INTO items (name) VALUES (?)', ['GNS250329']);
-  db.run('INSERT OR IGNORE INTO items (name) VALUES (?)', ['GrainBatch001']);
+  db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)', ['GNS250329', 1]);
+  db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)', ['GrainBatch001', 1]);
 });
 
 // GET all items
 app.get('/api/items', (req, res) => {
-  db.all('SELECT name FROM items', (err, rows) => {
+  db.all('SELECT name, enabled FROM items', (err, rows) => {
     if (err) {
       console.error('DB Select Error:', err);
       return res.status(500).json({ error: err.message });
@@ -67,7 +67,7 @@ app.post('/api/items', (req, res) => {
   if (!name) {
     return res.status(400).json({ error: 'Item name is required' });
   }
-  db.run('INSERT OR IGNORE INTO items (name) VALUES (?)', [name], (err) => {
+  db.run('INSERT OR IGNORE INTO items (name, enabled) VALUES (?, 1)', [name], (err) => {
     if (err) {
       console.error('Insert Item Error:', err);
       return res.status(500).json({ error: err.message });
@@ -76,6 +76,7 @@ app.post('/api/items', (req, res) => {
   });
 });
 
+// PUT update item name
 app.put('/api/items', (req, res) => {
   const { oldName, newName } = req.body;
   if (!oldName || !newName) {
@@ -87,6 +88,38 @@ app.put('/api/items', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     res.json({ message: 'Item updated successfully', oldName, newName });
+  });
+});
+
+// DELETE items
+app.delete('/api/items', (req, res) => {
+  const { names } = req.body;
+  if (!names || !Array.isArray(names) || names.length === 0) {
+    return res.status(400).json({ error: 'Array of item names is required' });
+  }
+  const placeholders = names.map(() => '?').join(',');
+  db.run(`DELETE FROM items WHERE name IN (${placeholders})`, names, (err) => {
+    if (err) {
+      console.error('Delete Items Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ message: 'Items deleted successfully', deleted: names });
+  });
+});
+
+// PATCH enable/disable items
+app.patch('/api/items', (req, res) => {
+  const { names, enabled } = req.body;
+  if (!names || !Array.isArray(names) || names.length === 0 || typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Array of item names and enabled boolean are required' });
+  }
+  const placeholders = names.map(() => '?').join(',');
+  db.run(`UPDATE items SET enabled = ? WHERE name IN (${placeholders})`, [enabled ? 1 : 0, ...names], (err) => {
+    if (err) {
+      console.error('Toggle Enable Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ message: `Items ${enabled ? 'enabled' : 'disabled'} successfully`, updated: names });
   });
 });
 
