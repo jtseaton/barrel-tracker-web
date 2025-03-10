@@ -23,16 +23,14 @@ const AppContent: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]); // Central inventory state
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Loading screen
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
-  // Update active section based on route
   useEffect(() => {
     const path = location.pathname;
     if (path === '/' || path === '/production' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting') {
@@ -48,18 +46,16 @@ const AppContent: React.FC = () => {
     }
   }, [location.pathname]);
 
-  // Fetch and refresh inventory
   const refreshInventory = async () => {
     try {
       const data = await fetchInventory();
-      console.log('Fetched inventory:', data); // Debug log
+      console.log('Fetched inventory:', data);
       setInventory(data);
     } catch (error) {
       console.error('Error fetching inventory:', error);
     }
   };
 
-  // Initial fetch
   useEffect(() => {
     refreshInventory();
   }, []);
@@ -158,7 +154,7 @@ const AppContent: React.FC = () => {
                 {activeSection === 'Inventory' && <Inventory inventory={inventory} refreshInventory={refreshInventory} />}
                 {activeSection === 'Vendors' && <Vendors />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
-                {activeSection === 'Processing' && <Processing />}
+                {activeSection === 'Processing' && <Processing inventory={inventory} refreshInventory={refreshInventory} />}
                 {activeSection === 'Sales & Distribution' && <Sales />}
                 {activeSection === 'Users' && <Users />}
                 {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
@@ -173,6 +169,7 @@ const AppContent: React.FC = () => {
           <Route path="/vendors" element={<Vendors />} />
           <Route path="/vendors/:name" element={<VendorDetails />} />
           <Route path="/vendors/:name/purchase-order/new" element={<PurchaseOrderForm />} />
+          <Route path="/processing" element={<Processing inventory={inventory} refreshInventory={refreshInventory} />} />
         </Routes>
       </div>
     </div>
