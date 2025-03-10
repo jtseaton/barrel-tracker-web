@@ -23,20 +23,25 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
   });
-  const [items, setItems] = useState<string[]>([]);
-  const [newItem, setNewItem] = useState('');
-  const [showNewItemInput, setShowNewItemInput] = useState(false);
+  const [items, setItems] = useState<string[]>([]); // Full items list
+  const [filteredItems, setFilteredItems] = useState<string[]>([]); // Filtered suggestions
+  const [showSuggestions, setShowSuggestions] = useState(false); // Toggle suggestion list
+  const [newItem, setNewItem] = useState(''); // For creating new item
+  const [showNewItemInput, setShowNewItemInput] = useState(false); // Toggle new item form
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
+  // Fetch items on mount
   useEffect(() => {
     const fetchItems = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/items`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        setItems(data.map((item: { name: string }) => item.name));
+        const itemNames = data.map((item: { name: string }) => item.name);
+        setItems(itemNames);
+        setFilteredItems(itemNames); // Initially show all
       } catch (err: any) {
         console.error('Fetch items error:', err);
         setProductionError('Failed to fetch items: ' + err.message);
@@ -45,6 +50,29 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     fetchItems();
   }, [API_BASE_URL]);
 
+  // Filter items as you type
+  const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setReceiveForm({ ...receiveForm, identifier: value });
+    setShowSuggestions(true);
+
+    if (value.trim() === '') {
+      setFilteredItems(items); // Show all if empty
+    } else {
+      const filtered = items.filter(item =>
+        item.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredItems(filtered);
+    }
+  };
+
+  // Select an item from suggestions
+  const handleItemSelect = (item: string) => {
+    setReceiveForm({ ...receiveForm, identifier: item });
+    setShowSuggestions(false);
+  };
+
+  // Create new item
   const handleCreateItem = async () => {
     if (!newItem) {
       setProductionError('New item name is required');
@@ -60,7 +88,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         const errorData = await res.json();
         throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
-      setItems([...items, newItem]);
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
+      setFilteredItems(updatedItems);
       setReceiveForm({ ...receiveForm, identifier: newItem });
       setNewItem('');
       setShowNewItemInput(false);
@@ -115,9 +145,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         const errorData = await res.json();
         throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
-      console.log('Receive successful, refreshing inventory'); // Debug log
-      await refreshInventory(); // Trigger refresh
-      navigate('/inventory'); // Go to inventory page
+      console.log('Receive successful, refreshing inventory');
+      await refreshInventory();
+      navigate('/inventory');
     } catch (err: any) {
       console.error('Receive error:', err);
       setProductionError(err.message);
@@ -137,20 +167,59 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       >
         <label>
           Item:
-          <select
+          <input
+            type="text"
             value={receiveForm.identifier}
-            onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value })}
-          >
-            <option value="">Select an item</option>
-            {items.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={() => setShowNewItemInput(true)}>
-            Add New Item
-          </button>
+            onChange={handleItemInputChange}
+            placeholder="Type to search items"
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} // Delay to allow click
+            style={{ width: '100%' }}
+          />
+          {showSuggestions && (
+            <ul
+              style={{
+                border: '1px solid #ccc',
+                maxHeight: '150px',
+                overflowY: 'auto',
+                position: 'absolute',
+                backgroundColor: '#fff',
+                width: '300px',
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+              }}
+            >
+              {filteredItems.map((item) => (
+                <li
+                  key={item}
+                  onClick={() => handleItemSelect(item)}
+                  style={{
+                    padding: '5px 10px',
+                    cursor: 'pointer',
+                    backgroundColor: receiveForm.identifier === item ? '#e0e0e0' : '#fff',
+                  }}
+                >
+                  {item}
+                </li>
+              ))}
+              {filteredItems.length === 0 && receiveForm.identifier && (
+                <li style={{ padding: '5px 10px' }}>
+                  No matches found.{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewItem(receiveForm.identifier);
+                      setShowNewItemInput(true);
+                      setShowSuggestions(false);
+                    }}
+                  >
+                    Create "{receiveForm.identifier}"
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
         </label>
         {showNewItemInput && (
           <div>
@@ -158,7 +227,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               type="text"
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
-              placeholder="New item name"
+              placeholder="Confirm new item name"
             />
             <button type="button" onClick={handleCreateItem}>
               Create
