@@ -207,9 +207,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem),
       });
+      console.log('Fetch sent, awaiting response');
       const responseData = await res.json();
       console.log('Receive response:', responseData);
       if (!res.ok) {
+        console.log('Response not OK:', res.status);
         throw new Error(responseData.error || `HTTP error! status: ${res.status}`);
       }
       console.log('Receive successful, refreshing inventory');
@@ -217,7 +219,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       navigate('/inventory');
     } catch (err: any) {
       console.error('Receive error:', err);
-      setProductionError(err.message);
+      setProductionError(err.message || 'Failed to receive item');
     }
   };
 
