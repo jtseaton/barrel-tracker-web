@@ -15,7 +15,7 @@ const VendorDetails: React.FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [vendorDetails, setVendorDetails] = useState<Vendor | null>(null);
-  const [editing, setEditing] = useState(!name); // Edit mode if new
+  const [editing, setEditing] = useState(name === 'new'); // Edit mode only for new
   const [editedVendor, setEditedVendor] = useState<Vendor>({
     name: '',
     type: 'Supplier',
@@ -161,31 +161,32 @@ const VendorDetails: React.FC = () => {
           )}
         </label>
       </div>
-      <div style={{ marginTop: '20px', textAlign: 'center' }}>
-        {editing ? (
-          <>
-            <button
-              onClick={handleSave}
-              style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }}
-            >
-              Save
-            </button>
-            <button
-              onClick={handleCancel}
-              style={{ backgroundColor: '#000000', color: '#EEC930', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
+      {editing && (
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button
+            onClick={handleSave}
+            style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }}
+          >
+            Save
+          </button>
+          <button
+            onClick={handleCancel}
+            style={{ backgroundColor: '#000000', color: '#EEC930', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {!editing && (
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
           <button
             onClick={() => setEditing(true)}
             style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }}
           >
             Edit
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
