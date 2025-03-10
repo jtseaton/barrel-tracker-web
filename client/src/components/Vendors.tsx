@@ -1,6 +1,6 @@
 // client/src/components/Vendors.tsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface Vendor {
   name: string;
@@ -10,8 +10,8 @@ interface Vendor {
 const Vendors: React.FC = () => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
-  const [newVendorName, setNewVendorName] = useState('');
   const [productionError, setProductionError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
@@ -31,25 +31,8 @@ const Vendors: React.FC = () => {
     }
   };
 
-  const handleAddVendor = async () => {
-    if (!newVendorName) {
-      setProductionError('Vendor name is required');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/vendors`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newVendorName, type: 'Supplier', enabled: 1, address: '', email: '', phone: '' }), // Defaults
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      setNewVendorName('');
-      fetchVendors(); // Refresh list
-      setProductionError(null);
-    } catch (err: any) {
-      console.error('Add vendor error:', err);
-      setProductionError('Failed to add vendor: ' + err.message);
-    }
+  const handleAddVendor = () => {
+    navigate('/vendors/new');
   };
 
   const handleDeleteVendors = async () => {
@@ -103,15 +86,8 @@ const Vendors: React.FC = () => {
   return (
     <div>
       <h2>Vendors List</h2>
-      {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
+      {productionError && <p style={{ color: '#F86752' }}>{productionError}</p>}
       <div style={{ marginBottom: '20px' }}>
-        <input
-          type="text"
-          value={newVendorName}
-          onChange={(e) => setNewVendorName(e.target.value)}
-          placeholder="New Vendor Name"
-          style={{ marginRight: '10px' }}
-        />
         <button onClick={handleAddVendor}>Add Vendor</button>
         <button onClick={handleDeleteVendors} style={{ marginLeft: '10px' }}>Delete Vendor</button>
         <button onClick={() => handleToggleEnable(true)} style={{ marginLeft: '10px' }}>Enable Vendor</button>
