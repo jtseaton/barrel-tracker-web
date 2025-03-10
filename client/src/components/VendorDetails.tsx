@@ -1,6 +1,6 @@
 // client/src/components/VendorDetails.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
 
 interface Vendor {
   name: string;
@@ -16,7 +16,7 @@ interface InventoryReceipt {
   type: string;
   quantity: string;
   receivedDate: string;
-  status: string; // Added to match inventory table schema
+  status: string;
 }
 
 interface PurchaseOrder {
@@ -39,6 +39,7 @@ interface PurchaseOrder {
 const VendorDetails: React.FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
+  const location = useLocation(); // Added to track navigation return
   const [vendorDetails, setVendorDetails] = useState<Vendor | null>(null);
   const [editing, setEditing] = useState(name === 'new');
   const [editedVendor, setEditedVendor] = useState<Vendor>({
@@ -83,6 +84,7 @@ const VendorDetails: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setReceipts(data.filter((item: InventoryReceipt) => ['Received', 'Stored'].includes(item.status || '')));
+      setProductionError(null); // Clear error on success
     } catch (err: any) {
       console.error('Fetch receipts error:', err);
       setProductionError('Failed to fetch receipts: ' + err.message);
@@ -138,12 +140,19 @@ const VendorDetails: React.FC = () => {
   };
 
   const handleAddReceipt = () => {
-    navigate('/receive', { state: { vendor: vendorDetails?.name } });
+    navigate('/receive', { state: { vendor: vendorDetails?.name, fromVendor: true } });
   };
 
   const handleAddPurchaseOrder = () => {
     navigate(`/vendors/${name}/purchase-order/new`);
   };
+
+  // Refresh receipts when returning from /receive
+  useEffect(() => {
+    if (location.state?.fromVendor && name && name !== 'new') {
+      fetchReceipts();
+    }
+  }, [location.state, name]); // Dependencies include location.state and name
 
   if (name && name !== 'new' && !vendorDetails) return <div>Loading...</div>;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom'; // Added useNavigate
 import Home from './components/Home';
 import Production from './components/Production';
 import Inventory from './components/Inventory';
@@ -12,7 +12,7 @@ import Items from './components/Items';
 import ItemDetails from './components/ItemDetails';
 import Vendors from './components/Vendors';
 import VendorDetails from './components/VendorDetails';
-import PurchaseOrderForm from './components/PurchaseOrderForm'; // New
+import PurchaseOrderForm from './components/PurchaseOrderForm';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
@@ -23,6 +23,7 @@ const AppContent: React.FC = () => {
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate(); // Added to enable navigation
 
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
@@ -30,25 +31,18 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const path = location.pathname;
-    if (path === '/') {
-      // activeSection remains as set by menu clicks
+    if (path === '/' || path === '/production' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting') {
+      setShowInventorySubmenu(false);
+      setActiveSection(path === '/' ? activeSection : path.slice(1).replace('-', ' & ').replace(/(^\w|\s\w)/g, m => m.toUpperCase()));
     } else if (path === '/receive') {
       setActiveSection('Inventory');
       setShowInventorySubmenu(true);
-    } else if (path === '/items' || path === '/items/new') {
+    } else if (path === '/items' || path === '/items/new' || path.startsWith('/items/')) {
       setActiveSection('Items');
       setShowInventorySubmenu(true);
-    } else if (path.startsWith('/items/')) {
-      setActiveSection('Items');
-      setShowInventorySubmenu(true);
-    } else if (path === '/vendors' || path === '/vendors/new') {
+    } else if (path === '/vendors' || path === '/vendors/new' || path.startsWith('/vendors/')) {
       setActiveSection('Vendors');
       setShowInventorySubmenu(true);
-    } else if (path.startsWith('/vendors/')) {
-      setActiveSection('Vendors');
-      setShowInventorySubmenu(true);
-    } else {
-      setShowInventorySubmenu(false);
     }
   }, [location.pathname]);
 
@@ -65,6 +59,7 @@ const AppContent: React.FC = () => {
   const handleBackClick = () => {
     setShowInventorySubmenu(false);
     setActiveSection('Home');
+    navigate('/'); // Ensure navigation resets to home
   };
 
   if (isLoading) {
@@ -130,6 +125,7 @@ const AppContent: React.FC = () => {
                     } else {
                       setActiveSection(section.name);
                       setShowInventorySubmenu(false);
+                      navigate(section.name === 'Home' ? '/' : `/${section.name.toLowerCase().replace(' & ', '-')}`);
                     }
                   }}
                   className={activeSection === section.name ? 'active' : ''}
