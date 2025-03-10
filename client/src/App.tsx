@@ -12,6 +12,7 @@ import Items from './components/Items';
 import ItemDetails from './components/ItemDetails';
 import Vendors from './components/Vendors';
 import VendorDetails from './components/VendorDetails';
+import PurchaseOrderForm from './components/PurchaseOrderForm'; // New
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
@@ -167,6 +168,7 @@ const AppContent: React.FC = () => {
           <Route path="/items/:name" element={<ItemDetails />} />
           <Route path="/vendors" element={<Vendors />} />
           <Route path="/vendors/:name" element={<VendorDetails />} />
+          <Route path="/vendors/:name/purchase-order/new" element={<PurchaseOrderForm />} />
         </Routes>
       </div>
     </div>
