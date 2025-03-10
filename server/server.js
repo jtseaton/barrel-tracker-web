@@ -13,7 +13,7 @@ const db = new sqlite3.Database(':memory:', (err) => {
   else console.log('Connected to SQLite database');
 });
 
-const OUR_DSP = 'DSP-AL-20010'; // Already added, just confirming
+const OUR_DSP = 'DSP-AL-20010';
 
 db.serialize(() => {
   db.run(`
@@ -30,7 +30,14 @@ db.serialize(() => {
       dspNumber TEXT,
       status TEXT,
       description TEXT,
-      cost TEXT  // Added
+      cost TEXT
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS items (
+      name TEXT PRIMARY KEY,
+      type TEXT,
+      enabled INTEGER DEFAULT 1
     )
   `);
   db.run(`
@@ -45,13 +52,6 @@ db.serialize(() => {
       toAccount TEXT
     )
   `);
-  db.run(`
-  CREATE TABLE IF NOT EXISTS items (
-    name TEXT PRIMARY KEY,
-    type TEXT,  // Added type column
-    enabled INTEGER DEFAULT 1
-  )
-`);
   db.run(`
     CREATE TABLE IF NOT EXISTS vendors (
       name TEXT PRIMARY KEY,
@@ -96,17 +96,20 @@ const loadItemsFromXML = () => {
         return;
       }
       const items = result.items.item || [];
-      items.forEach(item => {
-        const name = item.$.name;
-        const type = item.$.type || 'Other'; // Default to 'Other' if missing
-        const enabled = parseInt(item.$.enabled || '1');
-        db.run(
-          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-          [name, type, enabled],
-          (err) => {
-            if (err) console.error(`Error inserting item ${name}:`, err);
+      console.log('Raw items from XML:', JSON.stringify(items, null, 2)); // Full dump
+      items.forEach((item, index) => {
+        const name = String(item.$.name || '').replace(/[^a-zA-Z0-9\s]/g, ''); // Only letters, numbers, spaces
+        const type = String(item.$.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, ''); // Same deal
+        const enabled = parseInt(item.$.enabled || '1', 10) || 1; // Force valid integer
+        console.log(`Item ${index}: name="${name}", type="${type}", enabled=${enabled}`);
+        const query = 'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)';
+        console.log(`Executing query: ${query} with values: ["${name}", "${type}", ${enabled}]`);
+        db.run(query, [name, type, enabled], (err) => {
+          if (err) {
+            console.error(`Error inserting item ${index} (name="${name}"):`, err);
+            console.error('Failed query values:', { name, type, enabled });
           }
-        );
+        });
       });
       console.log('Items loaded from XML:', items.length);
     });
