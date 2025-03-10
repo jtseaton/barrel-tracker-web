@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { InventoryItem, PackageForm, MoveForm, LossForm, DailySummaryItem } from '../types/interfaces';
-import { MaterialType } from '../types/enums'; // If used
-import { fetchInventory } from '../utils/fetchUtils';
+import { InventoryItem, PackageForm } from '../types/interfaces';
 
-const Processing: React.FC = () => {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+interface ProcessingProps {
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
+}
+
+const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) => {
   const [packageForm, setPackageForm] = useState<PackageForm>({
     batchId: '',
     product: 'Old Black Bear Vodka',
@@ -21,8 +23,8 @@ const Processing: React.FC = () => {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
   useEffect(() => {
-    fetchInventory().then(setInventory).catch((err) => console.error(err));
-  }, []);
+    console.log('Processing inventory:', inventory);
+  }, [inventory]);
 
   const handlePackage = async () => {
     if (!packageForm.batchId || !packageForm.proofGallons || !packageForm.targetProof || !packageForm.netContents || !packageForm.alcoholContent || !packageForm.healthWarning) {
@@ -65,7 +67,7 @@ const Processing: React.FC = () => {
         }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      await fetchInventory().then(setInventory);
+      await refreshInventory();
       setPackageForm({
         batchId: '',
         product: 'Old Black Bear Vodka',
@@ -90,7 +92,7 @@ const Processing: React.FC = () => {
         body: JSON.stringify({ oldBatchId, newBatchId: editedBatchId }),
       });
       if (!res.ok) throw new Error('Failed to update batch ID');
-      await fetchInventory().then(setInventory);
+      await refreshInventory();
       setEditingBatchId(null);
       setEditedBatchId('');
       setProductionError(null);

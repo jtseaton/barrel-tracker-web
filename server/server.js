@@ -2,6 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const app = express();
+const OUR_DSP = 'DSP-AL-20010'; // Add this near the top, after const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../client/build')));
@@ -374,8 +375,8 @@ app.post('/api/move', (req, res) => {
 
       if (movedProofGallons === originalProofGallons) {
         db.run(
-          `UPDATE inventory SET account = ?, proofGallons = ? WHERE identifier = ?`,
-          [toAccount, movedProofGallons.toFixed(2), identifier],
+          `UPDATE inventory SET account = ?, proofGallons = ?, status = ? WHERE identifier = ?`,
+          [toAccount, movedProofGallons.toFixed(2), toAccount === 'Processing' ? 'Processing' : 'Stored', identifier],
           (err) => {
             if (err) {
               console.error('Update Moved Error:', err);
@@ -402,6 +403,7 @@ app.post('/api/move', (req, res) => {
                   date: new Date().toISOString().split('T')[0],
                   fromAccount: row.account,
                   toAccount,
+                  status: toAccount === 'Processing' ? 'Processing' : 'Stored', // Add status to response
                   serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
                 };
                 console.log('Move successful, tankSummary:', tankSummary);
@@ -437,7 +439,7 @@ app.post('/api/move', (req, res) => {
                 new Date().toISOString().split('T')[0],
                 row.source,
                 row.dspNumber,
-                toAccount === 'Processing' ? 'Processing' : 'Stored'
+                toAccount === 'Processing' ? 'Processing' : 'Stored' // Set status here too
               ],
               (err) => {
                 if (err) {
@@ -473,6 +475,7 @@ app.post('/api/move', (req, res) => {
                       date: new Date().toISOString().split('T')[0],
                       fromAccount: row.account,
                       toAccount,
+                      status: toAccount === 'Processing' ? 'Processing' : 'Stored', // Add status to response
                       serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
                     };
                     console.log('Partial move successful, tankSummary:', tankSummary);
@@ -534,22 +537,35 @@ app.post('/api/package', (req, res) => {
 
 app.post('/api/record-loss', (req, res) => {
   console.log('Received POST to /api/record-loss:', req.body);
-  const { identifier, quantityLost, proofGallonsLost, reason, date } = req.body;
+  const { identifier, quantityLost, proofGallonsLost, reason, date, dspNumber } = req.body;
 
   if (!identifier || !quantityLost || !proofGallonsLost || !reason || !date) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  const dspToUse = dspNumber || OUR_DSP; // Use client-provided dspNumber or fallback to OUR_DSP
+
   db.run(
     `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
      VALUES (?, 'Loss', ?, ?, ?, 'Loss', ?)`,
-    [identifier, quantityLost, proofGallonsLost, date, OUR_DSP],
+    [identifier, quantityLost, proofGallonsLost, date, dspToUse],
     (err) => {
       if (err) {
         console.error('Transaction Insert Error:', err);
         return res.status(500).json({ error: err.message });
       }
-      res.json({ message: 'Loss recorded' });
+      // Update inventory to reflect loss
+      db.run(
+        `UPDATE inventory SET quantity = quantity - ?, proofGallons = proofGallons - ? WHERE identifier = ?`,
+        [parseFloat(quantityLost), parseFloat(proofGallonsLost), identifier],
+        (err) => {
+          if (err) {
+            console.error('Update Inventory Error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ message: 'Loss recorded' });
+        }
+      );
     }
   );
 });
