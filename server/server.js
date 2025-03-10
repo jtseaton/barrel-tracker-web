@@ -29,7 +29,8 @@ db.serialize(() => {
       source TEXT,
       dspNumber TEXT,
       status TEXT,
-      description TEXT
+      description TEXT,
+      cost TEXT  // Added
     )
   `);
   db.run(`
@@ -45,11 +46,12 @@ db.serialize(() => {
     )
   `);
   db.run(`
-    CREATE TABLE IF NOT EXISTS items (
-      name TEXT PRIMARY KEY,
-      enabled INTEGER DEFAULT 1
-    )
-  `);
+  CREATE TABLE IF NOT EXISTS items (
+    name TEXT PRIMARY KEY,
+    type TEXT,  // Added type column
+    enabled INTEGER DEFAULT 1
+  )
+`);
   db.run(`
     CREATE TABLE IF NOT EXISTS vendors (
       name TEXT PRIMARY KEY,
@@ -83,7 +85,7 @@ db.serialize(() => {
 });
 
 const loadItemsFromXML = () => {
-  fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
+  fs.readFile(path.join(__dirname, '../items.xml'), 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading items.xml:', err);
       return;
@@ -96,10 +98,11 @@ const loadItemsFromXML = () => {
       const items = result.items.item || [];
       items.forEach(item => {
         const name = item.$.name;
+        const type = item.$.type || 'Other'; // Default to 'Other' if missing
         const enabled = parseInt(item.$.enabled || '1');
         db.run(
-          'INSERT OR IGNORE INTO items (name, enabled) VALUES (?, ?)',
-          [name, enabled],
+          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+          [name, type, enabled],
           (err) => {
             if (err) console.error(`Error inserting item ${name}:`, err);
           }
@@ -114,9 +117,9 @@ loadItemsFromXML();
 
 // Items endpoints
 app.get('/api/items', (req, res) => {
-  db.all('SELECT name, enabled FROM items', (err, rows) => {
+  db.all('SELECT name, type, enabled FROM items', (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows); // Now includes type
   });
 });
 
@@ -296,10 +299,11 @@ app.post('/api/receive', (req, res) => {
     source,
     dspNumber,
     status,
-    description, // Added
+    description,
+    cost, // Added
   } = req.body;
 
-  if (!account || !type || !quantity || !unit || !receivedDate || !dspNumber || !status) {
+  if (!account || !type || !quantity || !unit || !receivedDate || !status) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   if (type === 'Spirits' && (!identifier || !proof)) {
@@ -311,34 +315,26 @@ app.post('/api/receive', (req, res) => {
 
   const parsedQuantity = parseFloat(quantity);
   const parsedProof = proof ? parseFloat(proof) : null;
-  if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0))) {
-    return res.status(400).json({ error: 'Invalid quantity or proof' });
+  const parsedCost = cost ? parseFloat(cost) : null;
+  if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0)) || (parsedCost && parsedCost < 0)) {
+    return res.status(400).json({ error: 'Invalid quantity, proof, or cost' });
   }
 
   const finalProofGallons = type === 'Spirits' ? (proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2)) : '0.00';
 
-    db.run(
-      `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber, status, description || null],
-      (err) => {
-        if (err) {
-          console.error('Insert Receive Error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        // Add this to verify
-        db.all('SELECT * FROM inventory', (err, rows) => {
-          if (err) {
-            console.error('Fetch after insert error:', err);
-          } else {
-            console.log('Inventory after insert:', rows);
-          }
-        });
-        const tankSummary = type === 'Spirits' ? { /* ... */ } : null;
-        res.json({ message: 'Receive successful', tankSummary });
+  db.run(
+    `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber || null, status, description || null, cost || null],
+    (err) => {
+      if (err) {
+        console.error('Insert Receive Error:', err);
+        return res.status(500).json({ error: err.message });
       }
-    );
-  });
+      // ... (rest unchanged)
+    }
+  );
+});
 
 app.post('/api/produce', (req, res) => {
   console.log('Received POST to /api/produce:', req.body);
