@@ -47,13 +47,13 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
     const finalVolume = targetVolume * shrinkageFactor;
     const bottleCount = Math.floor(finalVolume / bottleSizeGal);
     const finalProofGallons = bottleCount * bottleSizeGal * (targetProof / 100);
-
+  
     try {
       const res = await fetch(`${API_BASE_URL}/api/package`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId: packageForm.batchId,
+          batchId: packageForm.batchId, // Original source batch ID
           product: packageForm.product,
           proofGallons: finalProofGallons.toFixed(2),
           targetProof: targetProof.toFixed(2),
@@ -66,7 +66,12 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
           date: new Date().toISOString().split('T')[0],
         }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      const responseData = await res.json();
+      console.log('Package response:', responseData); // Log the response
       await refreshInventory();
       setPackageForm({
         batchId: '',
