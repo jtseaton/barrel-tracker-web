@@ -15,7 +15,7 @@ import VendorDetails from './components/VendorDetails';
 import PurchaseOrderForm from './components/PurchaseOrderForm';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
-import { InventoryItem } from './types/interfaces'; // Assuming InventoryItem type is defined here
+import { InventoryItem } from './types/interfaces';
 import './App.css';
 
 const AppContent: React.FC = () => {
@@ -23,11 +23,11 @@ const AppContent: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]); // Inventory state typed as InventoryItem[]
+  const [inventory, setInventory] = useState<InventoryItem[]>([]); // Central inventory state
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Simulate loading screen
+  // Loading screen
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
@@ -48,17 +48,18 @@ const AppContent: React.FC = () => {
     }
   }, [location.pathname]);
 
-  // Function to fetch and refresh inventory
+  // Fetch and refresh inventory
   const refreshInventory = async () => {
     try {
-      const data = await fetchInventory(); // Assuming fetchInventory returns InventoryItem[]
+      const data = await fetchInventory();
+      console.log('Fetched inventory:', data); // Debug log
       setInventory(data);
     } catch (error) {
       console.error('Error fetching inventory:', error);
     }
   };
 
-  // Fetch inventory when the component mounts
+  // Initial fetch
   useEffect(() => {
     refreshInventory();
   }, []);
@@ -154,7 +155,7 @@ const AppContent: React.FC = () => {
               <>
                 {activeSection === 'Home' && <Home />}
                 {activeSection === 'Production' && <Production />}
-                {activeSection === 'Inventory' && <Inventory inventory={inventory} />}
+                {activeSection === 'Inventory' && <Inventory inventory={inventory} refreshInventory={refreshInventory} />}
                 {activeSection === 'Vendors' && <Vendors />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing />}
@@ -164,7 +165,7 @@ const AppContent: React.FC = () => {
               </>
             }
           />
-          <Route path="/inventory" element={<Inventory inventory={inventory} />} />
+          <Route path="/inventory" element={<Inventory inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} />} />
           <Route path="/items" element={<Items />} />
