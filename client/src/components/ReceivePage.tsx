@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ReceiveForm, InventoryItem, TankSummary } from '../types/interfaces';
+import { ReceiveForm, InventoryItem } from '../types/interfaces';
 import { MaterialType, Unit, Status } from '../types/enums';
 
 const OUR_DSP = 'DSP-AL-20010';
 
-const ReceivePage: React.FC<{
-  fetchInventory: () => Promise<InventoryItem[]>;
-  exportTankSummary: (tankSummary: TankSummary) => void;
-}> = ({ fetchInventory, exportTankSummary }) => {
+interface ReceivePageProps {
+  refreshInventory: () => Promise<void>;
+}
+
+const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const navigate = useNavigate();
   const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
     identifier: '',
@@ -27,8 +28,7 @@ const ReceivePage: React.FC<{
   const [showNewItemInput, setShowNewItemInput] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
 
-  // Use Render URL or empty string for relative paths
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || ''; // Adjust to your Render URL if needed
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -60,7 +60,6 @@ const ReceivePage: React.FC<{
         const errorData = await res.json();
         throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
-      const data = await res.json();
       setItems([...items, newItem]);
       setReceiveForm({ ...receiveForm, identifier: newItem });
       setNewItem('');
@@ -113,9 +112,7 @@ const ReceivePage: React.FC<{
         body: JSON.stringify(newItem),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      if (data.tankSummary) exportTankSummary(data.tankSummary);
-      await fetchInventory();
+      await refreshInventory(); // Refresh inventory after successful POST
       navigate('/');
     } catch (err: any) {
       console.error('Receive error:', err);
@@ -123,11 +120,10 @@ const ReceivePage: React.FC<{
     }
   };
 
-  // ... (rest of the JSX remains unchanged, see previous version for full form) ...
-
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h2>Receive Inventory</h2>
+      {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -138,9 +134,8 @@ const ReceivePage: React.FC<{
         <label>
           Item:
           <select
-            value={receiveForm.identifier || ''}
-            onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value || undefined })}
-            style={{ width: '100%' }}
+            value={receiveForm.identifier}
+            onChange={(e) => setReceiveForm({ ...receiveForm, identifier: e.target.value })}
           >
             <option value="">Select an item</option>
             {items.map((item) => (
@@ -148,20 +143,24 @@ const ReceivePage: React.FC<{
                 {item}
               </option>
             ))}
-            <option value="new">Create New Item</option>
           </select>
+          <button type="button" onClick={() => setShowNewItemInput(true)}>
+            Add New Item
+          </button>
         </label>
-        {receiveForm.identifier === 'new' && (
+        {showNewItemInput && (
           <div>
             <input
               type="text"
-              placeholder="New Item Name"
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
-              style={{ width: '100%' }}
+              placeholder="New item name"
             />
-            <button type="button" onClick={handleCreateItem} style={{ marginTop: '10px' }}>
-              Create Item
+            <button type="button" onClick={handleCreateItem}>
+              Create
+            </button>
+            <button type="button" onClick={() => setShowNewItemInput(false)}>
+              Cancel
             </button>
           </div>
         )}
@@ -170,7 +169,6 @@ const ReceivePage: React.FC<{
           <select
             value={receiveForm.materialType}
             onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
-            style={{ width: '100%' }}
           >
             {Object.values(MaterialType).map((type) => (
               <option key={type} value={type}>
@@ -179,15 +177,16 @@ const ReceivePage: React.FC<{
             ))}
           </select>
         </label>
-        {receiveForm.materialType === MaterialType.Other && (
+        {receiveForm.materialType === MaterialType.Spirits && (
           <label>
-            Description (e.g., Case Boxes, Activated Carbon):
-            <input
-              type="text"
-              value={receiveForm.description || ''}
-              onChange={(e) => setReceiveForm({ ...receiveForm, description: e.target.value || undefined })}
-              style={{ width: '100%' }}
-            />
+            Account:
+            <select
+              value={receiveForm.account}
+              onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+            >
+              <option value="Storage">Storage</option>
+              <option value="Processing">Processing</option>
+            </select>
           </label>
         )}
         <label>
@@ -197,7 +196,7 @@ const ReceivePage: React.FC<{
             value={receiveForm.quantity}
             onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
             step="0.01"
-            style={{ width: '100%' }}
+            min="0"
           />
         </label>
         <label>
@@ -205,7 +204,6 @@ const ReceivePage: React.FC<{
           <select
             value={receiveForm.unit}
             onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
-            style={{ width: '100%' }}
           >
             {Object.values(Unit).map((unit) => (
               <option key={unit} value={unit}>
@@ -215,30 +213,17 @@ const ReceivePage: React.FC<{
           </select>
         </label>
         {receiveForm.materialType === MaterialType.Spirits && (
-          <>
-            <label>
-              Proof:
-              <input
-                type="number"
-                value={receiveForm.proof || ''}
-                onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value || '' })}
-                step="0.01"
-                style={{ width: '100%' }}
-              />
-            </label>
-            <label>
-              Account:
-              <select
-                value={receiveForm.account}
-                onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
-                style={{ width: '100%' }}
-              >
-                <option value="Production">Production</option>
-                <option value="Storage">Storage</option>
-                <option value="Processing">Processing</option>
-              </select>
-            </label>
-          </>
+          <label>
+            Proof:
+            <input
+              type="number"
+              value={receiveForm.proof}
+              onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
+              step="0.01"
+              min="0"
+              max="200"
+            />
+          </label>
         )}
         <label>
           Source:
@@ -246,7 +231,6 @@ const ReceivePage: React.FC<{
             type="text"
             value={receiveForm.source}
             onChange={(e) => setReceiveForm({ ...receiveForm, source: e.target.value })}
-            style={{ width: '100%' }}
           />
         </label>
         <label>
@@ -255,7 +239,6 @@ const ReceivePage: React.FC<{
             type="text"
             value={receiveForm.dspNumber}
             onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
-            style={{ width: '100%' }}
           />
         </label>
         <label>
@@ -264,16 +247,22 @@ const ReceivePage: React.FC<{
             type="date"
             value={receiveForm.receivedDate}
             onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
-            style={{ width: '100%' }}
           />
         </label>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="submit">Submit</button>
-          <button type="button" onClick={() => navigate('/')}>
-            Cancel
-          </button>
-        </div>
-        {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
+        {receiveForm.materialType === MaterialType.Other && (
+          <label>
+            Description:
+            <input
+              type="text"
+              value={receiveForm.description}
+              onChange={(e) => setReceiveForm({ ...receiveForm, description: e.target.value })}
+            />
+          </label>
+        )}
+        <button type="submit">Receive</button>
+        <button type="button" onClick={() => navigate('/')}>
+          Cancel
+        </button>
       </form>
     </div>
   );
