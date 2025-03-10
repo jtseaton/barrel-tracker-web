@@ -76,8 +76,8 @@
   padding: 20px;
   margin-left: 0;
   transition: margin-left 0.3s ease;
-  background-color: #2E4655; /* Dark teal */
-  color: #FFFFFF; /* White text */
+  background-color: #FFFFFF; /* Dark teal */
+  color: #000000; /* White text */
 }
 
 .menu.open + .content {
