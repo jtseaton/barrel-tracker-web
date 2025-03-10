@@ -14,12 +14,12 @@
 }
 
 .menu {
-  width: 300px; /* Increased from 250px */
+  width: 300px;
   height: 100%;
   background-color: #333;
   position: fixed;
   top: 0;
-  left: -300px; /* Match new width */
+  left: -300px;
   transition: left 0.3s ease;
   z-index: 1000;
 }
@@ -51,7 +51,8 @@
   display: block;
   text-decoration: none;
   box-sizing: border-box;
-  white-space: nowrap; /* Prevent wrapping, ensure full width is used */
+  white-space: nowrap;
+  margin: 0; /* Ensure no extra margin offsets */
 }
 
 .menu button.active {
@@ -71,7 +72,7 @@
 }
 
 .menu.open + .content {
-  margin-left: 300px; /* Match new menu width */
+  margin-left: 300px;
 }
 
 /* Content Styling */

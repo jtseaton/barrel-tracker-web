@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react-router-dom';
 import Home from './components/Home';
 import Production from './components/Production';
 import Inventory from './components/Inventory';
@@ -8,8 +8,8 @@ import Sales from './components/Sales';
 import Users from './components/Users';
 import Reporting from './components/Reporting';
 import ReceivePage from './components/ReceivePage';
-import Items from './components/Items'; // New component
-import ItemDetails from './components/ItemDetails'; // New component
+import Items from './components/Items';
+import ItemDetails from './components/ItemDetails';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
@@ -19,10 +19,30 @@ const App: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const location = useLocation();
 
   React.useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
+
+  // Sync activeSection with route changes
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/') {
+      // activeSection remains as set by menu clicks
+    } else if (path === '/receive') {
+      setActiveSection('Inventory');
+      setShowInventorySubmenu(true);
+    } else if (path === '/items') {
+      setActiveSection('Items');
+      setShowInventorySubmenu(true);
+    } else if (path.startsWith('/items/')) {
+      setActiveSection('Items');
+      setShowInventorySubmenu(true);
+    } else {
+      setShowInventorySubmenu(false);
+    }
+  }, [location.pathname]);
 
   const handleInventoryClick = () => {
     if (activeSection === 'Inventory' && showInventorySubmenu) {
@@ -73,7 +93,7 @@ const App: React.FC = () => {
                 { name: 'Receive Inventory', path: '/receive' },
                 { name: 'Transfers', action: () => setActiveSection('Transfers') },
                 { name: 'Inventory', action: () => setActiveSection('Inventory') },
-                { name: 'Items', path: '/items' }, // Link to new Items page
+                { name: 'Items', path: '/items' },
               ].map((item) => (
                 <li key={item.name}>
                   {item.path ? (
@@ -137,8 +157,8 @@ const App: React.FC = () => {
               path="/receive"
               element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
             />
-            <Route path="/items" element={<Items />} /> {/* New Items route */}
-            <Route path="/items/:name" element={<ItemDetails />} /> {/* New Item Details route */}
+            <Route path="/items" element={<Items />} />
+            <Route path="/items/:name" element={<ItemDetails />} />
           </Routes>
         </div>
       </div>
