@@ -13,10 +13,14 @@ export enum Unit {
 
 export enum MaterialType {
   Grain = 'Grain',
+  Sugar = 'Sugar',
+  Hops = 'Hops',
   Yeast = 'Yeast',
+  Water = 'Water',
   Spirits = 'Spirits',
-  Bottles = 'Bottles',
-  Labels = 'Labels',
-  Caps = 'Caps',
+  Botanical = 'Botanical',
+  Mash = 'Mash',
+  Aging = 'Aging',
+  Packaging = 'Packaging',
   Other = 'Other',
 }
