@@ -14,18 +14,18 @@ import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
 
-const App: React.FC = () => {
+// Inner component to use useLocation
+const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const location = useLocation();
+  const location = useLocation(); // Now safe inside Router context
 
-  React.useEffect(() => {
+  useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
   }, []);
 
-  // Sync activeSection with route changes
   useEffect(() => {
     const path = location.pathname;
     if (path === '/') {
@@ -79,89 +79,96 @@ const App: React.FC = () => {
   }
 
   return (
-    <Router>
-      <div className="App">
-        <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
-          ☰
-        </button>
-        <nav className={`menu ${menuOpen ? 'open' : ''}`}>
-          <ul>
-            {showInventorySubmenu ? (
-              [
-                { name: 'Back', action: handleBackClick },
-                { name: 'Vendors', action: () => setActiveSection('Vendors') },
-                { name: 'Receive Inventory', path: '/receive' },
-                { name: 'Transfers', action: () => setActiveSection('Transfers') },
-                { name: 'Inventory', action: () => setActiveSection('Inventory') },
-                { name: 'Items', path: '/items' },
-              ].map((item) => (
-                <li key={item.name}>
-                  {item.path ? (
-                    <Link to={item.path} onClick={() => setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name)}>
-                      {item.name}
-                    </Link>
-                  ) : (
-                    <button onClick={item.action}>{item.name}</button>
-                  )}
-                </li>
-              ))
-            ) : (
-              [
-                { name: 'Home', subMenu: null },
-                { name: 'Production', subMenu: null },
-                { name: 'Inventory', subMenu: true },
-                { name: 'Processing', subMenu: null },
-                { name: 'Sales & Distribution', subMenu: null },
-                { name: 'Users', subMenu: null },
-                { name: 'Reporting', subMenu: null },
-              ].map((section) => (
-                <li key={section.name}>
-                  <button
-                    onClick={() => {
-                      if (section.name === 'Inventory') {
-                        handleInventoryClick();
-                      } else {
-                        setActiveSection(section.name);
-                        setShowInventorySubmenu(false);
-                      }
-                    }}
-                    className={activeSection === section.name ? 'active' : ''}
-                  >
-                    {section.name}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </nav>
-        <div className="content">
-          <h1>Tilly - Distillery Dog</h1>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <>
-                  {activeSection === 'Home' && <Home />}
-                  {activeSection === 'Production' && <Production />}
-                  {activeSection === 'Inventory' && <Inventory />}
-                  {activeSection === 'Vendors' && <div><h2>Vendors</h2><p>Vendors page coming soon</p></div>}
-                  {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
-                  {activeSection === 'Processing' && <Processing />}
-                  {activeSection === 'Sales & Distribution' && <Sales />}
-                  {activeSection === 'Users' && <Users />}
-                  {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
-                </>
-              }
-            />
-            <Route
-              path="/receive"
-              element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
-            />
-            <Route path="/items" element={<Items />} />
-            <Route path="/items/:name" element={<ItemDetails />} />
-          </Routes>
-        </div>
+    <div className="App">
+      <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
+        ☰
+      </button>
+      <nav className={`menu ${menuOpen ? 'open' : ''}`}>
+        <ul>
+          {showInventorySubmenu ? (
+            [
+              { name: 'Back', action: handleBackClick },
+              { name: 'Vendors', action: () => setActiveSection('Vendors') },
+              { name: 'Receive Inventory', path: '/receive' },
+              { name: 'Transfers', action: () => setActiveSection('Transfers') },
+              { name: 'Inventory', action: () => setActiveSection('Inventory') },
+              { name: 'Items', path: '/items' },
+            ].map((item) => (
+              <li key={item.name}>
+                {item.path ? (
+                  <Link to={item.path} onClick={() => setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name)}>
+                    {item.name}
+                  </Link>
+                ) : (
+                  <button onClick={item.action}>{item.name}</button>
+                )}
+              </li>
+            ))
+          ) : (
+            [
+              { name: 'Home', subMenu: null },
+              { name: 'Production', subMenu: null },
+              { name: 'Inventory', subMenu: true },
+              { name: 'Processing', subMenu: null },
+              { name: 'Sales & Distribution', subMenu: null },
+              { name: 'Users', subMenu: null },
+              { name: 'Reporting', subMenu: null },
+            ].map((section) => (
+              <li key={section.name}>
+                <button
+                  onClick={() => {
+                    if (section.name === 'Inventory') {
+                      handleInventoryClick();
+                    } else {
+                      setActiveSection(section.name);
+                      setShowInventorySubmenu(false);
+                    }
+                  }}
+                  className={activeSection === section.name ? 'active' : ''}
+                >
+                  {section.name}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </nav>
+      <div className="content">
+        <h1>Tilly - Distillery Dog</h1>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                {activeSection === 'Home' && <Home />}
+                {activeSection === 'Production' && <Production />}
+                {activeSection === 'Inventory' && <Inventory />}
+                {activeSection === 'Vendors' && <div><h2>Vendors</h2><p>Vendors page coming soon</p></div>}
+                {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
+                {activeSection === 'Processing' && <Processing />}
+                {activeSection === 'Sales & Distribution' && <Sales />}
+                {activeSection === 'Users' && <Users />}
+                {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
+              </>
+            }
+          />
+          <Route
+            path="/receive"
+            element={<ReceivePage fetchInventory={fetchInventory} exportTankSummary={exportTankSummaryToExcel} />}
+          />
+          <Route path="/items" element={<Items />} />
+          <Route path="/items/:name" element={<ItemDetails />} />
+        </Routes>
       </div>
+    </div>
+  );
+};
+
+// Outer wrapper with Router
+const App: React.FC = () => {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 };
