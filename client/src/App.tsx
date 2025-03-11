@@ -48,7 +48,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const path = location.pathname;
-    if (path === '/' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting') {
+    if (path === '/' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting' || path === '/profile') {
       setShowInventorySubmenu(false);
       setShowProductionSubmenu(false);
       setActiveSection(path === '/' ? 'Home' : path.slice(1).replace('-', ' & ').replace(/(^\w|\s\w)/g, m => m.toUpperCase()));
@@ -196,7 +196,18 @@ const AppContent: React.FC = () => {
         </ul>
       </nav>
       <div className="content">
-        <h1>Tilly - Distillery Dog</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <h1 style={{ fontFamily: 'Arial, sans-serif', color: '#333', margin: 0 }}>Tilly - Distillery Dog</h1>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Link to="/profile" style={{ marginRight: '15px' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </Link>
+            <img src="/tilly-logo.png" alt="Tilly Logo" style={{ height: '40px', width: 'auto' }} />
+          </div>
+        </div>
         <Routes>
           <Route
             path="/"
@@ -238,6 +249,7 @@ const AppContent: React.FC = () => {
           <Route path="/equipment" element={<Equipment />} />
           <Route path="/planning" element={<div><h2>Planning</h2><p>Coming soon</p></div>} />
           <Route path="/facility-designer" element={<div><h2>Facility Designer</h2><p>Coming soon</p></div>} />
+          <Route path="/profile" element={<div><h2>Profile</h2><p>Profile page coming soon</p></div>} />
         </Routes>
       </div>
     </div>
