@@ -1,87 +1,92 @@
 .App {
   display: flex;
-  flex-direction: row;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-  background-color: #2E4655; /* Dark teal background */
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
 }
 
 .hamburger {
   position: fixed;
   top: 10px;
   left: 10px;
-  z-index: 1001;
-  background-color: #F86752; /* Red-orange */
-  color: #FFFFFF;
+  font-size: 24px;
+  background: none;
   border: none;
-  padding: 10px;
-  font-size: 18px;
   cursor: pointer;
+  z-index: 1001;
 }
 
 .menu {
-  width: 300px;
-  height: 100%;
-  background-color: #000000; /* Black menu */
+  width: 250px;
+  background-color: #f4f4f4;
+  padding: 20px;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease-in-out;
   position: fixed;
   top: 0;
-  left: -300px;
-  transition: left 0.3s ease;
-  z-index: 1000;
-}
-
-.menu.open {
+  bottom: 0;
   left: 0;
+  transform: translateX(0);
 }
 
 .menu ul {
   list-style: none;
-  padding: 50px 20px 20px;
-  margin: 0;
-  color: #EEC930; /* Yellow text */
+  padding: 0;
 }
 
 .menu li {
-  margin: 10px 0;
+  margin: 20px 0; /* Increased spacing between menu items */
 }
 
-.menu button, .menu a {
-  background: none;
-  border: none;
-  color: #EEC930; /* Yellow */
-  font-size: 16px;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-  padding: 10px 15px;
-  display: block;
+.menu li button,
+.menu li a,
+.menu li span {
+  color: #333;
   text-decoration: none;
-  box-sizing: border-box;
-  white-space: nowrap;
-  margin: 0;
+  font-size: 20px; /* Increased font size (from ~16px to 20px) */
+  display: block;
+  padding: 10px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
 }
 
-.menu button.active {
+.menu li button:hover,
+.menu li a:hover {
+  background-color: #e0e0e0;
+}
+
+.menu li button.active {
+  background-color: #d0d0d0;
   font-weight: bold;
-  color: #F86752; /* Red-orange for active */
 }
 
-.menu a:hover, .menu button:hover {
-  color: #F86752; /* Red-orange on hover */
+.menu li span {
+  color: #888;
+}
+
+.menu.open {
+  transform: translateX(0);
+}
+
+@media (max-width: 768px) {
+  .menu {
+    transform: translateX(-100%);
+  }
+
+  .menu.open {
+    transform: translateX(0);
+  }
 }
 
 .content {
   flex: 1;
   padding: 20px;
-  margin-left: 0;
-  transition: margin-left 0.3s ease;
-  background-color: #FFFFFF; /* White content area */
-  color: #000000; /* Black text for general content */
+  margin-left: 250px;
 }
 
-.menu.open + .content {
-  margin-left: 300px;
+@media (max-width: 768px) {
+  .content {
+    margin-left: 0;
+  }
 }
 
 /* General button styling */
