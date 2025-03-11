@@ -172,12 +172,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     }
     if (receiveForm.materialType === MaterialType.Spirits && !receiveForm.proof) {
       setProductionError('Proof is required for Spirits');
-      console.log('Validation failed: missing proof');
       return;
     }
     if (receiveForm.materialType === MaterialType.Other && !(receiveForm.description || '').trim()) {
       setProductionError('Description is required for Other material type');
-      console.log('Validation failed: missing description');
       return;
     }
     const quantity = parseFloat(receiveForm.quantity);
@@ -185,46 +183,50 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     const cost = receiveForm.cost ? parseFloat(receiveForm.cost) : undefined;
     if (isNaN(quantity) || quantity <= 0 || (proof && (isNaN(proof) || proof > 200 || proof < 0)) || (cost && (isNaN(cost) || cost < 0))) {
       setProductionError('Invalid quantity, proof, or cost');
-      console.log('Validation failed: invalid numbers');
       return;
     }
     const proofGallons = proof ? (quantity * (proof / 100)).toFixed(2) : undefined;
     const newItem: InventoryItem = {
-        identifier: receiveForm.identifier,
-        account: receiveForm.materialType === MaterialType.Spirits ? receiveForm.account : 'Storage',
-        type: receiveForm.materialType,
-        quantity: receiveForm.quantity,
-        unit: receiveForm.unit,
-        proof: receiveForm.proof || undefined,
-        proofGallons: proof ? (quantity * (proof / 100)).toFixed(2) : undefined,
-        receivedDate: receiveForm.receivedDate,
-        source: receiveForm.source,
-        dspNumber: receiveForm.materialType === MaterialType.Spirits ? receiveForm.dspNumber : undefined,
-        status: Status.Received,
-        description: receiveForm.description,
-        cost: receiveForm.cost || undefined,
-      };
-      console.log('Submitting item:', newItem);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/receive`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newItem),
-        });
-        const responseData = await res.json();
-        console.log('Receive response:', responseData);
-        if (!res.ok) throw new Error(responseData.error || `HTTP error! status: ${res.status}`);
-        setSuccessMessage('Item received successfully!'); // Success feedback
-        await refreshInventory();
-        setTimeout(() => {
-          setSuccessMessage(null);
-          navigate('/inventory');
-        }, 1000); // Delay for visibility
-      } catch (err: any) {
-        console.error('Receive error:', err);
-        setProductionError(err.message || 'Failed to receive item');
-      }
+      identifier: receiveForm.identifier,
+      account: receiveForm.materialType === MaterialType.Spirits ? receiveForm.account : 'Storage',
+      type: receiveForm.materialType,
+      quantity: receiveForm.quantity,
+      unit: receiveForm.unit,
+      proof: receiveForm.proof || undefined,
+      proofGallons: proofGallons,
+      receivedDate: receiveForm.receivedDate,
+      source: receiveForm.source,
+      dspNumber: receiveForm.materialType === MaterialType.Spirits ? receiveForm.dspNumber : undefined,
+      status: Status.Received,
+      description: receiveForm.description,
+      cost: receiveForm.cost || undefined,
     };
+    console.log('Submitting item:', newItem);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem),
+      });
+      console.log('Fetch sent, status:', res.status);
+      if (!res.ok) {
+        const text = await res.text(); // Get raw response
+        console.log('Non-JSON response:', text);
+        throw new Error(`HTTP error! status: ${res.status}, body: ${text}`);
+      }
+      const responseData = await res.json();
+      console.log('Receive response:', responseData);
+      setSuccessMessage('Item received successfully!');
+      await refreshInventory();
+      setTimeout(() => {
+        setSuccessMessage(null);
+        navigate('/inventory');
+      }, 1000);
+    } catch (err: any) {
+      console.error('Receive error:', err);
+      setProductionError(err.message || 'Failed to receive item—server error');
+    }
+  };
   
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
