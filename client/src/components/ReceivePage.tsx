@@ -48,44 +48,32 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     const [successMessage, setSuccessMessage] = useState<string | null>(null); // New
   
     const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
-  
-    useEffect(() => {
-      const fetchItems = async () => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/items`);
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          const data = await res.json();
-          console.log('Fetched items:', data); // Debug type values
-          setItems(data);
-          setFilteredItems(data);
-        } catch (err: any) {
-          console.error('Fetch items error:', err);
-          setProductionError('Failed to fetch items: ' + err.message);
-        }
-      };
-    const fetchVendors = async () => {
+
+  useEffect(() => {
+    const fetchItems = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/vendors`);
+        const res = await fetch(`${API_BASE_URL}/api/items`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        console.log('Fetched vendors:', data);
-        setVendors(data);
-        setFilteredVendors(data);
+        console.log('Fetched items:', data); // Critical debug
+        setItems(data);
+        setFilteredItems(data);
       } catch (err: any) {
-        console.error('Fetch vendors error:', err);
-        setProductionError('Failed to fetch vendors: ' + err.message);
+        console.error('Fetch items error:', err);
+        setProductionError('Failed to fetch items: ' + err.message);
       }
     };
     fetchItems();
-    fetchVendors();
   }, [API_BASE_URL]);
 
   const handleItemSelect = (item: Item) => {
     console.log('Selected item:', item);
-    const materialType = Object.values(MaterialType).includes(item.type as MaterialType)
-      ? item.type as MaterialType
+    // Normalize type to match MaterialType enum
+    const normalizedType = item.type.charAt(0).toUpperCase() + item.type.slice(1).toLowerCase();
+    const materialType = Object.values(MaterialType).includes(normalizedType as MaterialType)
+      ? normalizedType as MaterialType
       : MaterialType.Other;
-    console.log('Setting materialType to:', materialType);
+    console.log('Normalized type:', normalizedType, 'Setting materialType to:', materialType);
     setReceiveForm(prev => {
       const updated = { ...prev, identifier: item.name, materialType };
       console.log('Updated form state:', updated);
