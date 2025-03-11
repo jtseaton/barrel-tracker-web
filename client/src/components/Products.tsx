@@ -37,7 +37,7 @@ const Products: React.FC = () => {
 
     const fetchStyles = async () => {
       try {
-        const res = await fetch('/config/styles.xml'); // Updated path for top-level config/
+        const res = await fetch('../../config/styles.xml'); // Updated path for top-level config/
         if (!res.ok) throw new Error(`Failed to fetch styles.xml: ${res.status}`);
         const text = await res.text();
         const parser = new DOMParser();
