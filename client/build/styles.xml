@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<styles>
+  <!-- Beer Styles -->
+  <style>American Amber Ale</style>
+  <style>American Barleywine</style>
+  <style>American Black Ale</style>
+  <style>American Blonde Ale</style>
+  <style>American Brown Ale</style>
+  <style>American IPA</style>
+  <style>Double IPA</style>
+  <style>New England IPA</style>
+  <style>American Pale Ale</style>
+  <style>American Porter</style>
+  <style>American Stout</style>
+  <style>Imperial Stout</style>
+  <style>American Wheat Beer</style>
+  <style>Belgian Dubbel</style>
+  <style>Belgian Tripel</style>
+  <style>Belgian Quadrupel</style>
+  <style>Belgian Witbier</style>
+  <style>Berliner Weisse</style>
+  <style>Gose</style>
+  <style>Hefeweizen</style>
+  <style>English Bitter</style>
+  <style>English Porter</style>
+  <style>Irish Dry Stout</style>
+  <style>Scottish Ale</style>
+  <style>Bohemian Pilsner</style>
+  <style>German Pilsner</style>
+  <style>Märzen</style>
+  <style>Rauchbier</style>
+  <style>Saison</style>
+  <style>Lambic</style>
+  <style>Gueuze</style>
+  <style>Kölsch</style>
+  <style>Altbier</style>
+  <!-- Wine Styles -->
+  <style>Cabernet Sauvignon</style>
+  <style>Merlot</style>
+  <style>Pinot Noir</style>
+  <style>Syrah/Shiraz</style>
+  <style>Zinfandel</style>
+  <style>Chardonnay</style>
+  <style>Sauvignon Blanc</style>
+  <style>Pinot Grigio</style>
+  <style>Riesling</style>
+  <style>Rosé</style>
+  <style>Prosecco</style>
+  <style>Champagne</style>
+  <style>Lambrusco</style>
+  <style>Port</style>
+  <style>Sherry</style>
+  <style>Madeira</style>
+  <style>Marsala</style>
+  <!-- Spirit Styles -->
+  <style>Bourbon</style>
+  <style>Rye Whiskey</style>
+  <style>Scotch Single Malt</style>
+  <style>Scotch Blended</style>
+  <style>Irish Whiskey</style>
+  <style>Tennessee Whiskey</style>
+  <style>Gin - London Dry</style>
+  <style>Gin - Genever</style>
+  <style>Vodka</style>
+  <style>Tequila Blanco</style>
+  <style>Tequila Reposado</style>
+  <style>Tequila Añejo</style>
+  <style>Mezcal</style>
+  <style>Rum - White</style>
+  <style>Rum - Dark</style>
+  <style>Rum - Spiced</style>
+  <style>Brandy</style>
+  <style>Cognac</style>
+  <style>Armagnac</style>
+  <style>Pisco</style>
+  <style>Grappa</style>
+  <!-- Add more as needed -->
+</styles>
