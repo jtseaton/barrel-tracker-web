@@ -93,3 +93,25 @@ export interface LossForm {
   reason: string;
   date: string;
 }
+
+export interface Product {
+  id: number; // Assuming DB ID
+  name: string;
+  abbreviation: string;
+  enabled: boolean;
+  priority: number;
+  class: string;
+  productColor: string;
+  type: string;
+  style: string;
+  abv: number;
+  ibu: number;
+}
+
+export interface Recipe {
+  id: number; // Assuming DB ID
+  productId: number;
+  name: string;
+  ingredients: string; // Simplified for now, could be an array later
+  instructions: string;
+}
