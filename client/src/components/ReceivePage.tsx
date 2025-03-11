@@ -544,7 +544,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         </div>
 
           <div style={{ position: 'relative' }}>
-            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px', boxSizing: 'border-box' }}>
               Vendor:
             </label>
             <input
@@ -605,7 +605,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               step="0.01"
               min="0"
               placeholder="Enter cost in USD"
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
             />
           </div>
 
@@ -617,7 +617,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               type="date"
               value={receiveForm.receivedDate}
               onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
             />
           </div>
 
@@ -630,7 +630,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 type="text"
                 value={receiveForm.description}
                 onChange={(e) => setReceiveForm({ ...receiveForm, description: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
               />
             </div>
           )}
