@@ -21,33 +21,33 @@ interface Vendor {
 }
 
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
-    const navigate = useNavigate();
-    const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
-      identifier: '',
-      account: 'Storage',
-      materialType: MaterialType.Grain,
-      quantity: '',
-      unit: Unit.Pounds,
-      proof: '',
-      source: '',
-      dspNumber: OUR_DSP,
-      receivedDate: new Date().toISOString().split('T')[0],
-      description: '',
-      cost: '',
-    });
-    const [items, setItems] = useState<Item[]>([]);
-    const [filteredItems, setFilteredItems] = useState<Item[]>([]);
-    const [showItemSuggestions, setShowItemSuggestions] = useState(false);
-    const [newItem, setNewItem] = useState<string>('');
-    const [newItemType, setNewItemType] = useState<string>(MaterialType.Grain);
-    const [showNewItemInput, setShowNewItemInput] = useState(false);
-    const [vendors, setVendors] = useState<Vendor[]>([]);
-    const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
-    const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
-    const [productionError, setProductionError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null); // New
-  
-    const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+  const navigate = useNavigate();
+  const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
+    identifier: '',
+    account: 'Storage',
+    materialType: MaterialType.Grain,
+    quantity: '',
+    unit: Unit.Pounds,
+    proof: '',
+    source: '',
+    dspNumber: OUR_DSP,
+    receivedDate: new Date().toISOString().split('T')[0],
+    description: '',
+    cost: '',
+  });
+  const [items, setItems] = useState<Item[]>([]);
+  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
+  const [showItemSuggestions, setShowItemSuggestions] = useState(false);
+  const [newItem, setNewItem] = useState<string>('');
+  const [newItemType, setNewItemType] = useState<string>(MaterialType.Grain);
+  const [showNewItemModal, setShowNewItemModal] = useState(false); // Modal state
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
+  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
+  const [productionError, setProductionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -55,7 +55,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         const res = await fetch(`${API_BASE_URL}/api/items`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        console.log('Fetched items:', data); // Critical debug
+        console.log('Fetched items:', data);
         setItems(data);
         setFilteredItems(data);
       } catch (err: any) {
@@ -63,13 +63,44 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         setProductionError('Failed to fetch items: ' + err.message);
       }
     };
+
+    const fetchVendors = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/vendors`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        console.log('Fetched vendors:', data);
+        setVendors(data);
+        setFilteredVendors(data);
+      } catch (err: any) {
+        console.error('Fetch vendors error:', err);
+        setProductionError('Failed to fetch vendors: ' + err.message);
+      }
+    };
+
     fetchItems();
+    fetchVendors();
   }, [API_BASE_URL]);
+
+  const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setReceiveForm({ ...receiveForm, identifier: value });
+    setShowItemSuggestions(true);
+    if (value.trim() === '') {
+      setFilteredItems(items);
+    } else {
+      const filtered = items.filter(item =>
+        item.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredItems(filtered);
+    }
+  };
 
   const handleItemSelect = (item: Item) => {
     console.log('Selected item:', item);
-    // Normalize type to match MaterialType enum
-    const normalizedType = item.type.charAt(0).toUpperCase() + item.type.slice(1).toLowerCase();
+    const normalizedType = item.type
+      ? item.type.charAt(0).toUpperCase() + item.type.slice(1).toLowerCase()
+      : 'Other';
     const materialType = Object.values(MaterialType).includes(normalizedType as MaterialType)
       ? normalizedType as MaterialType
       : MaterialType.Other;
@@ -80,22 +111,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       return updated;
     });
     setShowItemSuggestions(false);
-  };
-
-  const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setReceiveForm({ ...receiveForm, identifier: value });
-    setShowItemSuggestions(true);
-    console.log('Input value:', value);
-    if (value.trim() === '') {
-      setFilteredItems(items);
-    } else {
-      const filtered = items.filter(item =>
-        item.name.toLowerCase().includes(value.toLowerCase())
-      );
-      console.log('Filtered items:', filtered);
-      setFilteredItems(filtered);
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -125,7 +140,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       setFilteredItems(updatedItems);
       setReceiveForm({ ...receiveForm, identifier: newItem, materialType: newItemType as MaterialType });
       setNewItem('');
-      setShowNewItemInput(false);
+      setNewItemType(MaterialType.Grain);
+      setShowNewItemModal(false); // Close modal
       setProductionError(null);
     } catch (err: any) {
       console.error('Create item error:', err);
@@ -198,7 +214,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       });
       console.log('Fetch sent, status:', res.status);
       if (!res.ok) {
-        const text = await res.text(); // Get raw response
+        const text = await res.text();
         console.log('Non-JSON response:', text);
         throw new Error(`HTTP error! status: ${res.status}, body: ${text}`);
       }
@@ -215,13 +231,24 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       setProductionError(err.message || 'Failed to receive item—server error');
     }
   };
-  
+
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h2>Receive Inventory</h2>
       {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
-      {successMessage && <p style={{ color: 'green' }}>{successMessage}</p>} {/* Success UI */}
-      <form onSubmit={(e) => { e.preventDefault(); handleReceive(); }} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      {successMessage && (
+        <div style={{ color: 'green', textAlign: 'center' }}>
+          <p>{successMessage}</p>
+          <img src="/doggo-slurp.gif" alt="Dog slurping" style={{ width: '100px', height: '100px' }} />
+        </div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleReceive();
+        }}
+        style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
+      >
         <label>
           Item:
           <input
@@ -274,7 +301,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                       type="button"
                       onClick={() => {
                         setNewItem(receiveForm.identifier || '');
-                        setShowNewItemInput(true);
+                        setShowNewItemModal(true); // Open modal
                         setShowItemSuggestions(false);
                       }}
                     >
@@ -286,32 +313,75 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             </ul>
           )}
         </label>
-        {showNewItemInput && (
-          <div>
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Confirm new item name"
-            />
-            <select
-              value={newItemType}
-              onChange={(e) => setNewItemType(e.target.value)}
+
+        {/* New Item Modal */}
+        {showNewItemModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 2000,
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '5px',
+                width: '400px',
+              }}
             >
-              {Object.values(MaterialType).map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={handleCreateItem}>
-              Create
-            </button>
-            <button type="button" onClick={() => setShowNewItemInput(false)}>
-              Cancel
-            </button>
+              <h3>Create New Item</h3>
+              <label>
+                Item Name:
+                <input
+                  type="text"
+                  value={newItem}
+                  onChange={(e) => setNewItem(e.target.value)}
+                  placeholder="Enter item name"
+                  style={{ width: '100%', marginBottom: '10px' }}
+                />
+              </label>
+              <label>
+                Material Type:
+                <select
+                  value={newItemType}
+                  onChange={(e) => setNewItemType(e.target.value)}
+                  style={{ width: '100%', marginBottom: '10px' }}
+                >
+                  {Object.values(MaterialType).map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <button type="button" onClick={handleCreateItem}>
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewItemModal(false);
+                    setNewItem('');
+                    setNewItemType(MaterialType.Grain);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
+
         <label>
           Material Type:
           <select
@@ -455,11 +525,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             />
           </label>
         )}
-          <button type="submit">Receive</button>
-          <button type="button" onClick={() => navigate('/')}>Cancel</button>
-        </form>
-      </div>
-    );
-  };
-  
-  export default ReceivePage;
+        <button type="submit">Receive</button>
+        <button type="button" onClick={() => navigate('/')}>
+          Cancel
+        </button>
+      </form>
+    </div>
+  );
+};
+
+export default ReceivePage;
