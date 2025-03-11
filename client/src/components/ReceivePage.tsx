@@ -500,7 +500,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 }}
             />
             </div>
-            <div>
+            <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                 DSP Number:
             </label>
