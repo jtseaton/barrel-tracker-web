@@ -544,7 +544,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         </div>
 
           <div style={{ position: 'relative' }}>
-            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px', boxSizing: 'border-box' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
               Vendor:
             </label>
             <input
@@ -554,7 +554,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               placeholder="Type to search vendors"
               onFocus={() => setShowVendorSuggestions(true)}
               onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
             />
             {showVendorSuggestions && (
               <ul
