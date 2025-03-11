@@ -291,6 +291,8 @@ app.get('/api/inventory', (req, res) => {
   });
 });
 
+// ... (existing code)
+
 app.get('/api/products', (req, res) => {
   const mockProducts = [
     { id: 1, name: 'Whiskey', abbreviation: 'WH', enabled: true, priority: 1, class: 'Distilled', productColor: 'Amber', type: 'Spirits', style: 'Bourbon', abv: 40, ibu: 0 },
@@ -323,6 +325,37 @@ app.get('/api/products/:id/recipes', (req, res) => {
     ? [{ id: 1, productId: 1, name: 'Whiskey Recipe', ingredients: 'Corn, Barley, Water', instructions: 'Distill and age' }]
     : [{ id: 2, productId: 2, name: 'IPA Recipe', ingredients: 'Hops, Malt, Yeast', instructions: 'Ferment and hop' }];
   res.json(mockRecipes);
+});
+
+app.post('/api/products', (req, res) => {
+  console.log('Received POST to /api/products:', req.body);
+  const { name, abbreviation, enabled = true, priority = 1, class: prodClass, productColor, type, style, abv = 0, ibu = 0 } = req.body;
+  if (!name || !abbreviation) {
+    return res.status(400).json({ error: 'Name and abbreviation are required' });
+  }
+  const newProduct = {
+    id: Date.now(), // Mock ID—replace with DB auto-increment
+    name,
+    abbreviation,
+    enabled,
+    priority,
+    class: prodClass,
+    productColor,
+    type,
+    style,
+    abv,
+    ibu,
+  };
+  res.json(newProduct);
+});
+
+app.delete('/api/products', (req, res) => {
+  console.log('Received DELETE to /api/products:', req.body);
+  const { ids } = req.body; // Array of IDs to delete
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: 'IDs array is required' });
+  }
+  res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` }); // Mock response
 });
 
 app.post('/api/receive', (req, res) => {
