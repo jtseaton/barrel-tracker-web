@@ -27,8 +27,20 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const refreshInventory = async () => {
+    try {
+      const data = await fetchInventory();
+      console.log('Refresh inventory fetched:', data);
+      setInventory(data);
+      console.log('Inventory state updated:', data);
+    } catch (error) {
+      console.error('Error refreshing inventory:', error);
+    }
+  };
+
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 4000);
+    refreshInventory(); // Initial load
   }, []);
 
   useEffect(() => {
@@ -45,20 +57,6 @@ const AppContent: React.FC = () => {
       else if (path === '/vendors' || path.startsWith('/vendors/')) setActiveSection('Vendors');
     }
   }, [location.pathname]);
-
-  const refreshInventory = async () => {
-    try {
-      const data = await fetchInventory();
-      console.log('Fetched inventory:', data);
-      setInventory(data);
-    } catch (error) {
-      console.error('Error fetching inventory:', error);
-    }
-  };
-
-  useEffect(() => {
-    refreshInventory();
-  }, []);
 
   const handleInventoryClick = () => {
     if (activeSection === 'Inventory' && showInventorySubmenu) {
@@ -150,8 +148,8 @@ const AppContent: React.FC = () => {
             element={
               <>
                 {activeSection === 'Home' && <Home />}
-                {activeSection === 'Production' && <Production />}
                 {activeSection === 'Inventory' && <Inventory inventory={inventory} refreshInventory={refreshInventory} />}
+                {activeSection === 'Production' && <Production />}
                 {activeSection === 'Vendors' && <Vendors />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing inventory={inventory} refreshInventory={refreshInventory} />}
@@ -162,8 +160,8 @@ const AppContent: React.FC = () => {
             }
           />
           <Route path="/inventory" element={<Inventory inventory={inventory} refreshInventory={refreshInventory} />} />
-          <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} />} />
+          <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
           <Route path="/vendors" element={<Vendors />} />
