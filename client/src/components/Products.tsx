@@ -20,7 +20,7 @@ const Products: React.FC = () => {
     ibu: 0,
   });
   const [styles, setStyles] = useState<string[]>([]);
-  const [stylesError, setStylesError] = useState<string | null>(null); // Added this fucker
+  const [stylesError, setStylesError] = useState<string | null>(null);
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
   useEffect(() => {
@@ -37,14 +37,14 @@ const Products: React.FC = () => {
 
     const fetchStyles = async () => {
       try {
-        const res = await fetch('../../config/styles.xml'); // Updated path for top-level config/
+        const res = await fetch('/styles.xml'); // Hits client/public/styles.xml
         if (!res.ok) throw new Error(`Failed to fetch styles.xml: ${res.status}`);
         const text = await res.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
         const styleNodes = xmlDoc.getElementsByTagName('style');
         const styleList = Array.from(styleNodes).map(node => node.textContent || '');
-        if (styleList.length === 0) throw new Error('No styles found in XML');
+        if (styleList.length === 0) throw new Error('No styles found in XML—check structure');
         setStyles(styleList);
         setStylesError(null);
       } catch (err: any) {
@@ -70,7 +70,12 @@ const Products: React.FC = () => {
         throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
       const addedProduct = await res.json();
-      setProducts([...products, addedProduct]);
+      console.log('Added product:', addedProduct); // Debug
+      // Refresh the full list to sync with backend
+      const updatedRes = await fetch(`${API_BASE_URL}/api/products`);
+      if (!updatedRes.ok) throw new Error('Failed to refresh products');
+      const updatedProducts = await updatedRes.json();
+      setProducts(updatedProducts);
       setShowAddModal(false);
       setNewProduct({ name: '', abbreviation: '', enabled: true, priority: 1, class: '', productColor: '', type: '', style: '', abv: 0, ibu: 0 });
     } catch (err: any) {
@@ -311,27 +316,27 @@ const Products: React.FC = () => {
           </tr>
         </thead>
         <tbody>
-          {products.map((product) => (
-            <tr key={product.id} style={{ backgroundColor: '#fff' }}>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={selectedProducts.includes(product.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedProducts([...selectedProducts, product.id]);
-                    } else {
-                      setSelectedProducts(selectedProducts.filter(id => id !== product.id));
-                    }
-                  }}
-                />
-              </td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                <Link to={`/products/${product.id}`}>{product.name}</Link>
-              </td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{product.abbreviation}</td>
-            </tr>
-          ))}
+        {products.map((product) => (
+  <tr key={product.id} style={{ backgroundColor: '#fff' }}>
+    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+      <input
+        type="checkbox"
+        checked={selectedProducts.includes(product.id)}
+        onChange={(e) => {
+          if (e.target.checked) {
+            setSelectedProducts([...selectedProducts, product.id]);
+          } else {
+            setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+          }
+        }}
+      />
+    </td>
+    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+      <Link to={`/products/${product.id}`}>{product.name}</Link>
+    </td>
+    <td style={{ border: '1px solid #ddd', padding: '8px' }}>{product.abbreviation}</td>
+  </tr>
+))}
         </tbody>
       </table>
     </div>
