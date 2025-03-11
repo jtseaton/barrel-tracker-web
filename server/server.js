@@ -291,6 +291,40 @@ app.get('/api/inventory', (req, res) => {
   });
 });
 
+app.get('/api/products', (req, res) => {
+  const mockProducts = [
+    { id: 1, name: 'Whiskey', abbreviation: 'WH', enabled: true, priority: 1, class: 'Distilled', productColor: 'Amber', type: 'Spirits', style: 'Bourbon', abv: 40, ibu: 0 },
+    { id: 2, name: 'IPA', abbreviation: 'IP', enabled: true, priority: 2, class: 'Beer', productColor: 'Golden', type: 'Ale', style: 'India Pale Ale', abv: 6.5, ibu: 60 },
+  ];
+  res.json(mockProducts);
+});
+
+app.get('/api/products/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const mockProduct = {
+    id,
+    name: id === 1 ? 'Whiskey' : 'IPA',
+    abbreviation: id === 1 ? 'WH' : 'IP',
+    enabled: true,
+    priority: id,
+    class: id === 1 ? 'Distilled' : 'Beer',
+    productColor: id === 1 ? 'Amber' : 'Golden',
+    type: id === 1 ? 'Spirits' : 'Ale',
+    style: id === 1 ? 'Bourbon' : 'India Pale Ale',
+    abv: id === 1 ? 40 : 6.5,
+    ibu: id === 1 ? 0 : 60,
+  };
+  res.json(mockProduct);
+});
+
+app.get('/api/products/:id/recipes', (req, res) => {
+  const id = parseInt(req.params.id);
+  const mockRecipes = id === 1
+    ? [{ id: 1, productId: 1, name: 'Whiskey Recipe', ingredients: 'Corn, Barley, Water', instructions: 'Distill and age' }]
+    : [{ id: 2, productId: 2, name: 'IPA Recipe', ingredients: 'Hops, Malt, Yeast', instructions: 'Ferment and hop' }];
+  res.json(mockRecipes);
+});
+
 app.post('/api/receive', (req, res) => {
   console.log('Received POST to /api/receive:', req.body);
   const {
