@@ -24,3 +24,9 @@ export enum MaterialType {
   Packaging = 'Packaging',
   Other = 'Other',
 }
+
+export enum ProductClass {
+  Beer = 'Beer',
+  Wine = 'Wine',
+  Spirits = 'Spirits',
+}
