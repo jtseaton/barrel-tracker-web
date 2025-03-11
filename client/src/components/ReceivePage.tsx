@@ -244,31 +244,36 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
           </div>
         )}
         <form
-          onSubmit={(e) => {
+        onSubmit={(e) => {
             e.preventDefault();
             handleReceive();
-          }}
-          style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}
+        }}
+        style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr',
+            gap: '15px',
+            boxSizing: 'border-box', // Ensure form respects its own padding
+        }}
         >
-          <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-              Item:
+            Item:
             </label>
             <input
-              type="text"
-              value={receiveForm.identifier}
-              onChange={handleItemInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Type to search items"
-              onFocus={() => setShowItemSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
-              style={{
+            type="text"
+            value={receiveForm.identifier}
+            onChange={handleItemInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Type to search items"
+            onFocus={() => setShowItemSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+            style={{
                 width: '100%',
                 padding: '8px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
-                boxSizing: 'border-box',
-              }}
+                boxSizing: 'border-box', // Already present, kept for clarity
+            }}
             />
             {showItemSuggestions && (
               <ul
@@ -373,20 +378,28 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                     style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
                   />
                 </label>
-                <label style={{ display: 'block', marginBottom: '10px' }}>
-                  Material Type:
-                  <select
-                    value={newItemType}
-                    onChange={(e) => setNewItemType(e.target.value)}
-                    style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  >
+                <div>
+                    <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                    Material Type:
+                    </label>
+                    <select
+                    value={receiveForm.materialType}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
+                    style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        boxSizing: 'border-box', // Added to match input
+                    }}
+                    >
                     {Object.values(MaterialType).map((type) => (
-                      <option key={type} value={type}>
+                        <option key={type} value={type}>
                         {type}
-                      </option>
+                        </option>
                     ))}
-                  </select>
-                </label>
+                    </select>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <button
                     type="button"
