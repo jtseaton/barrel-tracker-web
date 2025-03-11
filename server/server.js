@@ -320,14 +320,14 @@ app.post('/api/receive', (req, res) => {
     return res.status(400).json({ error: 'Description required for Other type' });
   }
 
+  // Declare variables up top
+  const parsedQuantity = parseFloat(quantity);
+  const parsedProof = proof ? parseFloat(proof) : null;
+  const parsedCost = cost ? parseFloat(cost) : null;
   if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0)) || (parsedCost && parsedCost < 0)) {
     console.log('Validation failed: invalid quantity, proof, or cost');
     return res.status(400).json({ error: 'Invalid quantity, proof, or cost' });
   }
-
-  const parsedQuantity = parseFloat(quantity);
-  const parsedProof = proof ? parseFloat(proof) : null;
-  const parsedCost = cost ? parseFloat(cost) : null;
   const finalProofGallons = type === 'Spirits' ? (proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2)) : '0.00';
 
   db.get(
