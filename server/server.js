@@ -30,7 +30,8 @@ db.serialize(() => {
       dspNumber TEXT,
       status TEXT,
       description TEXT,
-      cost TEXT
+      cost TEXT,
+      UNIQUE(identifier, type, account) -- Prevent duplicates
     )
   `);
   db.run(`
@@ -303,38 +304,80 @@ app.post('/api/receive', (req, res) => {
     dspNumber,
     status,
     description,
-    cost, // Added
+    cost,
   } = req.body;
 
   if (!account || !type || !quantity || !unit || !receivedDate || !status) {
+    console.log('Validation failed: missing required fields');
     return res.status(400).json({ error: 'Missing required fields' });
   }
   if (type === 'Spirits' && (!identifier || !proof)) {
+    console.log('Validation failed: Spirits require identifier and proof');
     return res.status(400).json({ error: 'Spirits require an identifier and proof' });
   }
   if (type === 'Other' && !description) {
+    console.log('Validation failed: Description required for Other');
     return res.status(400).json({ error: 'Description required for Other type' });
+  }
+
+  if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0)) || (parsedCost && parsedCost < 0)) {
+    console.log('Validation failed: invalid quantity, proof, or cost');
+    return res.status(400).json({ error: 'Invalid quantity, proof, or cost' });
   }
 
   const parsedQuantity = parseFloat(quantity);
   const parsedProof = proof ? parseFloat(proof) : null;
   const parsedCost = cost ? parseFloat(cost) : null;
-  if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0)) || (parsedCost && parsedCost < 0)) {
-    return res.status(400).json({ error: 'Invalid quantity, proof, or cost' });
-  }
-
   const finalProofGallons = type === 'Spirits' ? (proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2)) : '0.00';
 
-  db.run(
-    `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber || null, status, description || null, cost || null],
-    (err) => {
+  db.get(
+    'SELECT quantity, proofGallons FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
+    [identifier, type, account],
+    (err, row) => {
       if (err) {
-        console.error('Insert Receive Error:', err);
+        console.error('Select error:', err);
         return res.status(500).json({ error: err.message });
       }
-      // ... (rest unchanged)
+      if (row) {
+        const existingQuantity = parseFloat(row.quantity);
+        const newQuantity = (existingQuantity + parsedQuantity).toFixed(2);
+        const existingProofGallons = parseFloat(row.proofGallons || '0');
+        const newProofGallons = type === 'Spirits' ? (existingProofGallons + parseFloat(finalProofGallons)).toFixed(2) : '0.00';
+        console.log('Updating inventory:', { identifier, newQuantity });
+        db.run(
+          `UPDATE inventory SET 
+            quantity = ?, 
+            proofGallons = ?, 
+            receivedDate = ?, 
+            source = ?, 
+            cost = ? 
+           WHERE identifier = ? AND type = ? AND account = ?`,
+          [newQuantity, newProofGallons, receivedDate, source || 'Unknown', cost || null, identifier, type, account],
+          (err) => {
+            if (err) {
+              console.error('Update error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log('Update successful');
+            res.json({ message: 'Receive successful' });
+          }
+        );
+      } else {
+        console.log('Inserting into inventory:', req.body);
+        db.run(
+          `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber || null, status, description || null, cost || null],
+          (err) => {
+            if (err) {
+              console.error('Insert error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log('Insert successful');
+            res.json({ message: 'Receive successful' });
+          }
+        );
+      }
     }
   );
 });
