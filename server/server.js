@@ -97,22 +97,24 @@ const loadItemsFromXML = () => {
         return;
       }
       const items = result.items.item || [];
-      console.log('Raw items from XML:', JSON.stringify(items, null, 2)); // Full dump
+      console.log('Raw XML parse result:', JSON.stringify(result, null, 2)); // Full dump
+      console.log('Items array:', items);
       items.forEach((item, index) => {
-        const name = String(item.$.name || '').replace(/[^a-zA-Z0-9\s]/g, ''); // Only letters, numbers, spaces
-        const type = String(item.$.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, ''); // Same deal
-        const enabled = parseInt(item.$.enabled || '1', 10) || 1; // Force valid integer
+        const attributes = item.$ || {}; // Ensure attributes exist
+        const name = String(attributes.name || '').replace(/[^a-zA-Z0-9\s]/g, '');
+        const type = String(attributes.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, ''); // Fallback to Other
+        const enabled = parseInt(attributes.enabled || '1', 10) || 1;
         console.log(`Item ${index}: name="${name}", type="${type}", enabled=${enabled}`);
-        const query = 'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)';
-        console.log(`Executing query: ${query} with values: ["${name}", "${type}", ${enabled}]`);
-        db.run(query, [name, type, enabled], (err) => {
-          if (err) {
-            console.error(`Error inserting item ${index} (name="${name}"):`, err);
-            console.error('Failed query values:', { name, type, enabled });
+        db.run(
+          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+          [name, type, enabled],
+          (err) => {
+            if (err) console.error(`Error inserting item ${name}:`, err);
+            else console.log(`Inserted: name="${name}", type="${type}", enabled=${enabled}`);
           }
-        });
+        );
       });
-      console.log('Items loaded from XML:', items.length);
+      console.log('Items load complete, count:', items.length);
     });
   });
 };
