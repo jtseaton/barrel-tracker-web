@@ -34,7 +34,7 @@
 }
 
 .menu li {
-  margin: 20px 0; /* Increased spacing between menu items */
+  margin: 10px 0; /* Reverted to original spacing */
 }
 
 .menu li button,
@@ -42,7 +42,7 @@
 .menu li span {
   color: #333;
   text-decoration: none;
-  font-size: 20px; /* Increased font size (from ~16px to 20px) */
+  font-size: 16px; /* Reverted to original font size */
   display: block;
   padding: 10px;
   border-radius: 4px;
