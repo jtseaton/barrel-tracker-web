@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types/interfaces';
-import { MaterialType, Unit, Status } from '../types/enums';
+import { MaterialType, ProductClass } from '../types/enums'; // Updated import
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -115,8 +115,8 @@ const Products: React.FC = () => {
         </button>
       </div>
 
-      {/* Add Product Modal */}
-      {showAddModal && (
+        {/* Add Product Modal */}
+        {showAddModal && (
   <div
     style={{
       position: 'fixed',
@@ -179,12 +179,25 @@ const Products: React.FC = () => {
       </label>
       <label style={{ display: 'block', marginBottom: '10px' }}>
         Class:
-        <input
-          type="text"
+        <select
           value={newProduct.class || ''}
           onChange={(e) => setNewProduct({ ...newProduct, class: e.target.value })}
-          style={{ width: '100%', padding: '5px', marginTop: '5px' }}
-        />
+          style={{
+            width: '100%',
+            padding: '5px',
+            marginTop: '5px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <option value="">Select Class</option>
+          {Object.values(ProductClass).map((classType) => (
+            <option key={classType} value={classType}>
+              {classType}
+            </option>
+          ))}
+        </select>
       </label>
       <label style={{ display: 'block', marginBottom: '10px' }}>
         Product Color:
