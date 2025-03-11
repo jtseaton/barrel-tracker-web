@@ -27,6 +27,11 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
+    console.log('Inventory component mounted, refreshing');
+    refreshInventory();
+  }, [refreshInventory]);
+
+  useEffect(() => {
     console.log('Inventory prop received:', inventory);
     const receivedStored = inventory.filter((item) => ['Received', 'Stored'].includes(item.status));
     console.log('Filtered Received/Stored:', receivedStored);
@@ -75,7 +80,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }), // Add dspNumber
+        body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }),
       });
       if (!res.ok) {
         const errorData = await res.text();
