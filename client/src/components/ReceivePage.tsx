@@ -214,8 +214,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         console.log('Response not OK:', res.status);
         throw new Error(responseData.error || `HTTP error! status: ${res.status}`);
       }
-      console.log('Receive successful, refreshing inventory');
+      console.log('Receive successful, calling refreshInventory');
       await refreshInventory();
+      console.log('refreshInventory complete, navigating');
       navigate('/inventory');
     } catch (err: any) {
       console.error('Receive error:', err);
