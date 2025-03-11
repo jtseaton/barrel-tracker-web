@@ -40,7 +40,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   const [newItem, setNewItem] = useState<string>('');
   const [newItemType, setNewItemType] = useState<string>(MaterialType.Grain);
-  const [showNewItemModal, setShowNewItemModal] = useState(false); // Modal state
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
@@ -141,7 +141,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       setReceiveForm({ ...receiveForm, identifier: newItem, materialType: newItemType as MaterialType });
       setNewItem('');
       setNewItemType(MaterialType.Grain);
-      setShowNewItemModal(false); // Close modal
+      setShowNewItemModal(false);
       setProductionError(null);
     } catch (err: any) {
       console.error('Create item error:', err);
@@ -233,303 +233,426 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      <h2>Receive Inventory</h2>
-      {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
-      {successMessage && (
-        <div style={{ color: 'green', textAlign: 'center' }}>
-          <p>{successMessage}</p>
-          <img src="/doggo-slurp.gif" alt="Dog slurping" style={{ width: '100px', height: '100px' }} />
-        </div>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleReceive();
-        }}
-        style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
-      >
-        <label>
-          Item:
-          <input
-            type="text"
-            value={receiveForm.identifier}
-            onChange={handleItemInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Type to search items"
-            onFocus={() => setShowItemSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
-            style={{ width: '100%' }}
-          />
-          {showItemSuggestions && (
-            <ul
-              style={{
-                border: '1px solid #ccc',
-                maxHeight: '150px',
-                overflowY: 'auto',
-                position: 'absolute',
-                backgroundColor: '#fff',
-                width: '300px',
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                zIndex: 1000,
-              }}
-            >
-              {filteredItems.length > 0 ? (
-                filteredItems.map((item) => (
-                  <li
-                    key={item.name}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleItemSelect(item);
-                    }}
-                    style={{
-                      padding: '5px 10px',
-                      cursor: 'pointer',
-                      backgroundColor: receiveForm.identifier === item.name ? '#e0e0e0' : '#fff',
-                    }}
-                  >
-                    {item.name}
-                  </li>
-                ))
-              ) : (
-                receiveForm.identifier && (
-                  <li style={{ padding: '5px 10px' }}>
-                    No matches found.{' '}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewItem(receiveForm.identifier || '');
-                        setShowNewItemModal(true); // Open modal
-                        setShowItemSuggestions(false);
-                      }}
-                    >
-                      Create "{receiveForm.identifier}"
-                    </button>
-                  </li>
-                )
-              )}
-            </ul>
-          )}
-        </label>
-
-        {/* New Item Modal */}
-        {showNewItemModal && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              zIndex: 2000,
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: 'white',
-                padding: '20px',
-                borderRadius: '5px',
-                width: '400px',
-              }}
-            >
-              <h3>Create New Item</h3>
-              <label>
-                Item Name:
-                <input
-                  type="text"
-                  value={newItem}
-                  onChange={(e) => setNewItem(e.target.value)}
-                  placeholder="Enter item name"
-                  style={{ width: '100%', marginBottom: '10px' }}
-                />
-              </label>
-              <label>
-                Material Type:
-                <select
-                  value={newItemType}
-                  onChange={(e) => setNewItemType(e.target.value)}
-                  style={{ width: '100%', marginBottom: '10px' }}
-                >
-                  {Object.values(MaterialType).map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button type="button" onClick={handleCreateItem}>
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowNewItemModal(false);
-                    setNewItem('');
-                    setNewItemType(MaterialType.Grain);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
+      <h2 style={{ color: '#333', marginBottom: '20px' }}>Receive Inventory</h2>
+      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        {productionError && <p style={{ color: '#f44336', marginBottom: '15px', textAlign: 'center' }}>{productionError}</p>}
+        {successMessage && (
+          <div style={{ color: '#4CAF50', textAlign: 'center', marginBottom: '15px' }}>
+            <p>{successMessage}</p>
+            <img src="/doggo-slurp.gif" alt="Dog slurping" style={{ width: '100px', height: '100px' }} />
           </div>
         )}
-
-        <label>
-          Material Type:
-          <select
-            value={receiveForm.materialType}
-            onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
-          >
-            {Object.values(MaterialType).map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </label>
-        {receiveForm.materialType === MaterialType.Spirits && (
-          <>
-            <label>
-              Account:
-              <select
-                value={receiveForm.account}
-                onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
-              >
-                <option value="Storage">Storage</option>
-                <option value="Processing">Processing</option>
-              </select>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleReceive();
+          }}
+          style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}
+        >
+          <div style={{ position: 'relative' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Item:
             </label>
-            <label>
-              Proof:
-              <input
-                type="number"
-                value={receiveForm.proof}
-                onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
-                step="0.01"
-                min="0"
-                max="200"
-              />
-            </label>
-            <label>
-              DSP Number:
-              <input
-                type="text"
-                value={receiveForm.dspNumber}
-                onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
-              />
-            </label>
-          </>
-        )}
-        <label>
-          Quantity:
-          <input
-            type="number"
-            value={receiveForm.quantity}
-            onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
-            step="0.01"
-            min="0"
-          />
-        </label>
-        <label>
-          Unit:
-          <select
-            value={receiveForm.unit}
-            onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
-          >
-            {Object.values(Unit).map((unit) => (
-              <option key={unit} value={unit}>
-                {unit}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Vendor:
-          <input
-            type="text"
-            value={receiveForm.source}
-            onChange={handleVendorInputChange}
-            placeholder="Type to search vendors"
-            onFocus={() => setShowVendorSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
-            style={{ width: '100%' }}
-          />
-          {showVendorSuggestions && (
-            <ul
-              style={{
-                border: '1px solid #ccc',
-                maxHeight: '150px',
-                overflowY: 'auto',
-                position: 'absolute',
-                backgroundColor: '#fff',
-                width: '300px',
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                zIndex: 1000,
-              }}
-            >
-              {filteredVendors.map((vendor) => (
-                <li
-                  key={vendor.name}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleVendorSelect(vendor);
-                  }}
-                  style={{
-                    padding: '5px 10px',
-                    cursor: 'pointer',
-                    backgroundColor: receiveForm.source === vendor.name ? '#e0e0e0' : '#fff',
-                  }}
-                >
-                  {vendor.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </label>
-        <label>
-          Cost:
-          <input
-            type="number"
-            value={receiveForm.cost}
-            onChange={(e) => setReceiveForm({ ...receiveForm, cost: e.target.value })}
-            step="0.01"
-            min="0"
-            placeholder="Enter cost in USD"
-          />
-        </label>
-        <label>
-          Received Date:
-          <input
-            type="date"
-            value={receiveForm.receivedDate}
-            onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
-          />
-        </label>
-        {receiveForm.materialType === MaterialType.Other && (
-          <label>
-            Description (Optional):
             <input
               type="text"
-              value={receiveForm.description}
-              onChange={(e) => setReceiveForm({ ...receiveForm, description: e.target.value })}
+              value={receiveForm.identifier}
+              onChange={handleItemInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Type to search items"
+              onFocus={() => setShowItemSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                boxSizing: 'border-box',
+              }}
             />
-          </label>
-        )}
-        <button type="submit">Receive</button>
-        <button type="button" onClick={() => navigate('/')}>
-          Cancel
-        </button>
-      </form>
+            {showItemSuggestions && (
+              <ul
+                style={{
+                  border: '1px solid #ddd',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  position: 'absolute',
+                  backgroundColor: '#fff',
+                  width: '100%',
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  zIndex: 1000,
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+                {filteredItems.length > 0 ? (
+                  filteredItems.map((item) => (
+                    <li
+                      key={item.name}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleItemSelect(item);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: receiveForm.identifier === item.name ? '#e0e0e0' : '#fff',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      {item.name}
+                    </li>
+                  ))
+                ) : (
+                  receiveForm.identifier && (
+                    <li style={{ padding: '8px 10px', borderBottom: '1px solid #eee' }}>
+                      No matches found.{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewItem(receiveForm.identifier || '');
+                          setShowNewItemModal(true);
+                          setShowItemSuggestions(false);
+                        }}
+                        style={{
+                          backgroundColor: '#2196F3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '5px 10px',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                        }}
+                        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                      >
+                        Create "{receiveForm.identifier}"
+                      </button>
+                    </li>
+                  )
+                )}
+              </ul>
+            )}
+          </div>
+
+          {/* New Item Modal */}
+          {showNewItemModal && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 2000,
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: 'white',
+                  padding: '20px',
+                  borderRadius: '8px',
+                  width: '400px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+                <h3 style={{ color: '#333', marginBottom: '15px' }}>Create New Item</h3>
+                <label style={{ display: 'block', marginBottom: '10px' }}>
+                  Item Name:
+                  <input
+                    type="text"
+                    value={newItem}
+                    onChange={(e) => setNewItem(e.target.value)}
+                    placeholder="Enter item name"
+                    style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  />
+                </label>
+                <label style={{ display: 'block', marginBottom: '10px' }}>
+                  Material Type:
+                  <select
+                    value={newItemType}
+                    onChange={(e) => setNewItemType(e.target.value)}
+                    style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  >
+                    {Object.values(MaterialType).map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button
+                    type="button"
+                    onClick={handleCreateItem}
+                    style={{
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.3s',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#45a049')}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#4CAF50')}
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewItemModal(false);
+                      setNewItem('');
+                      setNewItemType(MaterialType.Grain);
+                    }}
+                    style={{
+                      backgroundColor: '#f44336',
+                      color: 'white',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.3s',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#da190b')}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#f44336')}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Material Type:
+            </label>
+            <select
+              value={receiveForm.materialType}
+              onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            >
+              {Object.values(MaterialType).map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {receiveForm.materialType === MaterialType.Spirits && (
+            <>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Account:
+                </label>
+                <select
+                  value={receiveForm.account}
+                  onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                >
+                  <option value="Storage">Storage</option>
+                  <option value="Processing">Processing</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Proof:
+                </label>
+                <input
+                  type="number"
+                  value={receiveForm.proof}
+                  onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
+                  step="0.01"
+                  min="0"
+                  max="200"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  DSP Number:
+                </label>
+                <input
+                  type="text"
+                  value={receiveForm.dspNumber}
+                  onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+            </>
+          )}
+
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Quantity:
+            </label>
+            <input
+              type="number"
+              value={receiveForm.quantity}
+              onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
+              step="0.01"
+              min="0"
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Unit:
+            </label>
+            <select
+              value={receiveForm.unit}
+              onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            >
+              {Object.values(Unit).map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Vendor:
+            </label>
+            <input
+              type="text"
+              value={receiveForm.source}
+              onChange={handleVendorInputChange}
+              placeholder="Type to search vendors"
+              onFocus={() => setShowVendorSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+            {showVendorSuggestions && (
+              <ul
+                style={{
+                  border: '1px solid #ddd',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  position: 'absolute',
+                  backgroundColor: '#fff',
+                  width: '100%',
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  zIndex: 1000,
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+                {filteredVendors.map((vendor) => (
+                  <li
+                    key={vendor.name}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleVendorSelect(vendor);
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      backgroundColor: receiveForm.source === vendor.name ? '#e0e0e0' : '#fff',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {vendor.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Cost:
+            </label>
+            <input
+              type="number"
+              value={receiveForm.cost}
+              onChange={(e) => setReceiveForm({ ...receiveForm, cost: e.target.value })}
+              step="0.01"
+              min="0"
+              placeholder="Enter cost in USD"
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Received Date:
+            </label>
+            <input
+              type="date"
+              value={receiveForm.receivedDate}
+              onChange={(e) => setReceiveForm({ ...receiveForm, receivedDate: e.target.value })}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
+
+          {receiveForm.materialType === MaterialType.Other && (
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Description (Optional):
+              </label>
+              <input
+                type="text"
+                value={receiveForm.description}
+                onChange={(e) => setReceiveForm({ ...receiveForm, description: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+              />
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '15px' }}>
+            <button
+              type="submit"
+              style={{
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                transition: 'background-color 0.3s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#45a049')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#4CAF50')}
+            >
+              Receive
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              style={{
+                backgroundColor: '#f44336',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                transition: 'background-color 0.3s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#da190b')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#f44336')}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };
