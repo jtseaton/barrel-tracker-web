@@ -1,76 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <items>
   <!-- Brewing Ingredients -->
-  <item name="2-Row Barley" enabled="1" />
-  <item name="Rye Barley" enabled="1" />
-  <item name="Agave Syrup" enabled="1" />
-  <item name="Flaked Corn" enabled="1" />
-  <item name="Malted Barley" enabled="1" />
-  <item name="Wheat Malt" enabled="1" />
-  <item name="Oats" enabled="1" />
-  <item name="Rice Hulls" enabled="1" />
-  <item name="Crystal Malt" enabled="1" />
-  <item name="Chocolate Malt" enabled="1" />
-  <item name="Roasted Barley" enabled="1" />
-  <item name="Peated Malt" enabled="1" />
-  <item name="Munich Malt" enabled="1" />
-  <item name="Vienna Malt" enabled="1" />
-  <item name="Pilsner Malt" enabled="1" />
-  <item name="Corn Sugar" enabled="1" />
-  <item name="Molasses" enabled="1" />
-  <item name="Honey" enabled="1" />
-  <item name="Sorghum Syrup" enabled="1" />
-  <item name="Hops (Cascade)" enabled="1" />
-  <item name="Hops (Centennial)" enabled="1" />
-  <item name="Hops (Chinook)" enabled="1" />
-  <item name="Hops (Saaz)" enabled="1" />
-  <item name="Yeast (Ale)" enabled="1" />
-  <item name="Yeast (Lager)" enabled="1" />
-  <item name="Yeast (Distillers)" enabled="1" />
-  <item name="Water" enabled="1" />
+  <item name="2-Row Barley" type="Grain" enabled="1" />
+  <item name="Rye Barley" type="Grain" enabled="1" />
+  <item name="Agave Syrup" type="Sugar" enabled="1" />
+  <item name="Flaked Corn" type="Grain" enabled="1" />
+  <item name="Malted Barley" type="Grain" enabled="1" />
+  <item name="Wheat Malt" type="Grain" enabled="1" />
+  <item name="Oats" type="Grain" enabled="1" />
+  <item name="Hops (Cascade)" type="Hops" enabled="1" />
+  <item name="Yeast (Ale)" type="Yeast" enabled="1" />
+  <item name="Water" type="Water" enabled="1" />
+  <item name="Neutral Grain Spirits" type="Spirits" enabled="1" />
+  <item name="Juniper Berries" type="Botanical" enabled="1" />
 
   <!-- Distilling Ingredients -->
-  <item name="Barley Mash" enabled="1" />
-  <item name="Corn Mash" enabled="1" />
-  <item name="Rye Mash" enabled="1" />
-  <item name="Wheat Mash" enabled="1" />
-  <item name="Sugar Wash" enabled="1" />
-  <item name="Neutral Grain Spirits" enabled="1" />
-  <item name="Juniper Berries" enabled="1" />
-  <item name="Coriander Seeds" enabled="1" />
-  <item name="Angelica Root" enabled="1" />
-  <item name="Citrus Peel" enabled="1" />
-  <item name="Cinnamon Bark" enabled="1" />
-  <item name="Vanilla Beans" enabled="1" />
-  <item name="Oak Chips" enabled="1" />
-  <item name="Charred Oak" enabled="1" />
+  <item name="Barley Mash" type="Mash" enabled="1" />
+  <item name="Corn Mash" type="Mash" enabled="1" />
+  <item name="Oak Chips" type="Aging" enabled="1" />
 
   <!-- Beer Packaging -->
-  <item name="4 Case Tray" enabled="1" />
-  <item name="6 Case Tray" enabled="1" />
-  <item name="12 Case Tray" enabled="1" />
-  <item name="Paktech 6 Pack Carrier" enabled="1" />
-  <item name="202E Can Lids" enabled="1" />
-  <item name="12 oz Bottle" enabled="1" />
-  <item name="Bottle Crown" enabled="1" />
-  <item name="1/6 BBL Keg" enabled="1" />
-  <item name="1/4 BBL Keg" enabled="1" />
-  <item name="1/2 BBL Keg" enabled="1" />
-  <item name="12 oz Can" enabled="1" />
-  <item name="16 oz Can" enabled="1" />
-  <item name="19.2 oz Can" enabled="1" />
-  <item name="6 Pack Cardboard Carrier" enabled="1" />
+  <item name="4 Case Tray" type="Packaging" enabled="1" />
+  <item name="6 Case Tray" type="Packaging" enabled="1" />
+  <item name="12 Case Tray" type="Packaging" enabled="1" />
+  <item name="Paktech 6 Pack Carrier" type="Packaging" enabled="1" />
+  <item name="202E Can Lids" type="Packaging" enabled="1" />
+  <item name="12 oz Bottle" type="Packaging" enabled="1" />
+  <item name="Bottle Crown" type="Packaging" enabled="1" />
+  <item name="1/6 BBL Keg" type="Packaging" enabled="1" />
 
   <!-- Liquor Packaging -->
-  <item name="750ML Bottle" enabled="1" />
-  <item name="50ML Bottle" enabled="1" />
-  <item name="375ML Bottle" enabled="1" />
-  <item name="Cork" enabled="1" />
-  <item name="6 Bottle Case Box" enabled="1" />
-  <item name="12 Bottle Case Box" enabled="1" />
-  <item name="1L Bottle" enabled="1" />
-  <item name="1.75L Bottle" enabled="1" />
-  <item name="Screw Cap" enabled="1" />
-  <item name="Synthetic Cork" enabled="1" />
-  <item name="Shrink Capsule" enabled="1" />
+  <item name="750ML Bottle" type="Packaging" enabled="1" />
+  <item name="50ML Bottle" type="Packaging" enabled="1" />
+  <item name="375ML Bottle" type="Packaging" enabled="1" />
+  <item name="Cork" type="Packaging" enabled="1" />
+  <item name="6 Bottle Case Box" type="Packaging" enabled="1" />
 </items>
