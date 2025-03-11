@@ -378,28 +378,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                     style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
                   />
                 </label>
-                <div>
-                    <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Material Type:
-                    </label>
-                    <select
-                    value={receiveForm.materialType}
-                    onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
-                    style={{
-                        width: '100%',
-                        padding: '8px',
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        boxSizing: 'border-box', // Added to match input
-                    }}
-                    >
+                <label style={{ display: 'block', marginBottom: '10px' }}>
+                  Material Type:
+                  <select
+                    value={newItemType}
+                    onChange={(e) => setNewItemType(e.target.value)}
+                    style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  >
                     {Object.values(MaterialType).map((type) => (
-                        <option key={type} value={type}>
+                      <option key={type} value={type}>
                         {type}
-                        </option>
+                      </option>
                     ))}
-                    </select>
-                </div>
+                  </select>
+                </label>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <button
                     type="button"
@@ -444,96 +436,112 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             </div>
           )}
 
-          <div>
+        <div>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Material Type:
+        </label>
+        <select
+            value={receiveForm.materialType}
+            onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
+            style={{
+            width: '100%',
+            padding: '8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            boxSizing: 'border-box', // Added
+            }}
+        >
+            {Object.values(MaterialType).map((type) => (
+            <option key={type} value={type}>
+                {type}
+            </option>
+            ))}
+        </select>
+        </div>
+
+        {receiveForm.materialType === MaterialType.Spirits && (
+        <>
+            <div>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-              Material Type:
+                Account:
             </label>
             <select
-              value={receiveForm.materialType}
-              onChange={(e) => setReceiveForm({ ...receiveForm, materialType: e.target.value as MaterialType })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                value={receiveForm.account}
+                onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
+                style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                boxSizing: 'border-box', // Added
+                }}
             >
-              {Object.values(MaterialType).map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
             </select>
-          </div>
-
-          {receiveForm.materialType === MaterialType.Spirits && (
-            <>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Account:
-                </label>
-                <select
-                  value={receiveForm.account}
-                  onChange={(e) => setReceiveForm({ ...receiveForm, account: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                >
-                  <option value="Storage">Storage</option>
-                  <option value="Processing">Processing</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Proof:
-                </label>
-                <input
-                  type="number"
-                  value={receiveForm.proof}
-                  onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
-                  step="0.01"
-                  min="0"
-                  max="200"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  DSP Number:
-                </label>
-                <input
-                  type="text"
-                  value={receiveForm.dspNumber}
-                  onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </div>
-            </>
-          )}
-
-          <div>
+            </div>
+            <div>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-              Quantity:
+                Proof:
             </label>
             <input
-              type="number"
-              value={receiveForm.quantity}
-              onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
-              step="0.01"
-              min="0"
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                type="number"
+                value={receiveForm.proof}
+                onChange={(e) => setReceiveForm({ ...receiveForm, proof: e.target.value })}
+                step="0.01"
+                min="0"
+                max="200"
+                style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                boxSizing: 'border-box',
+                }}
             />
-          </div>
-
-          <div>
+            </div>
+            <div>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-              Unit:
+                DSP Number:
             </label>
-            <select
-              value={receiveForm.unit}
-              onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-            >
-              {Object.values(Unit).map((unit) => (
-                <option key={unit} value={unit}>
-                  {unit}
-                </option>
-              ))}
-            </select>
-          </div>
+            <input
+                type="text"
+                value={receiveForm.dspNumber}
+                onChange={(e) => setReceiveForm({ ...receiveForm, dspNumber: e.target.value })}
+                style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                boxSizing: 'border-box',
+                }}
+            />
+            </div>
+        </>
+        )}
+
+        <div>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Unit:
+        </label>
+        <select
+            value={receiveForm.unit}
+            onChange={(e) => setReceiveForm({ ...receiveForm, unit: e.target.value as Unit })}
+            style={{
+            width: '100%',
+            padding: '8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            boxSizing: 'border-box', // Added
+            }}
+        >
+            {Object.values(Unit).map((unit) => (
+            <option key={unit} value={unit}>
+                {unit}
+            </option>
+            ))}
+        </select>
+        </div>
 
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
