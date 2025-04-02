@@ -101,7 +101,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.poNumber}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, poNumber: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -110,7 +110,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.site}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, site: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -119,7 +119,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="date"
             value={purchaseOrder.poDate}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, poDate: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -128,7 +128,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.supplier}
             disabled
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', backgroundColor: '#000000', color: '#FFFFFF' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', backgroundColor: '#000000', color: '#FFFFFF', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -136,7 +136,7 @@ const PurchaseOrderForm: React.FC = () => {
           <textarea
             value={purchaseOrder.supplierAddress}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, supplierAddress: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -145,7 +145,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.supplierCity}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, supplierCity: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -154,7 +154,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.supplierState}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, supplierState: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -163,7 +163,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.supplierZip}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, supplierZip: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -171,7 +171,7 @@ const PurchaseOrderForm: React.FC = () => {
           <textarea
             value={purchaseOrder.comments}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, comments: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -180,7 +180,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.shipToName}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, shipToName: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -188,7 +188,7 @@ const PurchaseOrderForm: React.FC = () => {
           <textarea
             value={purchaseOrder.shipToAddress}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, shipToAddress: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -197,7 +197,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.shipToCity}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, shipToCity: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -206,7 +206,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.shipToState}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, shipToState: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -215,7 +215,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.shipToZip}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, shipToZip: e.target.value })}
-            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
       </div>
