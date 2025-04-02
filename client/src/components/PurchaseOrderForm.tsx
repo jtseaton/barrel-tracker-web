@@ -1,4 +1,3 @@
-// client/src/components/PurchaseOrderForm.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -20,12 +19,12 @@ interface PurchaseOrder {
 }
 
 const PurchaseOrderForm: React.FC = () => {
-  const { name } = useParams<{ name: string }>(); // Vendor name
+  const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [vendorDetails, setVendorDetails] = useState<{ name: string; address: string } | null>(null);
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder>({
     poNumber: '',
-    site: 'Main Site', // Placeholder until Sites page
+    site: 'Main Site',
     poDate: new Date().toISOString().split('T')[0],
     supplier: name || '',
     supplierAddress: '',
@@ -33,20 +32,19 @@ const PurchaseOrderForm: React.FC = () => {
     supplierState: '',
     supplierZip: '',
     comments: '',
-    shipToName: 'Paws & Pours', // Placeholder
-    shipToAddress: '789 Oak St', // Placeholder
+    shipToName: 'Paws & Pours',
+    shipToAddress: '789 Oak St',
     shipToCity: 'Birmingham',
     shipToState: 'AL',
     shipToZip: '35203',
   });
   const [productionError, setProductionError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
-    if (name) {
-      fetchVendorDetails();
-    }
+    if (name) fetchVendorDetails();
   }, [name]);
 
   const fetchVendorDetails = async () => {
@@ -59,7 +57,6 @@ const PurchaseOrderForm: React.FC = () => {
         ...prev,
         supplier: data.name,
         supplierAddress: data.address || '',
-        // Assuming address might need splitting later for city/state/zip
       }));
     } catch (err: any) {
       console.error('Fetch vendor error:', err);
@@ -79,10 +76,27 @@ const PurchaseOrderForm: React.FC = () => {
         body: JSON.stringify(purchaseOrder),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      navigate(`/vendors/${name}`);
+      setIsSaved(true);
+      setProductionError(null);
     } catch (err: any) {
       console.error('Save purchase order error:', err);
       setProductionError('Failed to save purchase order: ' + err.message);
+    }
+  };
+
+  const handleEmail = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/purchase-orders/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poNumber: purchaseOrder.poNumber, supplier: purchaseOrder.supplier }),
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      alert('Email sent to vendor!');
+      navigate(`/vendors/${name}`);
+    } catch (err: any) {
+      console.error('Email error:', err);
+      setProductionError('Failed to send email: ' + err.message);
     }
   };
 
@@ -97,8 +111,9 @@ const PurchaseOrderForm: React.FC = () => {
       borderRadius: '8px', 
       maxWidth: '800px', 
       margin: '20px auto',
-      maxHeight: '80vh', // Limits height to 80% of viewport
-      overflowY: 'auto'}}>
+      maxHeight: '80vh',
+      overflowY: 'auto'
+    }}>
       <h2 style={{ color: '#EEC930', fontSize: '28px', marginBottom: '20px' }}>Add New Purchase Order</h2>
       {productionError && <p style={{ color: '#F86752', fontSize: '16px' }}>{productionError}</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -233,6 +248,14 @@ const PurchaseOrderForm: React.FC = () => {
         >
           Save
         </button>
+        {isSaved && (
+          <button
+            onClick={handleEmail}
+            style={{ backgroundColor: '#EEC930', color: '#000000', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
+          >
+            Email to Vendor
+          </button>
+        )}
         <button
           onClick={handleCancel}
           style={{ backgroundColor: '#000000', color: '#EEC930', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
