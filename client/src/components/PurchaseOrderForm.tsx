@@ -91,7 +91,14 @@ const PurchaseOrderForm: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#2E4655', borderRadius: '8px', maxWidth: '800px', margin: '20px auto' }}>
+    <div style={{ 
+      padding: '20px', 
+      backgroundColor: '#2E4655', 
+      borderRadius: '8px', 
+      maxWidth: '800px', 
+      margin: '20px auto',
+      maxHeight: '80vh', // Limits height to 80% of viewport
+      overflowY: 'auto'}}>
       <h2 style={{ color: '#EEC930', fontSize: '28px', marginBottom: '20px' }}>Add New Purchase Order</h2>
       {productionError && <p style={{ color: '#F86752', fontSize: '16px' }}>{productionError}</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
