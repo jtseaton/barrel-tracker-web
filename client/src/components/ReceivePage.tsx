@@ -241,7 +241,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       margin: '20px auto',
       maxHeight: '80vh', // Limits height to 80% of viewport
       overflowY: 'auto'}}>
-      <h2 style={{ color: '#333', marginBottom: '20px' }}>Receive Inventory</h2>
+      <h2 style={{ color: '#ffffff', marginBottom: '20px' }}>Receive Inventory</h2>
       <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
         {productionError && <p style={{ color: '#f44336', marginBottom: '15px', textAlign: 'center' }}>{productionError}</p>}
         {successMessage && (
