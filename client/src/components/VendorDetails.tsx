@@ -247,7 +247,7 @@ const VendorDetails: React.FC = () => {
               <textarea
                 value={editedVendor.address}
                 onChange={(e) => setEditedVendor({ ...editedVendor, address: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px' }}
+                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px', boxSizing: 'border-box' }}
               />
             ) : (
               <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.address || 'N/A'}</span>
@@ -260,7 +260,7 @@ const VendorDetails: React.FC = () => {
                 type="email"
                 value={editedVendor.email}
                 onChange={(e) => setEditedVendor({ ...editedVendor, email: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
               />
             ) : (
               <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.email || 'N/A'}</span>
@@ -273,7 +273,7 @@ const VendorDetails: React.FC = () => {
                 type="tel"
                 value={editedVendor.phone}
                 onChange={(e) => setEditedVendor({ ...editedVendor, phone: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
               />
             ) : (
               <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.phone || 'N/A'}</span>
