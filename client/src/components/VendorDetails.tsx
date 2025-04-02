@@ -218,7 +218,7 @@ const VendorDetails: React.FC = () => {
                 type="text"
                 value={editedVendor.name}
                 onChange={(e) => setEditedVendor({ ...editedVendor, name: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
               />
             ) : (
               <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.name}</span>
