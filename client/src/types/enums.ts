@@ -10,6 +10,7 @@ export enum Unit {
   Gallons = 'gallons',
   Count = 'count',
 }
+export const TEST_VALUE = 'test'; // Add this line
 
 export enum MaterialType {
   Grain = 'Grain',

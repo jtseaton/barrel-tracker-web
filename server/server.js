@@ -278,23 +278,20 @@ app.patch('/api/vendors', (req, res) => {
   });
 });
 
-// GET /api/purchase-orders (replace existing)
 app.get('/api/purchase-orders', (req, res) => {
-  const { supplier } = req.query;
-  const query = supplier 
-    ? 'SELECT * FROM purchase_orders WHERE supplier = ? AND status = "Open"'
-    : 'SELECT * FROM purchase_orders WHERE status = "Open"';
-  const params = supplier ? [supplier] : [];
-  
+  const { source } = req.query;
+  let query = 'SELECT * FROM purchase_orders WHERE status = "Open"';
+  let params = [];
+  if (source) {
+    query += ' AND source = ?';
+    params.push(source);
+  }
   db.all(query, params, (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    const posWithItems = rows.map(row => ({
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows.map(row => ({
       ...row,
-      items: JSON.parse(row.items || '[]'),
-    }));
-    res.json(posWithItems);
+      items: JSON.parse(row.items),
+    })));
   });
 });
 
@@ -309,15 +306,15 @@ app.get('/api/purchase-orders/:poNumber', (req, res) => {
 
 app.post('/api/purchase-orders', (req, res) => {
   const { poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, items } = req.body;
-  if (!poNumber) return res.status(400).json({ error: 'PO Number is required' });
-  const itemsJson = JSON.stringify(items || []);
+  if (!poNumber || !supplier || !items.length) {
+    return res.status(400).json({ error: 'PO Number, Supplier, and at least one item are required' });
+  }
   db.run(
-    `INSERT OR REPLACE INTO purchase_orders (poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, items)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, itemsJson],
+    'INSERT INTO purchase_orders (poNumber, poDate, source, status, items) VALUES (?, ?, ?, ?, ?)',
+    [poNumber, poDate, supplier, 'Open', JSON.stringify(items)],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Purchase order saved successfully', poNumber });
+      res.json({ message: 'PO created' });
     }
   );
 });
