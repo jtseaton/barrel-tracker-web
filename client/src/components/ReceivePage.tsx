@@ -9,6 +9,11 @@ interface ReceivePageProps {
   refreshInventory: () => Promise<void>;
 }
 
+interface OtherCharge {
+  name: string;
+  cost: string;
+}
+
 interface Item {
   name: string;
   type: string;
@@ -35,8 +40,20 @@ interface ReceiveItem {
   proof?: string;
   cost?: string;
   description?: string;
-  poNumber?: string; // Add this
+  poNumber?: string;
+  isShipping?: boolean; // Add this
 }
+
+const OTHER_CHARGES_OPTIONS = [
+  'Credit Card Processing',
+  'Freight',
+  'Shipping',
+  'Skid',
+  'Milling',
+  'Tote Service',
+  'Storage',
+  'Discount',
+];
 
 const isFreightItem = (item: ReceiveItem) => 
   ['Freight', 'Shipping'].includes(item.identifier.toLowerCase());
@@ -45,19 +62,21 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
-  const [singleForm, setSingleForm] = useState<ReceiveForm>({
-    identifier: '',
-    account: 'Storage',
-    materialType: MaterialType.Grain,
-    quantity: '',
-    unit: Unit.Pounds,
-    proof: '',
-    source: location.state?.vendor || '',
-    dspNumber: OUR_DSP,
-    receivedDate: new Date().toISOString().split('T')[0],
-    description: '',
-    cost: '',
-  });
+const [otherCharges, setOtherCharges] = useState<OtherCharge[]>([]);
+const [singleForm, setSingleForm] = useState<ReceiveForm>({
+  identifier: '',
+  account: 'Storage',
+  materialType: MaterialType.Grain,
+  quantity: '',
+  unit: Unit.Pounds,
+  proof: '',
+  source: location.state?.vendor || '',
+  dspNumber: OUR_DSP,
+  receivedDate: new Date().toISOString().split('T')[0],
+  description: '',
+  cost: '',
+  // No isShipping anymore
+});
   const [useSingleItem, setUseSingleItem] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
@@ -208,9 +227,21 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     }
   };
   
+  const addChargeRow = () => {
+    setOtherCharges([...otherCharges, { name: '', cost: '' }]);
+  };
+  
+  const removeChargeRow = (index: number) => {
+    setOtherCharges(otherCharges.filter((_, i) => i !== index));
+  };
 
   const addItemRow = () => {
-    setReceiveItems([...receiveItems, { identifier: '', materialType: MaterialType.Grain, quantity: '', unit: Unit.Pounds }]);
+    setReceiveItems([...receiveItems, { 
+      identifier: '', 
+      materialType: MaterialType.Grain, 
+      quantity: '', 
+      unit: Unit.Pounds 
+    }]);
   };
 
   const removeItemRow = (index: number) => {
@@ -220,7 +251,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const handleReceive = async () => {
     const itemsToReceive = useSingleItem ? [singleForm] : receiveItems;
     if (!itemsToReceive.length || itemsToReceive.some(item => !item.identifier || !item.materialType || !item.quantity || !item.unit)) {
-      setProductionError('All items must have Item, Material Type, Quantity, and Unit');
+      setProductionError('All inventory items must have Item, Material Type, Quantity, and Unit');
       return;
     }
     const invalidItems = itemsToReceive.filter(item => 
@@ -231,25 +262,24 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
     );
     if (invalidItems.length) {
-      setProductionError('Invalid data in items: check Spirits proof, Other description, or numeric values');
+      setProductionError('Invalid data in inventory items: check Spirits proof, Other description, or numeric values');
+      return;
+    }
+    const invalidCharges = otherCharges.filter(charge => 
+      !charge.name || (charge.cost && (isNaN(parseFloat(charge.cost)) || parseFloat(charge.cost) < 0))
+    );
+    if (invalidCharges.length) {
+      setProductionError('Invalid other charges: ensure name is selected and cost is valid');
       return;
     }
   
-    // Split freight/shipping costs
-    const freightItems = itemsToReceive.filter(isFreightItem);
-    const inventoryItemsRaw = itemsToReceive.filter(item => !isFreightItem(item));
-    if (inventoryItemsRaw.length === 0 && freightItems.length > 0) {
-      setProductionError('Cannot receive only freight/shipping items');
-      return;
-    }
+    const totalOtherCost = otherCharges.reduce((sum, charge) => 
+      sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
+    const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
   
-    const totalFreightCost = freightItems.reduce((sum, item) => 
-      sum + (item.cost ? parseFloat(item.cost) : 0), 0);
-    const freightPerItem = inventoryItemsRaw.length > 0 ? totalFreightCost / inventoryItemsRaw.length : 0;
-  
-    const inventoryItems: InventoryItem[] = inventoryItemsRaw.map(item => {
+    const inventoryItems: InventoryItem[] = itemsToReceive.map(item => {
       const itemCost = item.cost ? parseFloat(item.cost) : 0;
-      const updatedCost = (itemCost + freightPerItem).toFixed(2);
+      const updatedCost = (itemCost + costPerItem).toFixed(2);
       return {
         identifier: item.identifier,
         account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Storage',
@@ -338,30 +368,30 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
           )}
         </div>
         {singleForm.source && (
-  <div style={{ marginBottom: '15px' }}>
-    <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Open Purchase Orders:</label>
-    {purchaseOrders.length > 0 ? (
-      <ul style={{ listStyle: 'none', padding: 0, maxHeight: '150px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#fff' }}>
-        {purchaseOrders.map(po => (
-          <li
-            key={po.poNumber}
-            onClick={() => handlePOSelect(po.poNumber)} // Pass just the poNumber
-            style={{
-              padding: '8px 10px',
-              cursor: 'pointer',
-              backgroundColor: selectedPO === po.poNumber ? '#e0e0e0' : '#fff',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            {po.poNumber} - {po.poDate} ({po.items.length} items)
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p style={{ color: '#555' }}>No open POs for {singleForm.source}</p>
-    )}
-  </div>
-)}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Open Purchase Orders:</label>
+            {purchaseOrders.length > 0 ? (
+              <ul style={{ listStyle: 'none', padding: 0, maxHeight: '150px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#fff' }}>
+                {purchaseOrders.map(po => (
+                  <li
+                    key={po.poNumber}
+                    onClick={() => handlePOSelect(po.poNumber)}
+                    style={{
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      backgroundColor: selectedPO === po.poNumber ? '#e0e0e0' : '#fff',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {po.poNumber} - {po.poDate} ({po.items.length} items)
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ color: '#555' }}>No open POs for {singleForm.source}</p>
+            )}
+          </div>
+        )}
         {useSingleItem ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
             <div style={{ position: 'relative' }}>
@@ -503,6 +533,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
           </div>
         ) : (
           <div>
+            <h3 style={{ color: '#555', marginBottom: '10px' }}>Inventory Items</h3>
             {receiveItems.map((item, index) => (
               <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
                 <div style={{ position: 'relative' }}>
@@ -641,6 +672,52 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
             >
               Add Item
+            </button>
+            <h3 style={{ color: '#555', marginTop: '20px', marginBottom: '10px' }}>Other Charges</h3>
+            {otherCharges.map((charge, index) => (
+              <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
+                <select
+                  value={charge.name}
+                  onChange={(e) => {
+                    const updatedCharges = [...otherCharges];
+                    updatedCharges[index].name = e.target.value;
+                    setOtherCharges(updatedCharges);
+                  }}
+                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                >
+                  <option value="">Select Charge</option>
+                  {OTHER_CHARGES_OPTIONS.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  value={charge.cost}
+                  onChange={(e) => {
+                    const updatedCharges = [...otherCharges];
+                    updatedCharges[index].cost = e.target.value;
+                    setOtherCharges(updatedCharges);
+                  }}
+                  step="0.01"
+                  min="0"
+                  placeholder="Cost"
+                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeChargeRow(index)}
+                  style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
+                >
+                  X
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addChargeRow}
+              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+            >
+              Add Charge
             </button>
           </div>
         )}
