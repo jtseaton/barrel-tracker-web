@@ -3,9 +3,10 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 const xml2js = require('xml2js');
-const app = express();
-
+const nodemailer = require('nodemailer');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../client/build')));
@@ -16,6 +17,14 @@ const db = new sqlite3.Database(':memory:', (err) => {
 });
 
 const OUR_DSP = 'DSP-AL-20010';
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 db.serialize(() => {
   db.run(`
@@ -33,7 +42,7 @@ db.serialize(() => {
       status TEXT,
       description TEXT,
       cost TEXT,
-      UNIQUE(identifier, type, account) -- Prevent duplicates
+      UNIQUE(identifier, type, account)
     )
   `);
   db.run(`
@@ -80,11 +89,12 @@ db.serialize(() => {
       shipToAddress TEXT,
       shipToCity TEXT,
       shipToState TEXT,
-      shipToZip TEXT
+      shipToZip TEXT,
+      items TEXT  -- JSON string of items: [{name: string, quantity: number}]
     )
   `);
-   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
-   ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+  db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
+    ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
 });
 
 const loadItemsFromXML = () => {
@@ -99,24 +109,19 @@ const loadItemsFromXML = () => {
         return;
       }
       const items = result.items.item || [];
-      console.log('Raw XML parse result:', JSON.stringify(result, null, 2)); // Full dump
-      console.log('Items array:', items);
-      items.forEach((item, index) => {
-        const attributes = item.$ || {}; // Ensure attributes exist
+      items.forEach((item) => {
+        const attributes = item.$ || {};
         const name = String(attributes.name || '').replace(/[^a-zA-Z0-9\s]/g, '');
-        const type = String(attributes.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, ''); // Fallback to Other
+        const type = String(attributes.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, '');
         const enabled = parseInt(attributes.enabled || '1', 10) || 1;
-        console.log(`Item ${index}: name="${name}", type="${type}", enabled=${enabled}`);
         db.run(
           'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
           [name, type, enabled],
           (err) => {
             if (err) console.error(`Error inserting item ${name}:`, err);
-            else console.log(`Inserted: name="${name}", type="${type}", enabled=${enabled}`);
           }
         );
       });
-      console.log('Items load complete, count:', items.length);
     });
   });
 };
@@ -127,7 +132,7 @@ loadItemsFromXML();
 app.get('/api/items', (req, res) => {
   db.all('SELECT name, type, enabled FROM items', (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows); // Now includes type
+    res.json(rows);
   });
 });
 
@@ -247,52 +252,50 @@ app.get('/api/purchase-orders', (req, res) => {
   if (!supplier) return res.status(400).json({ error: 'Supplier is required' });
   db.all('SELECT * FROM purchase_orders WHERE supplier = ?', [supplier], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows.map(row => ({ ...row, items: JSON.parse(row.items || '[]') })));
+  });
+});
+
+app.get('/api/purchase-orders/:poNumber', (req, res) => {
+  const { poNumber } = req.params;
+  db.get('SELECT * FROM purchase_orders WHERE poNumber = ?', [poNumber], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Purchase order not found' });
+    res.json({ ...row, items: JSON.parse(row.items || '[]') });
   });
 });
 
 app.post('/api/purchase-orders', (req, res) => {
-  const { poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip } = req.body;
+  const { poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, items } = req.body;
   if (!poNumber) return res.status(400).json({ error: 'PO Number is required' });
+  const itemsJson = JSON.stringify(items || []);
   db.run(
-    `INSERT INTO purchase_orders (poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip],
+    `INSERT OR REPLACE INTO purchase_orders (poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, items)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, itemsJson],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Purchase order created successfully', poNumber });
+      res.json({ message: 'Purchase order saved successfully', poNumber });
     }
   );
 });
 
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-// Add this endpoint after /api/purchase-orders POST
 app.post('/api/purchase-orders/email', (req, res) => {
   const { poNumber, supplier } = req.body;
-
-  if (!poNumber || !supplier) {
-    return res.status(400).json({ error: 'PO Number and supplier are required' });
-  }
+  if (!poNumber || !supplier) return res.status(400).json({ error: 'PO Number and supplier are required' });
 
   db.get('SELECT * FROM purchase_orders WHERE poNumber = ?', [poNumber], (err, po) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!po) return res.status(404).json({ error: 'Purchase order not found' });
 
+    const items = JSON.parse(po.items || '[]');
     db.get('SELECT email FROM vendors WHERE name = ?', [supplier], (err, vendor) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!vendor || !vendor.email) return res.status(404).json({ error: 'Vendor email not found' });
 
+      const itemsText = items.length ? items.map(item => `${item.name}: ${item.quantity}`).join('\n') : 'No items';
       const mailOptions = {
-        from: 'your-email@gmail.com', // Match the auth user
+        from: process.env.EMAIL_USER,
         to: vendor.email,
         subject: `Purchase Order ${poNumber}`,
         text: `
@@ -302,6 +305,8 @@ app.post('/api/purchase-orders/email', (req, res) => {
           Supplier: ${po.supplier}
           Address: ${po.supplierAddress}, ${po.supplierCity}, ${po.supplierState} ${po.supplierZip}
           Comments: ${po.comments || 'None'}
+          Items:
+          ${itemsText}
           Ship To: ${po.shipToName}, ${po.shipToAddress}, ${po.shipToCity}, ${po.shipToState} ${po.shipToZip}
         `,
       };
@@ -309,7 +314,7 @@ app.post('/api/purchase-orders/email', (req, res) => {
       transporter.sendMail(mailOptions, (error) => {
         if (error) {
           console.error('Email error:', error);
-          return res.status(500).json({ error: 'Failed to send email' });
+          return res.status(500).json({ error: 'Failed to send email: ' + error.message });
         }
         res.json({ message: 'Email sent successfully' });
       });
@@ -317,17 +322,6 @@ app.post('/api/purchase-orders/email', (req, res) => {
   });
 });
 
-app.get('/api/inventory', (req, res) => {
-  db.all('SELECT * FROM inventory', (err, rows) => {
-    if (err) {
-      console.error('DB Select Error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
-});
-
-// Add after other endpoints
 app.get('/api/inventory', (req, res) => {
   const { source } = req.query;
   let query = 'SELECT identifier, type, quantity, receivedDate, status FROM inventory';
@@ -344,8 +338,6 @@ app.get('/api/inventory', (req, res) => {
     res.json(rows);
   });
 });
-
-// ... (existing code)
 
 app.get('/api/products', (req, res) => {
   const mockProducts = [
@@ -388,7 +380,7 @@ app.post('/api/products', (req, res) => {
     return res.status(400).json({ error: 'Name and abbreviation are required' });
   }
   const newProduct = {
-    id: Date.now(), // Mock ID—replace with DB auto-increment
+    id: Date.now(),
     name,
     abbreviation,
     enabled,
@@ -405,11 +397,11 @@ app.post('/api/products', (req, res) => {
 
 app.delete('/api/products', (req, res) => {
   console.log('Received DELETE to /api/products:', req.body);
-  const { ids } = req.body; // Array of IDs to delete
+  const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) {
     return res.status(400).json({ error: 'IDs array is required' });
   }
-  res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` }); // Mock response
+  res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` });
 });
 
 app.post('/api/receive', (req, res) => {
@@ -443,7 +435,6 @@ app.post('/api/receive', (req, res) => {
     return res.status(400).json({ error: 'Description required for Other type' });
   }
 
-  // Declare variables up top
   const parsedQuantity = parseFloat(quantity);
   const parsedProof = proof ? parseFloat(proof) : null;
   const parsedCost = cost ? parseFloat(cost) : null;
@@ -599,7 +590,7 @@ app.post('/api/move', (req, res) => {
                   date: new Date().toISOString().split('T')[0],
                   fromAccount: row.account,
                   toAccount,
-                  status: toAccount === 'Processing' ? 'Processing' : 'Stored', // Add status to response
+                  status: toAccount === 'Processing' ? 'Processing' : 'Stored',
                   serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
                 };
                 console.log('Move successful, tankSummary:', tankSummary);
@@ -635,7 +626,7 @@ app.post('/api/move', (req, res) => {
                 new Date().toISOString().split('T')[0],
                 row.source,
                 row.dspNumber,
-                toAccount === 'Processing' ? 'Processing' : 'Stored' // Set status here too
+                toAccount === 'Processing' ? 'Processing' : 'Stored'
               ],
               (err) => {
                 if (err) {
@@ -671,7 +662,7 @@ app.post('/api/move', (req, res) => {
                       date: new Date().toISOString().split('T')[0],
                       fromAccount: row.account,
                       toAccount,
-                      status: toAccount === 'Processing' ? 'Processing' : 'Stored', // Add status to response
+                      status: toAccount === 'Processing' ? 'Processing' : 'Stored',
                       serialNumber: `${new Date().toISOString().replace(/-/g, '').slice(2)}-${Math.floor(Math.random() * 1000)}`
                     };
                     console.log('Partial move successful, tankSummary:', tankSummary);
@@ -695,10 +686,8 @@ app.post('/api/package', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // Generate a new batch ID for the packaged product
   const newBatchId = `${product.replace(/\s+/g, '')}-${date.replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`;
 
-  // Find the source batch to get its details
   db.get('SELECT * FROM inventory WHERE identifier = ?', [batchId], (err, row) => {
     if (err) {
       console.error('DB Select Error:', err);
@@ -709,7 +698,6 @@ app.post('/api/package', (req, res) => {
       return res.status(404).json({ error: 'Source batch not found' });
     }
 
-    // Check if there's enough proof gallons
     const sourceProofGallons = parseFloat(row.proofGallons);
     const requestedProofGallons = parseFloat(proofGallons);
     if (sourceProofGallons < requestedProofGallons) {
@@ -719,7 +707,6 @@ app.post('/api/package', (req, res) => {
     db.serialize(() => {
       db.run('BEGIN TRANSACTION');
 
-      // Insert the new packaged item
       db.run(
         `INSERT INTO inventory (identifier, account, type, quantity, proof, proofGallons, receivedDate, source, dspNumber, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Packaged')`,
@@ -731,7 +718,6 @@ app.post('/api/package', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
 
-          // Update the source batch by reducing proof gallons and quantity
           const remainingProofGallons = (sourceProofGallons - requestedProofGallons).toFixed(2);
           const originalQuantity = parseFloat(row.quantity);
           const usedQuantity = (originalQuantity * (requestedProofGallons / sourceProofGallons)).toFixed(2);
@@ -747,7 +733,6 @@ app.post('/api/package', (req, res) => {
                 return res.status(500).json({ error: err.message });
               }
 
-              // Record the transaction
               db.run(
                 `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
                  VALUES (?, ?, ?, ?, ?, 'Packaged', ?)`,
@@ -779,7 +764,7 @@ app.post('/api/record-loss', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const dspToUse = dspNumber || OUR_DSP; // Use client-provided dspNumber or fallback to OUR_DSP
+  const dspToUse = dspNumber || OUR_DSP;
 
   db.run(
     `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
@@ -790,7 +775,6 @@ app.post('/api/record-loss', (req, res) => {
         console.error('Transaction Insert Error:', err);
         return res.status(500).json({ error: err.message });
       }
-      // Update inventory to reflect loss
       db.run(
         `UPDATE inventory SET quantity = quantity - ?, proofGallons = proofGallons - ? WHERE identifier = ?`,
         [parseFloat(quantityLost), parseFloat(proofGallonsLost), identifier],
