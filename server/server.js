@@ -93,9 +93,36 @@ db.serialize(() => {
       items TEXT  -- JSON string of items: [{name: string, quantity: number}]
     )
   `);
+  // Initialize purchase_orders with status
+  db.run(`
+  CREATE TABLE IF NOT EXISTS purchase_orders (
+    poNumber TEXT PRIMARY KEY,
+    site TEXT,
+    poDate TEXT,
+    supplier TEXT,
+    supplierAddress TEXT,
+    supplierCity TEXT,
+    supplierState TEXT,
+    supplierZip TEXT,
+    comments TEXT,
+    shipToName TEXT,
+    shipToAddress TEXT,
+    shipToCity TEXT,
+    shipToState TEXT,
+    shipToZip TEXT,
+    status TEXT DEFAULT 'Open'
+    )
+` );
+
+  // Migrate existing data (run once, then comment out or remove)
+  db.run(`ALTER TABLE purchase_orders ADD COLUMN status TEXT DEFAULT 'Open'`, (err) => {
+   if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding status column:', err);
+   } 
+  });
   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-});
+  });
 
 const loadItemsFromXML = () => {
   fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
@@ -246,13 +273,23 @@ app.patch('/api/vendors', (req, res) => {
   });
 });
 
-// Purchase Orders endpoints
+// GET /api/purchase-orders (replace existing)
 app.get('/api/purchase-orders', (req, res) => {
   const { supplier } = req.query;
-  if (!supplier) return res.status(400).json({ error: 'Supplier is required' });
-  db.all('SELECT * FROM purchase_orders WHERE supplier = ?', [supplier], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows.map(row => ({ ...row, items: JSON.parse(row.items || '[]') })));
+  const query = supplier 
+    ? 'SELECT * FROM purchase_orders WHERE supplier = ? AND status = "Open"'
+    : 'SELECT * FROM purchase_orders WHERE status = "Open"';
+  const params = supplier ? [supplier] : [];
+  
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    const posWithItems = rows.map(row => ({
+      ...row,
+      items: JSON.parse(row.items || '[]'),
+    }));
+    res.json(posWithItems);
   });
 });
 
@@ -404,96 +441,116 @@ app.delete('/api/products', (req, res) => {
   res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` });
 });
 
+// POST /api/receive (replace existing)
 app.post('/api/receive', (req, res) => {
-  console.log('Received POST to /api/receive:', req.body);
-  const {
-    identifier,
-    account,
-    type,
-    quantity,
-    unit,
-    proof,
-    proofGallons,
-    receivedDate,
-    source,
-    dspNumber,
-    status,
-    description,
-    cost,
-  } = req.body;
+  const items = Array.isArray(req.body) ? req.body : [req.body];
+  const poNumber = items[0]?.poNumber; // Assuming PO is passed if tied to one
 
-  if (!account || !type || !quantity || !unit || !receivedDate || !status) {
-    console.log('Validation failed: missing required fields');
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-  if (type === 'Spirits' && (!identifier || !proof)) {
-    console.log('Validation failed: Spirits require identifier and proof');
-    return res.status(400).json({ error: 'Spirits require an identifier and proof' });
-  }
-  if (type === 'Other' && !description) {
-    console.log('Validation failed: Description required for Other');
-    return res.status(400).json({ error: 'Description required for Other type' });
+  const validateItem = (item) => {
+    const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost } = item;
+    if (!account || !type || !quantity || !unit || !receivedDate || !status) {
+      return 'Missing required fields';
+    }
+    if (type === 'Spirits' && (!identifier || !proof)) {
+      return 'Spirits require identifier and proof';
+    }
+    if (type === 'Other' && !description) {
+      return 'Description required for Other type';
+    }
+    const parsedQuantity = parseFloat(quantity);
+    const parsedProof = proof ? parseFloat(proof) : null;
+    const parsedCost = cost ? parseFloat(cost) : null;
+    if (isNaN(parsedQuantity) || parsedQuantity <= 0 || 
+        (parsedProof && (parsedProof > 200 || parsedProof < 0)) || 
+        (parsedCost && parsedCost < 0)) {
+      return 'Invalid quantity, proof, or cost';
+    }
+    return null;
+  };
+
+  const errors = items.map(validateItem).filter(e => e);
+  if (errors.length) {
+    return res.status(400).json({ error: errors[0] });
   }
 
-  const parsedQuantity = parseFloat(quantity);
-  const parsedProof = proof ? parseFloat(proof) : null;
-  const parsedCost = cost ? parseFloat(cost) : null;
-  if (isNaN(parsedQuantity) || parsedQuantity <= 0 || (parsedProof && (parsedProof > 200 || parsedProof < 0)) || (parsedCost && parsedCost < 0)) {
-    console.log('Validation failed: invalid quantity, proof, or cost');
-    return res.status(400).json({ error: 'Invalid quantity, proof, or cost' });
-  }
-  const finalProofGallons = type === 'Spirits' ? (proofGallons || (parsedQuantity * (parsedProof / 100)).toFixed(2)) : '0.00';
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+    items.forEach(item => {
+      const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost } = item;
+      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
 
-  db.get(
-    'SELECT quantity, proofGallons FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
-    [identifier, type, account],
-    (err, row) => {
+      db.get(
+        'SELECT quantity, proofGallons FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
+        [identifier, type, account],
+        (err, row) => {
+          if (err) {
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: err.message });
+          }
+          if (row) {
+            const existingQuantity = parseFloat(row.quantity);
+            const newQuantity = (existingQuantity + parseFloat(quantity)).toFixed(2);
+            const existingProofGallons = parseFloat(row.proofGallons || '0');
+            const newProofGallons = type === 'Spirits' ? (existingProofGallons + parseFloat(finalProofGallons)).toFixed(2) : '0.00';
+            db.run(
+              `UPDATE inventory SET quantity = ?, proofGallons = ?, receivedDate = ?, source = ?, cost = ? WHERE identifier = ? AND type = ? AND account = ?`,
+              [newQuantity, newProofGallons, receivedDate, source || 'Unknown', cost || null, identifier, type, account],
+              (err) => {
+                if (err) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: err.message });
+                }
+              }
+            );
+          } else {
+            db.run(
+              `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber || null, status, description || null, cost || null],
+              (err) => {
+                if (err) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: err.message });
+                }
+              }
+            );
+          }
+        }
+      );
+    });
+
+    // Check if PO is fully received (simplified: close if any items received)
+    if (poNumber) {
+      db.get('SELECT items FROM purchase_orders WHERE poNumber = ?', [poNumber], (err, row) => {
+        if (err) {
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: err.message });
+        }
+        if (row) {
+          const poItems = JSON.parse(row.items || '[]');
+          const allReceived = poItems.every(poItem => 
+            items.some(recItem => recItem.identifier === poItem.name && parseFloat(recItem.quantity) >= poItem.quantity)
+          );
+          if (allReceived) {
+            db.run('UPDATE purchase_orders SET status = "Closed" WHERE poNumber = ?', [poNumber], (err) => {
+              if (err) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err.message });
+              }
+            });
+          }
+        }
+      });
+    }
+
+    db.run('COMMIT', (err) => {
       if (err) {
-        console.error('Select error:', err);
+        db.run('ROLLBACK');
         return res.status(500).json({ error: err.message });
       }
-      if (row) {
-        const existingQuantity = parseFloat(row.quantity);
-        const newQuantity = (existingQuantity + parsedQuantity).toFixed(2);
-        const existingProofGallons = parseFloat(row.proofGallons || '0');
-        const newProofGallons = type === 'Spirits' ? (existingProofGallons + parseFloat(finalProofGallons)).toFixed(2) : '0.00';
-        console.log('Updating inventory:', { identifier, newQuantity });
-        db.run(
-          `UPDATE inventory SET 
-            quantity = ?, 
-            proofGallons = ?, 
-            receivedDate = ?, 
-            source = ?, 
-            cost = ? 
-           WHERE identifier = ? AND type = ? AND account = ?`,
-          [newQuantity, newProofGallons, receivedDate, source || 'Unknown', cost || null, identifier, type, account],
-          (err) => {
-            if (err) {
-              console.error('Update error:', err);
-              return res.status(500).json({ error: err.message });
-            }
-            console.log('Update successful');
-            res.json({ message: 'Receive successful' });
-          }
-        );
-      } else {
-        console.log('Inserting into inventory:', req.body);
-        db.run(
-          `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber || null, status, description || null, cost || null],
-          (err) => {
-            if (err) {
-              console.error('Insert error:', err);
-              return res.status(500).json({ error: err.message });
-            }
-            console.log('Insert successful');
-            res.json({ message: 'Receive successful' });
-          }
-        );
-      }
-    }
-  );
+      res.json({ message: 'Receive successful' });
+    });
+  });
 });
 
 app.post('/api/produce', (req, res) => {
