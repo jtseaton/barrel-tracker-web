@@ -5,7 +5,7 @@ const fs = require('fs');
 const xml2js = require('xml2js');
 const app = express();
 
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../client/build')));
