@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { MaterialType } from '../types/interfaces';
 
 interface PurchaseOrder {
   poNumber: string;
@@ -16,7 +17,7 @@ interface PurchaseOrder {
   shipToCity: string;
   shipToState: string;
   shipToZip: string;
-  items: { name: string; quantity: number }[];
+  items: { name: string; quantity: number; materialType: MaterialType }[];
 }
 
 interface Item {
@@ -47,10 +48,11 @@ const PurchaseOrderForm: React.FC = () => {
     items: [],
   });
   const [productionError, setProductionError] = useState<string | null>(null);
-  const [isSaved, setIsSaved] = useState(!!poNumber); // True if editing an existing PO
+  const [isSaved, setIsSaved] = useState(!!poNumber);
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
   const [selectedItem, setSelectedItem] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
+  const [selectedMaterialType, setSelectedMaterialType] = useState<MaterialType>(MaterialType.Grain);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
@@ -106,13 +108,14 @@ const PurchaseOrderForm: React.FC = () => {
       setProductionError('Select an item and enter a valid quantity');
       return;
     }
-    const newItem = { name: selectedItem, quantity: parseFloat(quantity) };
+    const newItem = { name: selectedItem, quantity: parseFloat(quantity), materialType: selectedMaterialType };
     setPurchaseOrder((prev) => ({
       ...prev,
       items: [...prev.items, newItem],
     }));
     setSelectedItem('');
     setQuantity('');
+    setSelectedMaterialType(MaterialType.Grain);
     setProductionError(null);
   };
 
@@ -124,8 +127,8 @@ const PurchaseOrderForm: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!purchaseOrder.poNumber) {
-      setProductionError('PO Number is required');
+    if (!purchaseOrder.poNumber || !purchaseOrder.items.length) {
+      setProductionError('PO Number and at least one item are required');
       return;
     }
     try {
@@ -184,7 +187,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.poNumber}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, poNumber: e.target.value })}
-            disabled={!!poNumber} // Lock PO number when editing
+            disabled={!!poNumber}
             style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
@@ -323,6 +326,15 @@ const PurchaseOrderForm: React.FC = () => {
               min="1"
               style={{ padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', width: '100px' }}
             />
+            <select
+              value={selectedMaterialType}
+              onChange={(e) => setSelectedMaterialType(e.target.value as MaterialType)}
+              style={{ padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', width: '150px' }}
+            >
+              {Object.values(MaterialType).map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
             <button
               onClick={handleAddItem}
               style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
@@ -333,7 +345,7 @@ const PurchaseOrderForm: React.FC = () => {
           <ul style={{ listStyle: 'none', padding: 0, marginTop: '10px' }}>
             {purchaseOrder.items.map((item, index) => (
               <li key={index} style={{ display: 'flex', justifyContent: 'space-between', color: '#FFFFFF', marginBottom: '5px' }}>
-                {item.name}: {item.quantity}
+                {item.name}: {item.quantity} ({item.materialType})
                 <button
                   onClick={() => handleRemoveItem(index)}
                   style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '5px 10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
@@ -352,7 +364,7 @@ const PurchaseOrderForm: React.FC = () => {
         >
           Save
         </button>
-        {(isSaved || poNumber) && ( // Show email button if saved or editing
+        {(isSaved || poNumber) && (
           <button
             onClick={handleEmail}
             style={{ backgroundColor: '#EEC930', color: '#000000', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
