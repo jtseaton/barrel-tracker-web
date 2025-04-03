@@ -21,7 +21,7 @@ import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import { InventoryItem } from './types/interfaces';
 import './App.css';
 
-// Stub components (should already exist or be placeholders in your codebase)
+// Stub components
 const Facility: React.FC = () => <div><h2>Facility</h2><p>Facility page coming soon</p></div>;
 const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
 const Locations: React.FC = () => <div><h2>Locations</h2><p>Locations page coming soon</p></div>;
@@ -59,14 +59,14 @@ const AppContent: React.FC = () => {
       setShowInventorySubmenu(false);
       setShowProductionSubmenu(false);
       setActiveSection(path === '/' ? 'Home' : path.slice(1).replace('-', ' & ').replace(/(^\w|\s\w)/g, m => m.toUpperCase()));
-    } else if (path === '/inventory' || path === '/receive' || path === '/transfers' || path === '/items' || path.startsWith('/items/') || path.startsWith('/vendors/')) {
+    } else if (path === '/inventory' || path === '/receive' || path === '/transfers' || path === '/items' || path.startsWith('/items/') || path.startsWith('/vendors')) {
       setShowInventorySubmenu(true);
       setShowProductionSubmenu(false);
       if (path === '/inventory') setActiveSection('Inventory');
       else if (path === '/receive') setActiveSection('Inventory');
       else if (path === '/transfers') setActiveSection('Transfers');
       else if (path === '/items' || path.startsWith('/items/')) setActiveSection('Items');
-      else if (path.startsWith('/vendors/')) setActiveSection('Vendors'); // Updated for PO routes
+      else if (path.startsWith('/vendors')) setActiveSection('Vendors');
     } else if (path === '/production' || path === '/products' || path === '/facility' || path === '/production-page' || path === '/locations' || path === '/equipment' || path === '/planning' || path === '/facility-designer') {
       setShowProductionSubmenu(true);
       setShowInventorySubmenu(false);
@@ -234,7 +234,8 @@ const AppContent: React.FC = () => {
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
           <Route path="/vendors" element={<Vendors />} />
-          <Route path="/vendors/:name" element={<PurchaseOrderList />} /> {/* Updated to PO list */}
+          <Route path="/vendors/:name" element={<VendorDetails />} />
+          <Route path="/vendors/:name/purchase-orders" element={<PurchaseOrderList />} />
           <Route path="/vendors/:name/purchase-orders/new" element={<PurchaseOrderForm />} />
           <Route path="/vendors/:name/purchase-orders/:poNumber" element={<PurchaseOrderForm />} />
           <Route path="/processing" element={<Processing inventory={inventory} refreshInventory={refreshInventory} />} />
