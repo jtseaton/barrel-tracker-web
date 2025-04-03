@@ -1,6 +1,5 @@
-// client/src/components/VendorDetails.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
 interface Vendor {
   name: string;
@@ -39,7 +38,7 @@ interface PurchaseOrder {
 const VendorDetails: React.FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const location = useLocation(); // Added to track navigation return
+  const location = useLocation();
   const [vendorDetails, setVendorDetails] = useState<Vendor | null>(null);
   const [editing, setEditing] = useState(name === 'new');
   const [editedVendor, setEditedVendor] = useState<Vendor>({
@@ -84,7 +83,7 @@ const VendorDetails: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setReceipts(data.filter((item: InventoryReceipt) => ['Received', 'Stored'].includes(item.status || '')));
-      setProductionError(null); // Clear error on success
+      setProductionError(null);
     } catch (err: any) {
       console.error('Fetch receipts error:', err);
       setProductionError('Failed to fetch receipts: ' + err.message);
@@ -144,15 +143,30 @@ const VendorDetails: React.FC = () => {
   };
 
   const handleAddPurchaseOrder = () => {
-    navigate(`/vendors/${name}/purchase-order/new`);
+    if (name === 'new') {
+      setProductionError('Save the vendor before adding a purchase order');
+      return;
+    }
+    navigate(`/vendors/${name}/purchase-orders/new`);
   };
 
-  // Refresh receipts when returning from /receive
+  const handleViewPOs = () => {
+    if (name === 'new') {
+      setProductionError('Save the vendor before viewing purchase orders');
+      return;
+    }
+    navigate(`/vendors/${name}/purchase-orders`);
+  };
+
+  const handleEditPO = (poNumber: string) => {
+    navigate(`/vendors/${name}/purchase-orders/${poNumber}`);
+  };
+
   useEffect(() => {
     if (location.state?.fromVendor && name && name !== 'new') {
       fetchReceipts();
     }
-  }, [location.state, name]); // Dependencies include location.state and name
+  }, [location.state, name]);
 
   if (name && name !== 'new' && !vendorDetails) return <div>Loading...</div>;
 
@@ -192,7 +206,7 @@ const VendorDetails: React.FC = () => {
             Inventory Receipts
           </button>
           <button
-            onClick={() => setActiveTab('orders')}
+            onClick={handleViewPOs}
             style={{
               backgroundColor: activeTab === 'orders' ? '#F86752' : '#000000',
               color: activeTab === 'orders' ? '#FFFFFF' : '#EEC930',
@@ -356,6 +370,7 @@ const VendorDetails: React.FC = () => {
                 <th>Site</th>
                 <th>PO Date</th>
                 <th>Comments</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -365,6 +380,14 @@ const VendorDetails: React.FC = () => {
                   <td>{order.site}</td>
                   <td>{order.poDate}</td>
                   <td>{order.comments || 'N/A'}</td>
+                  <td>
+                    <button
+                      onClick={() => handleEditPO(order.poNumber)}
+                      style={{ backgroundColor: '#EEC930', color: '#000000', padding: '5px 10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
