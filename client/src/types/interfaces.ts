@@ -52,7 +52,8 @@ export interface ReceiveForm {
   receivedDate: string;
   description?: string;
   cost?: string;
-  poNumber?: string; // Add this
+  poNumber?: string;
+  isShipping?: boolean; // Add this
 }
 
 export interface InventoryItem {
@@ -69,7 +70,8 @@ export interface InventoryItem {
   status: Status;
   description?: string;
   cost?: string;
-  poNumber?: string; // Add this
+  poNumber?: string;
+  // No isShipping here—it’s not stored
 }
 
 export interface MoveForm {
