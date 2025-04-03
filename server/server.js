@@ -470,9 +470,10 @@ app.post('/api/receive', (req, res) => {
   db.serialize(() => {
     db.run('BEGIN TRANSACTION');
     items.forEach(item => {
-      const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost } = item;
+      const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost, totalCost } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
-      const itemTotalCost = cost ? (parseFloat(cost) * parseFloat(quantity)).toFixed(2) : '0.00';
+      const finalTotalCost = totalCost || '0.00'; // Use provided totalCost
+      const finalUnitCost = cost || '0.00'; // Use provided unit cost
 
       db.get(
         'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
@@ -486,12 +487,12 @@ app.post('/api/receive', (req, res) => {
             const existingQuantity = parseFloat(row.quantity);
             const existingTotalCost = parseFloat(row.totalCost || '0');
             const newQuantity = (existingQuantity + parseFloat(quantity)).toFixed(2);
-            const newTotalCost = (existingTotalCost + parseFloat(itemTotalCost)).toFixed(2);
-            const avgCost = (newTotalCost / newQuantity).toFixed(2);
+            const newTotalCost = (existingTotalCost + parseFloat(finalTotalCost)).toFixed(2);
+            const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
             db.run(
               `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ? 
                WHERE identifier = ? AND type = ? AND account = ?`,
-              [newQuantity, newTotalCost, avgCost, finalProofGallons, receivedDate, source || 'Unknown', unit, identifier, type, account],
+              [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, identifier, type, account],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
@@ -500,11 +501,10 @@ app.post('/api/receive', (req, res) => {
               }
             );
           } else {
-            const avgCost = cost ? parseFloat(cost).toFixed(2) : '0.00';
             db.run(
               `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, dspNumber, status, description)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, itemTotalCost, avgCost, receivedDate, source || 'Unknown', dspNumber || null, status, description || null],
+              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', dspNumber || null, status, description || null],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');

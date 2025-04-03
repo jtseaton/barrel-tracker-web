@@ -71,6 +71,7 @@ export interface InventoryItem {
   description?: string;
   cost?: string;
   poNumber?: string;
+  totalCost?: string;
   // No isShipping here—it’s not stored
 }
 

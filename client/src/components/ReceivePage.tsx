@@ -278,8 +278,11 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
     const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
   
     const inventoryItems: InventoryItem[] = itemsToReceive.map(item => {
-      const itemCost = item.cost ? parseFloat(item.cost) : 0;
-      const updatedCost = (itemCost + costPerItem).toFixed(2);
+      const totalItemCost = item.cost ? parseFloat(item.cost) : 0; // Total cost entered
+      const quantity = parseFloat(item.quantity);
+      const unitCost = totalItemCost / quantity; // Cost per unit
+      const finalTotalCost = (totalItemCost + costPerItem).toFixed(2); // Add split other charges
+      const finalUnitCost = (parseFloat(finalTotalCost) / quantity).toFixed(2); // New unit cost
       return {
         identifier: item.identifier,
         account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Storage',
@@ -293,7 +296,8 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
         dspNumber: item.materialType === MaterialType.Spirits ? singleForm.dspNumber : undefined,
         status: Status.Received,
         description: item.description,
-        cost: updatedCost,
+        cost: finalUnitCost, // Store unit cost
+        totalCost: finalTotalCost, // Store total cost
         poNumber: item.poNumber,
       };
     });
