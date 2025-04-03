@@ -13,12 +13,19 @@ import ItemDetails from './components/ItemDetails';
 import Vendors from './components/Vendors';
 import VendorDetails from './components/VendorDetails';
 import PurchaseOrderForm from './components/PurchaseOrderForm';
+import PurchaseOrderList from './components/PurchaseOrderList';
 import Products from './components/Products';
 import ProductDetails from './components/ProductDetails';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import { InventoryItem } from './types/interfaces';
 import './App.css';
+
+// Stub components (should already exist or be placeholders in your codebase)
+const Facility: React.FC = () => <div><h2>Facility</h2><p>Facility page coming soon</p></div>;
+const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
+const Locations: React.FC = () => <div><h2>Locations</h2><p>Locations page coming soon</p></div>;
+const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
 
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
@@ -59,7 +66,7 @@ const AppContent: React.FC = () => {
       else if (path === '/receive') setActiveSection('Inventory');
       else if (path === '/transfers') setActiveSection('Transfers');
       else if (path === '/items' || path.startsWith('/items/')) setActiveSection('Items');
-      else if (path === '/vendors' || path.startsWith('/vendors/')) setActiveSection('Vendors');
+      else if (path.startsWith('/vendors/')) setActiveSection('Vendors'); // Updated for PO routes
     } else if (path === '/production' || path === '/products' || path === '/facility' || path === '/production-page' || path === '/locations' || path === '/equipment' || path === '/planning' || path === '/facility-designer') {
       setShowProductionSubmenu(true);
       setShowInventorySubmenu(false);
@@ -227,8 +234,9 @@ const AppContent: React.FC = () => {
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
           <Route path="/vendors" element={<Vendors />} />
-          <Route path="/vendors/:name" element={<VendorDetails />} />
-          <Route path="/vendors/:name/purchase-order/new" element={<PurchaseOrderForm />} />
+          <Route path="/vendors/:name" element={<PurchaseOrderList />} /> {/* Updated to PO list */}
+          <Route path="/vendors/:name/purchase-orders/new" element={<PurchaseOrderForm />} />
+          <Route path="/vendors/:name/purchase-orders/:poNumber" element={<PurchaseOrderForm />} />
           <Route path="/processing" element={<Processing inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
@@ -253,9 +261,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-// Stub components (add these files)
-const Facility: React.FC = () => <div><h2>Facility</h2><p>Facility page coming soon</p></div>;
-const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
-const Locations: React.FC = () => <div><h2>Locations</h2><p>Locations page coming soon</p></div>;
-const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
