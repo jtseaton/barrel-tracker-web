@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ReceiveForm, InventoryItem } from '../types/interfaces';
-import { MaterialType, Unit, Status } from '../types/enums';
+import { PurchaseOrder, ReceiveItem, InventoryItem, Status } from '../types/interfaces';
+import { MaterialType, Unit } from '../types/enums'; // Adjusted path
 
 const OUR_DSP = 'DSP-AL-20010';
 
@@ -25,23 +25,30 @@ interface Vendor {
   enabled: number;
 }
 
-interface PurchaseOrder {
-  poNumber: string;
-  poDate: string;
-  supplier: string;
-  items: { name: string; quantity: number }[];
+interface ReceiveForm {
+  identifier: string;
+  account: string;
+  materialType: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof: string;
+  source: string;
+  dspNumber: string;
+  receivedDate: string;
+  description: string;
+  cost: string;
+  poNumber?: string;
 }
 
-interface ReceiveItem {
+interface ReceivableItem {
   identifier: string;
   materialType: MaterialType;
   quantity: string;
   unit: Unit;
   proof?: string;
-  cost?: string;
   description?: string;
+  cost?: string;
   poNumber?: string;
-  isShipping?: boolean; // Add this
 }
 
 const OTHER_CHARGES_OPTIONS = [
@@ -55,34 +62,31 @@ const OTHER_CHARGES_OPTIONS = [
   'Discount',
 ];
 
-const isFreightItem = (item: ReceiveItem) => 
-  ['Freight', 'Shipping'].includes(item.identifier.toLowerCase());
-
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
-const [otherCharges, setOtherCharges] = useState<OtherCharge[]>([]);
-const [singleForm, setSingleForm] = useState<ReceiveForm>({
-  identifier: '',
-  account: 'Storage',
-  materialType: MaterialType.Grain,
-  quantity: '',
-  unit: Unit.Pounds,
-  proof: '',
-  source: location.state?.vendor || '',
-  dspNumber: OUR_DSP,
-  receivedDate: new Date().toISOString().split('T')[0],
-  description: '',
-  cost: '',
-  // No isShipping anymore
-});
+  const [otherCharges, setOtherCharges] = useState<OtherCharge[]>([]);
+  const [singleForm, setSingleForm] = useState<ReceiveForm>({
+    identifier: '',
+    account: 'Stored',
+    materialType: MaterialType.Grain,
+    quantity: '',
+    unit: Unit.Pounds,
+    proof: '',
+    source: location.state?.vendor || '',
+    dspNumber: OUR_DSP,
+    receivedDate: new Date().toISOString().split('T')[0],
+    description: '',
+    cost: '',
+    poNumber: '',
+  });
   const [useSingleItem, setUseSingleItem] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   const [newItem, setNewItem] = useState<string>('');
-  const [newItemType, setNewItemType] = useState<string>(MaterialType.Grain);
+  const [newItemType, setNewItemType] = useState<MaterialType>(MaterialType.Grain);
   const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
@@ -91,6 +95,9 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
   const [selectedPO, setSelectedPO] = useState<string>('');
   const [productionError, setProductionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lotItems, setLotItems] = useState<ReceiveItem[]>([]);
+  const [showLotModal, setShowLotModal] = useState(false);
+  const [poItemToSplit, setPoItemToSplit] = useState<{ name: string; quantity: number } | null>(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -106,7 +113,7 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
         setProductionError('Failed to fetch items: ' + err.message);
       }
     };
-  
+
     const fetchVendors = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/vendors`);
@@ -118,10 +125,10 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
         setProductionError('Failed to fetch vendors: ' + err.message);
       }
     };
-  
+
     const fetchPOs = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${singleForm.source || ''}`);
+        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         setPurchaseOrders(data);
@@ -129,7 +136,7 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
         setProductionError('Failed to fetch POs: ' + err.message);
       }
     };
-  
+
     fetchItems();
     fetchVendors();
     if (singleForm.source) fetchPOs();
@@ -186,9 +193,9 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
       setItems(updatedItems);
       setFilteredItems(updatedItems);
       if (useSingleItem) {
-        setSingleForm({ ...singleForm, identifier: newItem, materialType: newItemType as MaterialType });
+        setSingleForm({ ...singleForm, identifier: newItem, materialType: newItemType });
       } else {
-        setReceiveItems([...receiveItems, { identifier: newItem, materialType: newItemType as MaterialType, quantity: '', unit: Unit.Pounds }]);
+        setReceiveItems([...receiveItems, { identifier: newItem, materialType: newItemType, quantity: '', unit: Unit.Pounds }]);
       }
       setNewItem('');
       setNewItemType(MaterialType.Grain);
@@ -213,24 +220,59 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
 
   const handlePOSelect = (poNumber: string) => {
     setSelectedPO(poNumber);
+    setSingleForm({ ...singleForm, poNumber });
     const po = purchaseOrders.find(p => p.poNumber === poNumber);
     if (po) {
-      setReceiveItems(po.items.map(item => ({
-        identifier: item.name,
-        materialType: MaterialType.Other,
-        quantity: item.quantity.toString(),
-        unit: Unit.Pounds,
-        cost: '',
-        poNumber: poNumber, // Use the string param
-      })));
-      setUseSingleItem(false);
+      const nonSpiritsItems = po.items
+        .filter(item => item.materialType !== MaterialType.Spirits)
+        .map(item => ({
+          identifier: item.name,
+          materialType: item.materialType,
+          quantity: item.quantity.toString(),
+          unit: Unit.Pounds,
+          cost: '',
+          poNumber: poNumber,
+        }));
+      const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
+      setReceiveItems(nonSpiritsItems);
+      if (spiritsItems.length > 0) {
+        setPoItemToSplit(spiritsItems[0]);
+        setShowLotModal(true);
+      } else {
+        setUseSingleItem(false);
+      }
     }
   };
-  
+
+  const handleLotSplit = () => {
+    if (!poItemToSplit || lotItems.length === 0 || lotItems.some(item => !item.identifier || !item.quantity)) {
+      setProductionError('All lots must have a Lot Number and Quantity');
+      return;
+    }
+    const totalQuantity = lotItems.reduce((sum, item) => sum + parseFloat(item.quantity || '0'), 0);
+    if (totalQuantity !== poItemToSplit.quantity) {
+      setProductionError(`Total quantity (${totalQuantity}) must equal PO quantity (${poItemToSplit.quantity})`);
+      return;
+    }
+    setReceiveItems(prev => [
+      ...prev,
+      ...lotItems.map(item => ({
+        ...item,
+        materialType: MaterialType.Spirits,
+        unit: Unit.Gallons,
+        poNumber: selectedPO || undefined,
+      })),
+    ]);
+    setLotItems([]);
+    setShowLotModal(false);
+    setPoItemToSplit(null);
+    setUseSingleItem(false);
+  };
+
   const addChargeRow = () => {
     setOtherCharges([...otherCharges, { name: '', cost: '' }]);
   };
-  
+
   const removeChargeRow = (index: number) => {
     setOtherCharges(otherCharges.filter((_, i) => i !== index));
   };
@@ -240,7 +282,8 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
       identifier: '', 
       materialType: MaterialType.Grain, 
       quantity: '', 
-      unit: Unit.Pounds 
+      unit: Unit.Pounds,
+      cost: '',
     }]);
   };
 
@@ -249,12 +292,12 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
   };
 
   const handleReceive = async () => {
-    const itemsToReceive = useSingleItem ? [singleForm] : receiveItems;
+    const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
     if (!itemsToReceive.length || itemsToReceive.some(item => !item.identifier || !item.materialType || !item.quantity || !item.unit)) {
-      setProductionError('All inventory items must have Item, Material Type, Quantity, and Unit');
+      setProductionError('All inventory items must have Item/Lot Number, Material Type, Quantity, and Unit');
       return;
     }
-    const invalidItems = itemsToReceive.filter(item => 
+    const invalidItems = itemsToReceive.filter(item =>
       (item.materialType === MaterialType.Spirits && !item.proof) ||
       (item.materialType === MaterialType.Other && !item.description?.trim()) ||
       isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0 ||
@@ -272,20 +315,20 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
       setProductionError('Invalid other charges: ensure name is selected and cost is valid');
       return;
     }
-  
+
     const totalOtherCost = otherCharges.reduce((sum, charge) => 
       sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
     const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
-  
+
     const inventoryItems: InventoryItem[] = itemsToReceive.map(item => {
-      const totalItemCost = item.cost ? parseFloat(item.cost) : 0; // Total cost entered
+      const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
       const quantity = parseFloat(item.quantity);
-      const unitCost = totalItemCost / quantity; // Cost per unit
-      const finalTotalCost = (totalItemCost + costPerItem).toFixed(2); // Add split other charges
-      const finalUnitCost = (parseFloat(finalTotalCost) / quantity).toFixed(2); // New unit cost
+      const unitCost = totalItemCost / quantity || 0;
+      const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
+      const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
       return {
-        identifier: item.identifier,
-        account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Storage',
+        identifier: item.materialType === MaterialType.Spirits ? item.identifier : (item.identifier || 'N/A'),
+        account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Stored',
         type: item.materialType,
         quantity: item.quantity,
         unit: item.unit,
@@ -296,12 +339,12 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
         dspNumber: item.materialType === MaterialType.Spirits ? singleForm.dspNumber : undefined,
         status: Status.Received,
         description: item.description,
-        cost: finalUnitCost, // Store unit cost
-        totalCost: finalTotalCost, // Store total cost
+        cost: finalUnitCost,
+        totalCost: finalTotalCost,
         poNumber: item.poNumber,
       };
     });
-  
+
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
@@ -496,7 +539,7 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
                     onChange={(e) => setSingleForm({ ...singleForm, account: e.target.value })}
                     style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
                   >
-                    <option value="Storage">Storage</option>
+                    <option value="Stored">Stored</option>
                     <option value="Processing">Processing</option>
                   </select>
                 </div>
@@ -539,7 +582,7 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
           <div>
             <h3 style={{ color: '#555', marginBottom: '10px' }}>Inventory Items</h3>
             {receiveItems.map((item, index) => (
-              <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
+              <div key={`item-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
                 <div style={{ position: 'relative' }}>
                   <input
                     type="text"
@@ -679,7 +722,7 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
             </button>
             <h3 style={{ color: '#555', marginTop: '20px', marginBottom: '10px' }}>Other Charges</h3>
             {otherCharges.map((charge, index) => (
-              <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
+              <div key={`charge-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
                 <select
                   value={charge.name}
                   onChange={(e) => {
@@ -725,8 +768,75 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
             </button>
           </div>
         )}
+        {showLotModal && poItemToSplit && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '500px' }}>
+              <h3>Split Spirits into Lots</h3>
+              <p>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>
+              {lotItems.map((lot, index) => (
+                <div key={`lot-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
+                  <input
+                    type="text"
+                    placeholder="Lot Number"
+                    value={lot.identifier || ''}
+                    onChange={(e) => {
+                      const updatedLots = [...lotItems];
+                      updatedLots[index].identifier = e.target.value;
+                      setLotItems(updatedLots);
+                    }}
+                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Quantity (gallons)"
+                    value={lot.quantity || ''}
+                    onChange={(e) => {
+                      const updatedLots = [...lotItems];
+                      updatedLots[index].quantity = e.target.value;
+                      setLotItems(updatedLots);
+                    }}
+                    step="0.01"
+                    min="0"
+                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setLotItems(lotItems.filter((_, i) => i !== index))}
+                    style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
+                  >
+                    X
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setLotItems([...lotItems, { identifier: '', quantity: '', materialType: MaterialType.Spirits, unit: Unit.Gallons }])}
+                style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+              >
+                Add Lot
+              </button>
+              <div style={{ marginTop: '15px' }}>
+                <button
+                  type="button"
+                  onClick={handleLotSplit}
+                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowLotModal(false); setLotItems([]); setPoItemToSplit(null); }}
+                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
+            </div>
+          </div>
+        )}
         <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px', marginTop: '15px' }}>Received Date:</label>
+          <label style={{ fontWeight: 'bold', color: '555', display: 'block', marginBottom: '5px', marginTop: '15px' }}>Received Date:</label>
           <input
             type="date"
             value={singleForm.receivedDate}
@@ -752,7 +862,7 @@ const [singleForm, setSingleForm] = useState<ReceiveForm>({
                 Material Type:
                 <select
                   value={newItemType}
-                  onChange={(e) => setNewItemType(e.target.value)}
+                  onChange={(e) => setNewItemType(e.target.value as MaterialType)}
                   style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
                 >
                   {Object.values(MaterialType).map((type) => (

@@ -1,4 +1,5 @@
-import { Status, Unit, MaterialType } from './enums';
+import { Status, Unit, MaterialType, ProductClass } from './enums';
+export { Status, Unit, MaterialType, ProductClass };
 
 export interface Transaction {
   action: string;
@@ -53,7 +54,18 @@ export interface ReceiveForm {
   description?: string;
   cost?: string;
   poNumber?: string;
-  isShipping?: boolean; // Add this
+}
+
+export interface ReceiveItem {
+  identifier: string;
+  materialType: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  cost?: string;
+  description?: string;
+  poNumber?: string;
+  isShipping?: boolean;
 }
 
 export interface InventoryItem {
@@ -72,7 +84,6 @@ export interface InventoryItem {
   cost?: string;
   poNumber?: string;
   totalCost?: string;
-  // No isShipping here—it’s not stored
 }
 
 export interface MoveForm {
@@ -100,7 +111,7 @@ export interface LossForm {
 }
 
 export interface Product {
-  id: number; // Assuming DB ID
+  id: number;
   name: string;
   abbreviation: string;
   enabled: boolean;
@@ -114,9 +125,23 @@ export interface Product {
 }
 
 export interface Recipe {
-  id: number; // Assuming DB ID
+  id: number;
   productId: number;
   name: string;
-  ingredients: string; // Simplified for now, could be an array later
+  ingredients: string;
   instructions: string;
+}
+
+export interface PurchaseOrder {
+  poNumber: string;
+  poDate: string;
+  source: string;
+  status: 'Open' | 'Closed';
+  items: PurchaseOrderItem[];
+}
+
+export interface PurchaseOrderItem {
+  name: string;
+  quantity: number;
+  materialType: MaterialType;
 }
