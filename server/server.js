@@ -366,7 +366,7 @@ app.post('/api/purchase-orders/email', (req, res) => {
 
 app.get('/api/inventory', (req, res) => {
   const { source } = req.query;
-  let query = 'SELECT identifier, type, quantity, receivedDate, status FROM inventory';
+  let query = 'SELECT * FROM inventory';
   let params = [];
   if (source) {
     query += ' WHERE source = ?';
@@ -475,7 +475,7 @@ app.post('/api/receive', (req, res) => {
       const itemTotalCost = cost ? (parseFloat(cost) * parseFloat(quantity)).toFixed(2) : '0.00';
 
       db.get(
-        'SELECT quantity, totalCost FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
+        'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
         [identifier, type, account],
         (err, row) => {
           if (err) {
@@ -489,9 +489,9 @@ app.post('/api/receive', (req, res) => {
             const newTotalCost = (existingTotalCost + parseFloat(itemTotalCost)).toFixed(2);
             const avgCost = (newTotalCost / newQuantity).toFixed(2);
             db.run(
-              `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ? 
+              `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ? 
                WHERE identifier = ? AND type = ? AND account = ?`,
-              [newQuantity, newTotalCost, avgCost, finalProofGallons, receivedDate, source || 'Unknown', identifier, type, account],
+              [newQuantity, newTotalCost, avgCost, finalProofGallons, receivedDate, source || 'Unknown', unit, identifier, type, account],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
