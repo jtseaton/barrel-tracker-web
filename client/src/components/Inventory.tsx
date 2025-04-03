@@ -179,7 +179,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               <td>{item.quantity || '0.00'}</td>
               <td>{item.unit || 'N/A'}</td>
               <td>{item.proof || 'N/A'}</td>
-              <td>{item.cost && item.quantity ? `$${(parseFloat(item.cost) * parseFloat(item.quantity)).toFixed(2)}` : 'N/A'}</td>
+              <td>{item.totalCost ? `$${parseFloat(item.totalCost).toFixed(2)}` : 'N/A'}</td>
               <td>{item.receivedDate || 'N/A'}</td>
               <td>{item.source || 'N/A'}</td>
               <td>{item.account || 'Storage'}</td>
