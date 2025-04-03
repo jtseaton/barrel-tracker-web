@@ -40,22 +40,6 @@ export interface DailySummaryItem {
   totalProofGallons: string;
 }
 
-export interface InventoryItem {
-  identifier: string;
-  account: string;
-  type: string; // Or MaterialType if you prefer
-  quantity: string;
-  unit: string;
-  proof?: string;
-  proofGallons?: string;
-  receivedDate: string;
-  source: string;
-  dspNumber?: string; // Changed from string to optional
-  status: string;
-  description?: string;
-  cost?: string; // Added for new Cost field
-}
-
 export interface ReceiveForm {
   identifier: string;
   account: string;
@@ -64,10 +48,28 @@ export interface ReceiveForm {
   unit: Unit;
   proof?: string;
   source: string;
-  dspNumber: string;
+  dspNumber?: string;
   receivedDate: string;
   description?: string;
-  cost?: string; // Added for new Cost field
+  cost?: string;
+  poNumber?: string; // Add this
+}
+
+export interface InventoryItem {
+  identifier: string;
+  account: string;
+  type: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  proofGallons?: string;
+  receivedDate: string;
+  source?: string;
+  dspNumber?: string;
+  status: Status;
+  description?: string;
+  cost?: string;
+  poNumber?: string; // Add this
 }
 
 export interface MoveForm {
