@@ -16,14 +16,21 @@ interface PurchaseOrder {
   shipToCity: string;
   shipToState: string;
   shipToZip: string;
+  items: { name: string; quantity: number }[];
+}
+
+interface Item {
+  name: string;
+  type: string;
+  enabled: number;
 }
 
 const PurchaseOrderForm: React.FC = () => {
-  const { name } = useParams<{ name: string }>();
+  const { name, poNumber } = useParams<{ name: string; poNumber?: string }>();
   const navigate = useNavigate();
   const [vendorDetails, setVendorDetails] = useState<{ name: string; address: string } | null>(null);
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder>({
-    poNumber: '',
+    poNumber: poNumber || '',
     site: 'Main Site',
     poDate: new Date().toISOString().split('T')[0],
     supplier: name || '',
@@ -37,15 +44,21 @@ const PurchaseOrderForm: React.FC = () => {
     shipToCity: 'Birmingham',
     shipToState: 'AL',
     shipToZip: '35203',
+    items: [],
   });
   const [productionError, setProductionError] = useState<string | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isSaved, setIsSaved] = useState(!!poNumber); // True if editing an existing PO
+  const [availableItems, setAvailableItems] = useState<Item[]>([]);
+  const [selectedItem, setSelectedItem] = useState<string>('');
+  const [quantity, setQuantity] = useState<string>('');
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
-    if (name) fetchVendorDetails();
-  }, [name]);
+    fetchVendorDetails();
+    fetchAvailableItems();
+    if (poNumber) fetchPurchaseOrder();
+  }, [name, poNumber]);
 
   const fetchVendorDetails = async () => {
     try {
@@ -62,6 +75,52 @@ const PurchaseOrderForm: React.FC = () => {
       console.error('Fetch vendor error:', err);
       setProductionError('Failed to fetch vendor: ' + err.message);
     }
+  };
+
+  const fetchAvailableItems = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/items`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setAvailableItems(data.filter((item: Item) => item.enabled));
+    } catch (err: any) {
+      console.error('Fetch items error:', err);
+      setProductionError('Failed to fetch items: ' + err.message);
+    }
+  };
+
+  const fetchPurchaseOrder = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/purchase-orders/${poNumber}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setPurchaseOrder(data);
+    } catch (err: any) {
+      console.error('Fetch PO error:', err);
+      setProductionError('Failed to fetch purchase order: ' + err.message);
+    }
+  };
+
+  const handleAddItem = () => {
+    if (!selectedItem || !quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0) {
+      setProductionError('Select an item and enter a valid quantity');
+      return;
+    }
+    const newItem = { name: selectedItem, quantity: parseFloat(quantity) };
+    setPurchaseOrder((prev) => ({
+      ...prev,
+      items: [...prev.items, newItem],
+    }));
+    setSelectedItem('');
+    setQuantity('');
+    setProductionError(null);
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setPurchaseOrder((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }));
   };
 
   const handleSave = async () => {
@@ -114,7 +173,9 @@ const PurchaseOrderForm: React.FC = () => {
       maxHeight: '80vh',
       overflowY: 'auto'
     }}>
-      <h2 style={{ color: '#EEC930', fontSize: '28px', marginBottom: '20px' }}>Add New Purchase Order</h2>
+      <h2 style={{ color: '#EEC930', fontSize: '28px', marginBottom: '20px' }}>
+        {poNumber ? 'Edit Purchase Order' : 'Add New Purchase Order'}
+      </h2>
       {productionError && <p style={{ color: '#F86752', fontSize: '16px' }}>{productionError}</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         <label style={{ color: '#EEC930', fontSize: '18px' }}>
@@ -123,6 +184,7 @@ const PurchaseOrderForm: React.FC = () => {
             type="text"
             value={purchaseOrder.poNumber}
             onChange={(e) => setPurchaseOrder({ ...purchaseOrder, poNumber: e.target.value })}
+            disabled={!!poNumber} // Lock PO number when editing
             style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
@@ -240,6 +302,48 @@ const PurchaseOrderForm: React.FC = () => {
             style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </label>
+        <div style={{ color: '#EEC930', fontSize: '18px' }}>
+          Items:
+          <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
+            <select
+              value={selectedItem}
+              onChange={(e) => setSelectedItem(e.target.value)}
+              style={{ padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', flex: 1 }}
+            >
+              <option value="">Select Item</option>
+              {availableItems.map((item) => (
+                <option key={item.name} value={item.name}>{item.name}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="Quantity"
+              min="1"
+              style={{ padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', width: '100px' }}
+            />
+            <button
+              onClick={handleAddItem}
+              style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Add
+            </button>
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0, marginTop: '10px' }}>
+            {purchaseOrder.items.map((item, index) => (
+              <li key={index} style={{ display: 'flex', justifyContent: 'space-between', color: '#FFFFFF', marginBottom: '5px' }}>
+                {item.name}: {item.quantity}
+                <button
+                  onClick={() => handleRemoveItem(index)}
+                  style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '5px 10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
       <div style={{ marginTop: '20px', textAlign: 'center' }}>
         <button
@@ -248,7 +352,7 @@ const PurchaseOrderForm: React.FC = () => {
         >
           Save
         </button>
-        {isSaved && (
+        {(isSaved || poNumber) && ( // Show email button if saved or editing
           <button
             onClick={handleEmail}
             style={{ backgroundColor: '#EEC930', color: '#000000', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
