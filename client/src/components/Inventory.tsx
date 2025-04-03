@@ -157,7 +157,17 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <table>
         <thead>
           <tr>
-            <th>Identifier</th><th>Type</th><th>Description</th><th>Quantity</th><th>Unit</th><th>Proof</th><th>Proof Gallons</th><th>Date Received</th><th>Source</th><th>DSP Number</th><th>Status</th>
+            <th>Identifier</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Quantity</th>
+            <th>Unit</th>
+            <th>Proof</th>
+            <th>Total Cost</th>
+            <th>Date Received</th>
+            <th>Source</th>
+            <th>Location</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -169,10 +179,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               <td>{item.quantity || '0.00'}</td>
               <td>{item.unit || 'N/A'}</td>
               <td>{item.proof || 'N/A'}</td>
-              <td>{item.proofGallons || '0.00'}</td>
+              <td>{item.cost && item.quantity ? `$${(parseFloat(item.cost) * parseFloat(item.quantity)).toFixed(2)}` : 'N/A'}</td>
               <td>{item.receivedDate || 'N/A'}</td>
               <td>{item.source || 'N/A'}</td>
-              <td>{item.dspNumber || 'N/A'}</td>
+              <td>{item.account || 'Storage'}</td>
               <td>{item.status}</td>
             </tr>
           ))}
@@ -182,7 +192,14 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <table>
         <thead>
           <tr>
-            <th>Identifier</th><th>Type</th><th>Quantity (WG)</th><th>Proof</th><th>Proof Gallons</th><th>Date Packaged</th><th>Source</th><th>DSP Number</th>
+            <th>Identifier</th>
+            <th>Type</th>
+            <th>Quantity (WG)</th>
+            <th>Proof</th>
+            <th>Proof Gallons</th>
+            <th>Date Packaged</th>
+            <th>Source</th>
+            <th>Location</th>
           </tr>
         </thead>
         <tbody>
@@ -195,7 +212,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               <td>{item.proofGallons || '0.00'}</td>
               <td>{item.receivedDate || 'N/A'}</td>
               <td>{item.source || 'N/A'}</td>
-              <td>{item.dspNumber || 'N/A'}</td>
+              <td>{item.account || 'Storage'}</td>
             </tr>
           ))}
         </tbody>

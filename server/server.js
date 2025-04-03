@@ -114,12 +114,17 @@ db.serialize(() => {
     )
 ` );
 
+  db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
+  });
+
   // Migrate existing data (run once, then comment out or remove)
   db.run(`ALTER TABLE purchase_orders ADD COLUMN status TEXT DEFAULT 'Open'`, (err) => {
    if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding status column:', err);
    } 
   });
+
   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
   });
@@ -441,46 +446,36 @@ app.delete('/api/products', (req, res) => {
   res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` });
 });
 
-// POST /api/receive (replace existing)
 app.post('/api/receive', (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [req.body];
-  const poNumber = items[0]?.poNumber; // Assuming PO is passed if tied to one
+  const poNumber = items[0]?.poNumber;
 
   const validateItem = (item) => {
     const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost } = item;
-    if (!account || !type || !quantity || !unit || !receivedDate || !status) {
-      return 'Missing required fields';
-    }
-    if (type === 'Spirits' && (!identifier || !proof)) {
-      return 'Spirits require identifier and proof';
-    }
-    if (type === 'Other' && !description) {
-      return 'Description required for Other type';
-    }
+    if (!account || !type || !quantity || !unit || !receivedDate || !status) return 'Missing required fields';
+    if (type === 'Spirits' && (!identifier || !proof)) return 'Spirits require identifier and proof';
+    if (type === 'Other' && !description) return 'Description required for Other type';
     const parsedQuantity = parseFloat(quantity);
     const parsedProof = proof ? parseFloat(proof) : null;
     const parsedCost = cost ? parseFloat(cost) : null;
     if (isNaN(parsedQuantity) || parsedQuantity <= 0 || 
         (parsedProof && (parsedProof > 200 || parsedProof < 0)) || 
-        (parsedCost && parsedCost < 0)) {
-      return 'Invalid quantity, proof, or cost';
-    }
+        (parsedCost && parsedCost < 0)) return 'Invalid quantity, proof, or cost';
     return null;
   };
 
   const errors = items.map(validateItem).filter(e => e);
-  if (errors.length) {
-    return res.status(400).json({ error: errors[0] });
-  }
+  if (errors.length) return res.status(400).json({ error: errors[0] });
 
   db.serialize(() => {
     db.run('BEGIN TRANSACTION');
     items.forEach(item => {
       const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
+      const itemTotalCost = cost ? (parseFloat(cost) * parseFloat(quantity)).toFixed(2) : '0.00';
 
       db.get(
-        'SELECT quantity, proofGallons FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
+        'SELECT quantity, totalCost FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
         [identifier, type, account],
         (err, row) => {
           if (err) {
@@ -489,12 +484,14 @@ app.post('/api/receive', (req, res) => {
           }
           if (row) {
             const existingQuantity = parseFloat(row.quantity);
+            const existingTotalCost = parseFloat(row.totalCost || '0');
             const newQuantity = (existingQuantity + parseFloat(quantity)).toFixed(2);
-            const existingProofGallons = parseFloat(row.proofGallons || '0');
-            const newProofGallons = type === 'Spirits' ? (existingProofGallons + parseFloat(finalProofGallons)).toFixed(2) : '0.00';
+            const newTotalCost = (existingTotalCost + parseFloat(itemTotalCost)).toFixed(2);
+            const avgCost = (newTotalCost / newQuantity).toFixed(2);
             db.run(
-              `UPDATE inventory SET quantity = ?, proofGallons = ?, receivedDate = ?, source = ?, cost = ? WHERE identifier = ? AND type = ? AND account = ?`,
-              [newQuantity, newProofGallons, receivedDate, source || 'Unknown', cost || null, identifier, type, account],
+              `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ? 
+               WHERE identifier = ? AND type = ? AND account = ?`,
+              [newQuantity, newTotalCost, avgCost, finalProofGallons, receivedDate, source || 'Unknown', identifier, type, account],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
@@ -503,10 +500,11 @@ app.post('/api/receive', (req, res) => {
               }
             );
           } else {
+            const avgCost = cost ? parseFloat(cost).toFixed(2) : '0.00';
             db.run(
-              `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', dspNumber || null, status, description || null, cost || null],
+              `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, dspNumber, status, description)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, itemTotalCost, avgCost, receivedDate, source || 'Unknown', dspNumber || null, status, description || null],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
@@ -519,7 +517,6 @@ app.post('/api/receive', (req, res) => {
       );
     });
 
-    // Check if PO is fully received (simplified: close if any items received)
     if (poNumber) {
       db.get('SELECT items FROM purchase_orders WHERE poNumber = ?', [poNumber], (err, row) => {
         if (err) {
