@@ -38,6 +38,9 @@ interface ReceiveItem {
   poNumber?: string; // Add this
 }
 
+const isFreightItem = (item: ReceiveItem) => 
+  ['Freight', 'Shipping'].includes(item.identifier.toLowerCase());
+
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -231,24 +234,40 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       setProductionError('Invalid data in items: check Spirits proof, Other description, or numeric values');
       return;
     }
-
-    const inventoryItems: InventoryItem[] = itemsToReceive.map(item => ({
-      identifier: item.identifier,
-      account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Storage',
-      type: item.materialType,
-      quantity: item.quantity,
-      unit: item.unit,
-      proof: item.proof,
-      proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
-      receivedDate: singleForm.receivedDate,
-      source: singleForm.source,
-      dspNumber: item.materialType === MaterialType.Spirits ? singleForm.dspNumber : undefined,
-      status: Status.Received,
-      description: item.description,
-      cost: item.cost,
-      poNumber: item.poNumber, // Add this
-    }));
-
+  
+    // Split freight/shipping costs
+    const freightItems = itemsToReceive.filter(isFreightItem);
+    const inventoryItemsRaw = itemsToReceive.filter(item => !isFreightItem(item));
+    if (inventoryItemsRaw.length === 0 && freightItems.length > 0) {
+      setProductionError('Cannot receive only freight/shipping items');
+      return;
+    }
+  
+    const totalFreightCost = freightItems.reduce((sum, item) => 
+      sum + (item.cost ? parseFloat(item.cost) : 0), 0);
+    const freightPerItem = inventoryItemsRaw.length > 0 ? totalFreightCost / inventoryItemsRaw.length : 0;
+  
+    const inventoryItems: InventoryItem[] = inventoryItemsRaw.map(item => {
+      const itemCost = item.cost ? parseFloat(item.cost) : 0;
+      const updatedCost = (itemCost + freightPerItem).toFixed(2);
+      return {
+        identifier: item.identifier,
+        account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Storage',
+        type: item.materialType,
+        quantity: item.quantity,
+        unit: item.unit,
+        proof: item.proof,
+        proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
+        receivedDate: singleForm.receivedDate,
+        source: singleForm.source,
+        dspNumber: item.materialType === MaterialType.Spirits ? singleForm.dspNumber : undefined,
+        status: Status.Received,
+        description: item.description,
+        cost: updatedCost,
+        poNumber: item.poNumber,
+      };
+    });
+  
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
