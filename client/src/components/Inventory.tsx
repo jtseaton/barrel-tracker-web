@@ -11,7 +11,6 @@ interface InventoryProps {
 }
 
 const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) => {
-  // Old State
   const [dailySummary, setDailySummary] = useState<DailySummaryItem[]>([]);
   const [moveForm, setMoveForm] = useState<MoveForm>({ identifier: '', toAccount: 'Storage', proofGallons: '' });
   const [lossForm, setLossForm] = useState<LossForm>({
@@ -21,20 +20,22 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     reason: '',
     date: new Date().toISOString().split('T')[0],
   });
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [adjustForm, setAdjustForm] = useState<{ newQuantity: string; reason: string; date: string }>({
+    newQuantity: '',
+    reason: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
-
-  // New State
-  const [searchTerm, setSearchTerm] = useState<string>(''); // Added for search
-  const [editItem, setEditItem] = useState<InventoryItem | null>(null); // Added for edit
-  const [showEditModal, setShowEditModal] = useState(false); // Added for edit modal
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-  // Old Effects
   useEffect(() => {
-    console.log('Inventory component mounted, refreshing');
     refreshInventory();
   }, [refreshInventory]);
 
@@ -46,14 +47,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
 
   useEffect(() => {
     fetchDailySummary()
-      .then((data) => {
-        console.log('Daily summary fetched:', data);
-        setDailySummary(data);
-      })
+      .then(setDailySummary)
       .catch((err) => console.error('Daily summary error:', err));
   }, []);
 
-  // Old Handlers
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
       setProductionError('Please fill in Identifier and Proof Gallons.');
@@ -66,10 +63,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const responseData = await res.json();
-      console.log('Move response:', responseData);
       await refreshInventory();
-      console.log('Inventory after move:', inventory);
       setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
       setProductionError(null);
@@ -90,10 +84,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }),
       });
-      if (!res.ok) {
-        const errorData = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorData}`);
-      }
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       await refreshInventory();
       setLossForm({
         identifier: '',
@@ -110,41 +101,50 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     }
   };
 
-  // New Handlers
   const handleEditClick = (item: InventoryItem) => {
-    setEditItem({ ...item }); // Clone item for editing
+    setEditItem({ ...item });
     setShowEditModal(true);
   };
 
-  const handleEditChange = (field: keyof InventoryItem, value: string) => {
+  const handleAdjustClick = () => {
     if (editItem) {
-      setEditItem({ ...editItem, [field]: value });
+      setAdjustForm({ newQuantity: editItem.quantity || '', reason: '', date: new Date().toISOString().split('T')[0] });
+      setShowAdjustModal(true);
     }
   };
 
-  const handleEditSubmit = async () => {
-    if (!editItem || !editItem.quantity || isNaN(parseFloat(editItem.quantity)) || parseFloat(editItem.quantity) < 0) {
-      setProductionError('Valid quantity is required');
+  const handleAdjustChange = (field: keyof typeof adjustForm, value: string) => {
+    setAdjustForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAdjustSubmit = async () => {
+    if (!editItem || !adjustForm.newQuantity || isNaN(parseFloat(adjustForm.newQuantity)) || parseFloat(adjustForm.newQuantity) < 0 || !adjustForm.reason) {
+      setProductionError('Valid new quantity and reason are required');
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inventory/${editItem.identifier}`, {
-        method: 'PUT',
+      const res = await fetch(`${API_BASE_URL}/api/inventory/adjust`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editItem),
+        body: JSON.stringify({
+          identifier: editItem.identifier,
+          newQuantity: adjustForm.newQuantity,
+          reason: adjustForm.reason,
+          date: adjustForm.date,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       await refreshInventory();
+      setShowAdjustModal(false);
       setShowEditModal(false);
       setEditItem(null);
       setProductionError(null);
     } catch (err: any) {
-      console.error('Edit inventory error:', err);
-      setProductionError('Failed to update item: ' + err.message);
+      console.error('Adjust inventory error:', err);
+      setProductionError('Failed to adjust item: ' + err.message);
     }
   };
 
-  // New: Filter inventory based on search term
   const filteredInventory = inventory.filter(item => 
     ['Received', 'Stored'].includes(item.status) && (
       (item.identifier || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -162,7 +162,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px' }}>Record Loss</button>
       </div>
 
-      {/* New: Search Bar */}
       <div style={{ marginBottom: '20px' }}>
         <input
           type="text"
@@ -173,7 +172,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         />
       </div>
 
-      {/* Old: Move Modal */}
       {showMoveModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
@@ -192,7 +190,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         </div>
       )}
 
-      {/* Old: Loss Modal */}
       {showLossModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
@@ -209,84 +206,75 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         </div>
       )}
 
-      {/* New: Edit Modal */}
       {showEditModal && editItem && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', maxWidth: '500px', overflowY: 'auto', maxHeight: '80vh' }}>
+            <h3>Inventory Item Details</h3>
+            <p><strong>Identifier:</strong> {editItem.identifier}</p>
+            <p><strong>Type:</strong> {editItem.type}</p>
+            <p><strong>Description:</strong> {editItem.description || 'N/A'}</p>
+            <p><strong>Quantity:</strong> {editItem.quantity} {editItem.unit}</p>
+            <p><strong>Unit:</strong> {editItem.unit || 'N/A'}</p>
+            {editItem.type === 'Spirits' && <p><strong>Proof:</strong> {editItem.proof || 'N/A'}</p>}
+            {editItem.type === 'Spirits' && <p><strong>Proof Gallons:</strong> {editItem.proofGallons || 'N/A'}</p>}
+            <p><strong>Total Cost:</strong> {editItem.totalCost ? `$${parseFloat(editItem.totalCost).toFixed(2)}` : 'N/A'}</p>
+            <p><strong>Date Received:</strong> {editItem.receivedDate || 'N/A'}</p>
+            <p><strong>Source:</strong> {editItem.source || 'N/A'}</p>
+            <p><strong>Location:</strong> {editItem.account || 'Storage'}</p>
+            <p><strong>Status:</strong> {editItem.status || 'Stored'}</p>
+            <p><strong>DSP Number:</strong> {editItem.dspNumber || 'N/A'}</p>
+            <button onClick={handleAdjustClick} style={{ marginTop: '10px' }}>Adjust</button>
+            <button onClick={() => setShowEditModal(false)} style={{ marginLeft: '10px' }}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {showAdjustModal && editItem && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px' }}>
-            <h3>Edit Inventory Item</h3>
+            <h3>Adjust Inventory</h3>
+            <p><strong>Current Quantity:</strong> {editItem.quantity} {editItem.unit}</p>
+            <p><strong>Current Total Cost:</strong> ${parseFloat(editItem.totalCost || '0').toFixed(2)}</p>
             <label>
-              Identifier: {editItem.identifier} (read-only)
-            </label><br />
-            <label>
-              Quantity:
+              New Quantity:
               <input
                 type="number"
-                value={editItem.quantity || ''}
-                onChange={(e) => handleEditChange('quantity', e.target.value)}
+                value={adjustForm.newQuantity}
+                onChange={(e) => handleAdjustChange('newQuantity', e.target.value)}
                 step="0.01"
                 style={{ marginLeft: '10px', padding: '5px' }}
               />
             </label><br />
             <label>
-              Proof:
-              <input
-                type="number"
-                value={editItem.proof || ''}
-                onChange={(e) => handleEditChange('proof', e.target.value)}
-                step="0.01"
-                style={{ marginLeft: '10px', padding: '5px' }}
-              />
-            </label><br />
-            <label>
-              Total Cost:
-              <input
-                type="number"
-                value={editItem.totalCost || ''}
-                onChange={(e) => handleEditChange('totalCost', e.target.value)}
-                step="0.01"
-                style={{ marginLeft: '10px', padding: '5px' }}
-              />
-            </label><br />
-            <label>
-              Description:
-              <input
-                type="text"
-                value={editItem.description || ''}
-                onChange={(e) => handleEditChange('description', e.target.value)}
-                style={{ marginLeft: '10px', padding: '5px' }}
-              />
-            </label><br />
-            <label>
-              Status:
+              Reason:
               <select
-                value={editItem.status || 'Stored'}
-                onChange={(e) => handleEditChange('status', e.target.value)}
+                value={adjustForm.reason}
+                onChange={(e) => handleAdjustChange('reason', e.target.value)}
                 style={{ marginLeft: '10px', padding: '5px' }}
               >
-                <option value="Received">Received</option>
-                <option value="Stored">Stored</option>
+                <option value="">Select Reason</option>
+                <option value="Spillage">Spillage</option>
+                <option value="Error">Error</option>
+                <option value="Breakage">Breakage</option>
+                <option value="Destroyed">Destroyed</option>
               </select>
             </label><br />
             <label>
-              Location:
-              <select
-                value={editItem.account || 'Storage'}
-                onChange={(e) => handleEditChange('account', e.target.value)}
+              Date:
+              <input
+                type="date"
+                value={adjustForm.date}
+                onChange={(e) => handleAdjustChange('date', e.target.value)}
                 style={{ marginLeft: '10px', padding: '5px' }}
-              >
-                <option value="Storage">Storage</option>
-                <option value="Production">Production</option>
-                <option value="Processing">Processing</option>
-              </select>
+              />
             </label><br />
-            <button onClick={handleEditSubmit} style={{ marginTop: '10px' }}>Save</button>
-            <button onClick={() => setShowEditModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
+            <button onClick={handleAdjustSubmit} style={{ marginTop: '10px' }}>Save Adjustment</button>
+            <button onClick={() => setShowAdjustModal(false)} style={{ marginLeft: '10px' }}>Cancel</button>
             {productionError && <p style={{ color: 'red' }}>{productionError}</p>}
           </div>
         </div>
       )}
 
-      {/* Old: Daily Summary Table */}
       <h2>Daily Summary (Proof Gallons)</h2>
       <table>
         <thead>
@@ -299,7 +287,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         </tbody>
       </table>
 
-      {/* Old Table with New Click Functionality */}
       <h2>Received/Stored Inventory</h2>
       <table>
         <thead>
@@ -321,8 +308,8 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
           {filteredInventory.map((item) => (
             <tr
               key={item.identifier || `${item.type}-${item.receivedDate}`}
-              onClick={() => handleEditClick(item)} // New: Click to edit
-              style={{ cursor: 'pointer' }} // New: Indicate clickable
+              onClick={() => handleEditClick(item)}
+              style={{ cursor: 'pointer' }}
             >
               <td>{item.identifier || 'N/A'}</td>
               <td>{item.type}</td>
@@ -340,7 +327,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         </tbody>
       </table>
 
-      {/* Old: Packaged Inventory Table */}
       <h2>Finished Packaged Inventory</h2>
       <table>
         <thead>
