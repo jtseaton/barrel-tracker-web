@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PurchaseOrder, ReceiveItem, InventoryItem, Status } from '../types/interfaces';
+import { PurchaseOrder, ReceiveItem, InventoryItem, Status, Vendor } from '../types/interfaces';
 import { MaterialType, Unit } from '../types/enums';
 
 const OUR_DSP = 'DSP-AL-20010';
 
 interface ReceivePageProps {
   refreshInventory: () => Promise<void>;
+  vendors: Vendor[];
+  refreshVendors: () => Promise<void>;
 }
 
 interface OtherCharge {
@@ -18,13 +20,6 @@ interface Item {
   name: string;
   type: string;
   enabled: number;
-}
-
-interface Vendor {
-  name: string;
-  enabled: number;
-  contact?: string; // Added for new vendor form
-  address?: string;
 }
 
 interface ReceiveForm {
@@ -64,7 +59,7 @@ const OTHER_CHARGES_OPTIONS = [
   'Discount',
 ];
 
-const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
+const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
@@ -90,11 +85,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
   const [newItem, setNewItem] = useState<string>('');
   const [newItemType, setNewItemType] = useState<MaterialType>(MaterialType.Grain);
   const [showNewItemModal, setShowNewItemModal] = useState(false);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
-  const [newVendor, setNewVendor] = useState<Vendor>({ name: '', enabled: 1, contact: '', address: '' }); // Added for modal
-  const [showNewVendorModal, setShowNewVendorModal] = useState(false); // Added for modal
+  const [newVendor, setNewVendor] = useState<Vendor>({ name: '', enabled: 1, contact: '', address: '', type: 'Supplier' });
+  const [showNewVendorModal, setShowNewVendorModal] = useState(false);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [selectedPO, setSelectedPO] = useState<string>('');
   const [productionError, setProductionError] = useState<string | null>(null);
@@ -118,18 +112,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       }
     };
 
-    const fetchVendors = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/vendors`);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setVendors(data);
-        setFilteredVendors(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch vendors: ' + err.message);
-      }
-    };
-
     const fetchPOs = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`);
@@ -142,9 +124,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
     };
 
     fetchItems();
-    fetchVendors();
     if (singleForm.source) fetchPOs();
-  }, [API_BASE_URL, singleForm.source]);
+    setFilteredVendors(vendors);
+  }, [API_BASE_URL, singleForm.source, vendors]);
 
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>, index?: number) => {
     const value = e.target.value;
@@ -234,12 +216,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
         body: JSON.stringify(newVendor),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const addedVendor = await res.json();
-      const updatedVendors = [...vendors, addedVendor];
-      setVendors(updatedVendors);
-      setFilteredVendors(updatedVendors);
-      setSingleForm({ ...singleForm, source: addedVendor.name });
-      setNewVendor({ name: '', enabled: 1, contact: '', address: '' });
+      await refreshVendors();
+      setSingleForm({ ...singleForm, source: newVendor.name });
+      setNewVendor({ name: '', enabled: 1, contact: '', address: '', type: 'Supplier' });
       setShowNewVendorModal(false);
       setShowVendorSuggestions(false);
       setProductionError(null);
@@ -266,7 +245,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
       const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
       setReceiveItems(nonSpiritsItems);
       if (spiritsItems.length > 0) {
-        setPoItemToSplit(spiritsItems[0]);
+        setPoItemToSplit({ name: spiritsItems[0].name, quantity: spiritsItems[0].quantity });
         setShowLotModal(true);
       } else {
         setUseSingleItem(false);
@@ -395,9 +374,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
 
   return (
     <div style={{ padding: '20px', backgroundColor: '#2E4655', borderRadius: '8px', maxWidth: '800px', margin: '20px auto', maxHeight: '80vh', overflowY: 'auto' }}>
-      <h2 style={{ color: '#EEC930', marginBottom: '20px', textAlign: 'center' }}>Receive Inventory</h2>
+      <h2 style={{ color: '#ffffff', marginBottom: '20px' }}>Receive Inventory</h2>
       <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        {productionError && <p style={{ color: '#F86752', marginBottom: '15px', textAlign: 'center' }}>{productionError}</p>}
+        {productionError && <p style={{ color: '#f44336', marginBottom: '15px', textAlign: 'center' }}>{productionError}</p>}
         {successMessage && (
           <div style={{ color: '#4CAF50', textAlign: 'center', marginBottom: '15px' }}>
             <p>{successMessage}</p>
@@ -408,13 +387,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
           <label style={{ fontWeight: 'bold', color: '#555', marginRight: '10px' }}>Receive Mode:</label>
           <button
             onClick={() => { setUseSingleItem(true); setReceiveItems([]); }}
-            style={{ backgroundColor: useSingleItem ? '#EEC930' : '#ddd', color: useSingleItem ? '#000' : '#555', padding: '5px 10px', border: 'none', borderRadius: '4px', marginRight: '10px' }}
+            style={{ backgroundColor: useSingleItem ? '#4CAF50' : '#ddd', color: useSingleItem ? 'white' : '#555', padding: '5px 10px', border: 'none', borderRadius: '4px', marginRight: '10px' }}
           >
             Single Item
           </button>
           <button
             onClick={() => { setUseSingleItem(false); if (!receiveItems.length) addItemRow(); }}
-            style={{ backgroundColor: !useSingleItem ? '#EEC930' : '#ddd', color: !useSingleItem ? '#000' : '#555', padding: '5px 10px', border: 'none', borderRadius: '4px' }}
+            style={{ backgroundColor: !useSingleItem ? '#4CAF50' : '#ddd', color: !useSingleItem ? 'white' : '#555', padding: '5px 10px', border: 'none', borderRadius: '4px' }}
           >
             Multiple Items
           </button>
@@ -447,7 +426,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                   <button
                     type="button"
                     onClick={() => { setNewVendor({ ...newVendor, name: singleForm.source }); setShowNewVendorModal(true); setShowVendorSuggestions(false); }}
-                    style={{ backgroundColor: '#F86752', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
+                    style={{ backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
                   >
                     Add "{singleForm.source}"
                   </button>
@@ -514,7 +493,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                         <button
                           type="button"
                           onClick={() => { setNewItem(singleForm.identifier); setShowNewItemModal(true); setShowItemSuggestions(false); }}
-                          style={{ backgroundColor: '#F86752', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
+                          style={{ backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
                         >
                           Create "{singleForm.identifier}"
                         </button>
@@ -655,7 +634,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                             <button
                               type="button"
                               onClick={() => { setNewItem(item.identifier); setShowNewItemModal(true); setShowItemSuggestions(false); }}
-                              style={{ backgroundColor: '#F86752', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
+                              style={{ backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
                             >
                               Create "{item.identifier}"
                             </button>
@@ -720,7 +699,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 <button
                   type="button"
                   onClick={() => removeItemRow(index)}
-                  style={{ backgroundColor: '#F86752', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
+                  style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
                 >
                   X
                 </button>
@@ -758,7 +737,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             <button
               type="button"
               onClick={addItemRow}
-              style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
             >
               Add Item
             </button>
@@ -795,7 +774,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 <button
                   type="button"
                   onClick={() => removeChargeRow(index)}
-                  style={{ backgroundColor: '#F86752', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
+                  style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
                 >
                   X
                 </button>
@@ -804,7 +783,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
             <button
               type="button"
               onClick={addChargeRow}
-              style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
             >
               Add Charge
             </button>
@@ -844,7 +823,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                   <button
                     type="button"
                     onClick={() => setLotItems(lotItems.filter((_, i) => i !== index))}
-                    style={{ backgroundColor: '#F86752', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
+                    style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
                   >
                     X
                   </button>
@@ -853,7 +832,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
               <button
                 type="button"
                 onClick={() => setLotItems([...lotItems, { identifier: '', quantity: '', materialType: MaterialType.Spirits, unit: Unit.Gallons }])}
-                style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+                style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
               >
                 Add Lot
               </button>
@@ -861,26 +840,80 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 <button
                   type="button"
                   onClick={handleLotSplit}
-                  style={{ backgroundColor: '#EEC930', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                 >
                   Submit
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowLotModal(false); setLotItems([]); setPoItemToSplit(null); }}
-                  style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}
+                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}
                 >
                   Cancel
                 </button>
               </div>
-              {productionError && <p style={{ color: '#F86752', marginTop: '10px' }}>{productionError}</p>}
+              {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
+            </div>
+          </div>
+        )}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px', marginTop: '15px' }}>Received Date:</label>
+          <input
+            type="date"
+            value={singleForm.receivedDate}
+            onChange={(e) => setSingleForm({ ...singleForm, receivedDate: e.target.value })}
+            style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+          />
+        </div>
+        {showNewItemModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <h3 style={{ color: '#333', marginBottom: '15px' }}>Create New Item</h3>
+              <label style={{ display: 'block', marginBottom: '10px' }}>
+                Item Name:
+                <input
+                  type="text"
+                  value={newItem}
+                  onChange={(e) => setNewItem(e.target.value)}
+                  placeholder="Enter item name"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: '10px' }}>
+                Material Type:
+                <select
+                  value={newItemType}
+                  onChange={(e) => setNewItemType(e.target.value as MaterialType)}
+                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
+                >
+                  {Object.values(MaterialType).map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <button
+                  type="button"
+                  onClick={handleCreateItem}
+                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowNewItemModal(false); setNewItem(''); setNewItemType(MaterialType.Grain); }}
+                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
         {showNewVendorModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
             <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <h3 style={{ color: '#2E4655', marginBottom: '15px' }}>Add New Vendor</h3>
+              <h3 style={{ color: '#333', marginBottom: '15px' }}>Add New Vendor</h3>
               <label style={{ display: 'block', marginBottom: '10px' }}>
                 Vendor Name:
                 <input
@@ -915,73 +948,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
                 <button
                   type="button"
                   onClick={handleCreateVendor}
-                  style={{ backgroundColor: '#EEC930', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                 >
                   Add Vendor
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowNewVendorModal(false); setNewVendor({ name: '', enabled: 1, contact: '', address: '' }); }}
-                  style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={() => { setShowNewVendorModal(false); setNewVendor({ name: '', enabled: 1, contact: '', address: '', type: 'Supplier' }); }}
+                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
               </div>
-              {productionError && <p style={{ color: '#F86752', marginTop: '10px' }}>{productionError}</p>}
-            </div>
-          </div>
-        )}
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px', marginTop: '15px' }}>Received Date:</label>
-          <input
-            type="date"
-            value={singleForm.receivedDate}
-            onChange={(e) => setSingleForm({ ...singleForm, receivedDate: e.target.value })}
-            style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-          />
-        </div>
-        {showNewItemModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
-            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <h3 style={{ color: '#2E4655', marginBottom: '15px' }}>Create New Item</h3>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Item Name:
-                <input
-                  type="text"
-                  value={newItem}
-                  onChange={(e) => setNewItem(e.target.value)}
-                  placeholder="Enter item name"
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Material Type:
-                <select
-                  value={newItemType}
-                  onChange={(e) => setNewItemType(e.target.value as MaterialType)}
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                >
-                  {Object.values(MaterialType).map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </label>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button
-                  type="button"
-                  onClick={handleCreateItem}
-                  style={{ backgroundColor: '#EEC930', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowNewItemModal(false); setNewItem(''); setNewItemType(MaterialType.Grain); }}
-                  style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
+              {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
             </div>
           </div>
         )}
@@ -989,14 +968,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory }) => {
           <button
             type="button"
             onClick={handleReceive}
-            style={{ backgroundColor: '#EEC930', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
+            style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
           >
             Receive
           </button>
           <button
             type="button"
-            onClick={() => navigate('/inventory')}
-            style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
+            onClick={() => navigate('/')}
+            style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
           >
             Cancel
           </button>
