@@ -369,6 +369,26 @@ app.get('/api/inventory', (req, res) => {
   });
 });
 
+app.put('/api/inventory/:identifier', (req, res) => {
+  const { identifier } = req.params;
+  const { quantity, proof, totalCost, description, status, account } = req.body; // Editable fields
+  if (!quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) < 0) {
+    return res.status(400).json({ error: 'Valid quantity is required' });
+  }
+  db.run(
+    `UPDATE inventory SET quantity = ?, proof = ?, totalCost = ?, description = ?, status = ?, account = ? 
+     WHERE identifier = ?`,
+    [quantity, proof || null, totalCost || null, description || null, status || 'Stored', account || 'Storage', identifier],
+    (err) => {
+      if (err) {
+        console.error('Update inventory error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ message: 'Inventory item updated', identifier });
+    }
+  );
+});
+
 app.get('/api/products', (req, res) => {
   const mockProducts = [
     { id: 1, name: 'Whiskey', abbreviation: 'WH', enabled: true, priority: 1, class: 'Distilled', productColor: 'Amber', type: 'Spirits', style: 'Bourbon', abv: 40, ibu: 0 },
