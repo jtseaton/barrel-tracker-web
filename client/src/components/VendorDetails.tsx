@@ -1,41 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Vendor, InventoryItem, PurchaseOrder } from '../types/interfaces'; // Updated to InventoryItem
 
-interface Vendor {
-  name: string;
-  type: 'Supplier' | 'Customer' | 'Distributor' | 'Delivery';
-  enabled: number;
-  address: string;
-  email: string;
-  phone: string;
+interface VendorDetailsProps {
+  vendors: Vendor[];
+  refreshVendors: () => Promise<void>;
+  refreshInventory: () => Promise<void>;
 }
 
-interface InventoryReceipt {
-  identifier: string;
-  type: string;
-  quantity: string;
-  receivedDate: string;
-  status: string;
-}
-
-interface PurchaseOrder {
-  poNumber: string;
-  site: string;
-  poDate: string;
-  supplier: string;
-  supplierAddress: string;
-  supplierCity: string;
-  supplierState: string;
-  supplierZip: string;
-  comments: string;
-  shipToName: string;
-  shipToAddress: string;
-  shipToCity: string;
-  shipToState: string;
-  shipToZip: string;
-}
-
-const VendorDetails: React.FC = () => {
+const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, refreshInventory }) => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,18 +24,22 @@ const VendorDetails: React.FC = () => {
   });
   const [productionError, setProductionError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'receipts' | 'orders'>('info');
-  const [receipts, setReceipts] = useState<InventoryReceipt[]>([]);
+  const [receipts, setReceipts] = useState<InventoryItem[]>([]); // Updated to InventoryItem
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
     if (name && name !== 'new') {
-      fetchVendorDetails();
+      const vendor = vendors.find(v => v.name === name);
+      if (vendor) {
+        setVendorDetails(vendor);
+        setEditedVendor(vendor);
+      }
       fetchReceipts();
       fetchPurchaseOrders();
     }
-  }, [name]);
+  }, [name, vendors]);
 
   const fetchVendorDetails = async () => {
     try {
@@ -82,7 +59,7 @@ const VendorDetails: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/inventory?source=${name}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      setReceipts(data.filter((item: InventoryReceipt) => ['Received', 'Stored'].includes(item.status || '')));
+      setReceipts(data.filter((item: InventoryItem) => ['Received', 'Stored'].includes(item.status || ''))); // Updated to InventoryItem
       setProductionError(null);
     } catch (err: any) {
       console.error('Fetch receipts error:', err);
@@ -121,6 +98,7 @@ const VendorDetails: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       setVendorDetails(editedVendor);
       setEditing(false);
+      await refreshVendors();
       setProductionError(null);
       navigate(`/vendors/${editedVendor.name}`);
     } catch (err: any) {
@@ -132,7 +110,7 @@ const VendorDetails: React.FC = () => {
   const handleCancel = () => {
     if (name && name !== 'new') {
       setEditing(false);
-      setEditedVendor(vendorDetails!);
+      setEditedVendor(vendorDetails || { name: '', type: 'Supplier', enabled: 1, address: '', email: '', phone: '' });
     } else {
       navigate('/vendors');
     }
@@ -156,6 +134,7 @@ const VendorDetails: React.FC = () => {
       return;
     }
     navigate(`/vendors/${name}/purchase-orders`);
+    setActiveTab('orders');
   };
 
   const handleEditPO = (poNumber: string) => {
@@ -165,6 +144,7 @@ const VendorDetails: React.FC = () => {
   useEffect(() => {
     if (location.state?.fromVendor && name && name !== 'new') {
       fetchReceipts();
+      refreshInventory();
     }
   }, [location.state, name]);
 
@@ -377,7 +357,7 @@ const VendorDetails: React.FC = () => {
               {purchaseOrders.map((order) => (
                 <tr key={order.poNumber}>
                   <td>{order.poNumber}</td>
-                  <td>{order.site}</td>
+                  <td>{order.site || 'N/A'}</td>
                   <td>{order.poDate}</td>
                   <td>{order.comments || 'N/A'}</td>
                   <td>

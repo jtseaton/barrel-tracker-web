@@ -137,6 +137,8 @@ export interface PurchaseOrder {
   poDate: string;
   source: string;
   status: 'Open' | 'Closed';
+  site?: string; // Added, optional
+  comments?: string; // Added, optional
   items: PurchaseOrderItem[];
 }
 
@@ -144,4 +146,14 @@ export interface PurchaseOrderItem {
   name: string;
   quantity: number;
   materialType: MaterialType;
+}
+
+export interface Vendor {
+  name: string;
+  enabled: number;
+  contact?: string;
+  address?: string;
+  type: 'Supplier' | 'Customer' | 'Distributor' | 'Delivery';
+  email?: string;
+  phone?: string;
 }
