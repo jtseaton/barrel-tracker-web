@@ -1,14 +1,13 @@
-// client/src/components/Vendors.tsx
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Vendor } from '../types/interfaces'; // Updated import
 
-interface Vendor {
-  name: string;
-  enabled: boolean;
+interface VendorsProps {
+  vendors: Vendor[];
+  refreshVendors: () => Promise<void>;
 }
 
-const Vendors: React.FC = () => {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+const Vendors: React.FC<VendorsProps> = ({ vendors, refreshVendors }) => {
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
   const [productionError, setProductionError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -16,20 +15,8 @@ const Vendors: React.FC = () => {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
-    fetchVendors();
-  }, [API_BASE_URL]);
-
-  const fetchVendors = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/vendors`);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      setVendors(data);
-    } catch (err: any) {
-      console.error('Fetch vendors error:', err);
-      setProductionError('Failed to fetch vendors: ' + err.message);
-    }
-  };
+    refreshVendors(); // Fetch on mount
+  }, [refreshVendors]);
 
   const handleAddVendor = () => {
     navigate('/vendors/new');
@@ -48,10 +35,9 @@ const Vendors: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       setSelectedVendors([]);
-      fetchVendors();
+      await refreshVendors();
       setProductionError(null);
     } catch (err: any) {
-      console.error('Delete vendors error:', err);
       setProductionError('Failed to delete vendors: ' + err.message);
     }
   };
@@ -69,10 +55,9 @@ const Vendors: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       setSelectedVendors([]);
-      fetchVendors();
+      await refreshVendors();
       setProductionError(null);
     } catch (err: any) {
-      console.error('Toggle enable error:', err);
       setProductionError(`Failed to ${enable ? 'enable' : 'disable'} vendors: ` + err.message);
     }
   };
