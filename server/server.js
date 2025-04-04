@@ -90,29 +90,10 @@ db.serialize(() => {
       shipToCity TEXT,
       shipToState TEXT,
       shipToZip TEXT,
-      items TEXT  -- JSON string of items: [{name: string, quantity: number}]
+      status TEXT DEFAULT 'Open',
+      items TEXT  -- JSON string of items
     )
   `);
-  // Initialize purchase_orders with status
-  db.run(`
-  CREATE TABLE IF NOT EXISTS purchase_orders (
-    poNumber TEXT PRIMARY KEY,
-    site TEXT,
-    poDate TEXT,
-    supplier TEXT,
-    supplierAddress TEXT,
-    supplierCity TEXT,
-    supplierState TEXT,
-    supplierZip TEXT,
-    comments TEXT,
-    shipToName TEXT,
-    shipToAddress TEXT,
-    shipToCity TEXT,
-    shipToState TEXT,
-    shipToZip TEXT,
-    status TEXT DEFAULT 'Open'
-    )
-` );
 
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
@@ -283,14 +264,14 @@ app.get('/api/purchase-orders', (req, res) => {
   let query = 'SELECT * FROM purchase_orders WHERE status = "Open"';
   let params = [];
   if (source) {
-    query += ' AND source = ?';
+    query += ' AND supplier = ?'; // Changed from 'source' to 'supplier'
     params.push(source);
   }
   db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows.map(row => ({
       ...row,
-      items: JSON.parse(row.items),
+      items: JSON.parse(row.items || '[]'), // Ensure items is always parsed
     })));
   });
 });
@@ -309,11 +290,21 @@ app.post('/api/purchase-orders', (req, res) => {
   if (!poNumber || !supplier || !items.length) {
     return res.status(400).json({ error: 'PO Number, Supplier, and at least one item are required' });
   }
+  console.log('Received PO:', req.body); // Add logging
   db.run(
-    'INSERT INTO purchase_orders (poNumber, poDate, source, status, items) VALUES (?, ?, ?, ?, ?)',
-    [poNumber, poDate, supplier, 'Open', JSON.stringify(items)],
+    `INSERT INTO purchase_orders (
+      poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, 
+      comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, status, items
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip,
+      comments, shipToName, shipToAddress, shipToCity, shipToState, shipToZip, 'Open', JSON.stringify(items)
+    ],
     (err) => {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) {
+        console.error('Insert PO error:', err.message); // Log the error
+        return res.status(500).json({ error: err.message });
+      }
       res.json({ message: 'PO created' });
     }
   );
