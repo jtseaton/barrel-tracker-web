@@ -389,6 +389,61 @@ app.put('/api/inventory/:identifier', (req, res) => {
   );
 });
 
+app.post('/api/inventory/adjust', (req, res) => {
+  const { identifier, newQuantity, reason, date } = req.body;
+  if (!identifier || !newQuantity || isNaN(parseFloat(newQuantity)) || parseFloat(newQuantity) < 0 || !reason) {
+    return res.status(400).json({ error: 'Identifier, valid new quantity, and reason are required' });
+  }
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+
+    db.get('SELECT quantity, totalCost, type, unit, cost FROM inventory WHERE identifier = ?', [identifier], (err, row) => {
+      if (err) {
+        db.run('ROLLBACK');
+        return res.status(500).json({ error: err.message });
+      }
+      if (!row) {
+        db.run('ROLLBACK');
+        return res.status(404).json({ error: 'Item not found' });
+      }
+
+      const oldQuantity = parseFloat(row.quantity);
+      const newQuantityNum = parseFloat(newQuantity);
+      const unitCost = row.cost ? parseFloat(row.cost) : (parseFloat(row.totalCost) / oldQuantity) || 0; // Fallback to derived unit cost
+      const newTotalCost = (unitCost * newQuantityNum).toFixed(2);
+      const quantityDiff = (oldQuantity - newQuantityNum).toFixed(2);
+
+      // Update inventory
+      db.run(
+        'UPDATE inventory SET quantity = ?, totalCost = ? WHERE identifier = ?',
+        [newQuantity, newTotalCost, identifier],
+        (err) => {
+          if (err) {
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: err.message });
+          }
+
+          // Log adjustment in transactions
+          db.run(
+            `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber, toAccount)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'Adjusted')`,
+            [identifier, row.type, quantityDiff, row.type === 'Spirits' ? quantityDiff * (parseFloat(row.proof || '0') / 100) : 0, date || new Date().toISOString().split('T')[0], reason, OUR_DSP],
+            (err) => {
+              if (err) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: err.message });
+              }
+              db.run('COMMIT');
+              res.json({ message: 'Inventory adjusted', identifier, newQuantity, newTotalCost });
+            }
+          );
+        }
+      );
+    });
+  });
+});
+
 app.get('/api/products', (req, res) => {
   const mockProducts = [
     { id: 1, name: 'Whiskey', abbreviation: 'WH', enabled: true, priority: 1, class: 'Distilled', productColor: 'Amber', type: 'Spirits', style: 'Bourbon', abv: 40, ibu: 0 },
