@@ -353,12 +353,19 @@ app.post('/api/purchase-orders/email', (req, res) => {
 });
 
 app.get('/api/inventory', (req, res) => {
-  const { source } = req.query;
+  const { source, identifier } = req.query;
   let query = 'SELECT * FROM inventory';
   let params = [];
-  if (source) {
-    query += ' WHERE source = ?';
-    params.push(source);
+  if (source || identifier) {
+    query += ' WHERE';
+    if (source) {
+      query += ' source = ?';
+      params.push(source);
+    }
+    if (identifier) {
+      query += (source ? ' AND' : '') + ' identifier = ?';
+      params.push(identifier);
+    }
   }
   db.all(query, params, (err, rows) => {
     if (err) {
