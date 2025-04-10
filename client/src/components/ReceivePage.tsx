@@ -420,16 +420,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   {vendor.name}
                 </li>
               ))}
+              <li
+                onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+                style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+              >
+                Add New Vendor
+              </li>
               {filteredVendors.length === 0 && singleForm.source && (
-                <li style={{ padding: '8px 10px', borderBottom: '1px solid #eee' }}>
-                  No matches found.{' '}
-                  <button
-                    type="button"
-                    onClick={() => { setNewVendor({ ...newVendor, name: singleForm.source }); setShowNewVendorModal(true); setShowVendorSuggestions(false); }}
-                    style={{ backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
-                  >
-                    Add "{singleForm.source}"
-                  </button>
+                <li style={{ padding: '8px 10px', borderBottom: '1px solid #eee', color: '#555' }}>
+                  No matches found for "{singleForm.source}"
                 </li>
               )}
             </ul>
