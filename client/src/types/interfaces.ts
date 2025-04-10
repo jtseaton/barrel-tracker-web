@@ -54,6 +54,8 @@ export interface ReceiveForm {
   description?: string;
   cost?: string;
   poNumber?: string;
+  siteId: string;     // Added
+  locationId: string; // Added
 }
 
 export interface ReceiveItem {
@@ -62,10 +64,24 @@ export interface ReceiveItem {
   quantity: string;
   unit: Unit;
   proof?: string;
-  cost?: string;
   description?: string;
+  cost?: string;
   poNumber?: string;
-  isShipping?: boolean;
+  siteId: string;     // Added
+  locationId: string; // Added
+}
+
+export interface ReceivableItem {
+  identifier: string;
+  materialType: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  description?: string;
+  cost?: string;
+  poNumber?: string;
+  siteId: string;
+  locationId: string;
 }
 
 export interface InventoryItem {
@@ -84,6 +100,8 @@ export interface InventoryItem {
   cost?: string;
   poNumber?: string;
   totalCost?: string;
+  siteId: string;     // Added
+  locationId: number; // Added
 }
 
 export interface MoveForm {
@@ -135,10 +153,10 @@ export interface Recipe {
 export interface PurchaseOrder {
   poNumber: string;
   poDate: string;
-  source: string;
+  supplier: string;
   status: 'Open' | 'Closed';
-  site?: string; // Added, optional
-  comments?: string; // Added, optional
+  siteId?: string;
+  comments?: string;
   items: PurchaseOrderItem[];
 }
 
@@ -156,4 +174,20 @@ export interface Vendor {
   type: 'Supplier' | 'Customer' | 'Distributor' | 'Delivery';
   email?: string;
   phone?: string;
+}
+
+export interface Site {
+  siteId: string;
+  name: string;
+  type: string;
+  address?: string;
+  enabled: number;
+}
+
+export interface Location {
+  locationId: number;
+  siteId: string;
+  account: string;
+  name: string;
+  enabled: number;
 }
