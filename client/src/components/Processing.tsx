@@ -26,6 +26,8 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
     console.log('Processing inventory:', inventory);
   }, [inventory]);
 
+  const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
+
   const handlePackage = async () => {
     if (!packageForm.batchId || !packageForm.proofGallons || !packageForm.targetProof || !packageForm.netContents || !packageForm.alcoholContent || !packageForm.healthWarning) {
       setProductionError('Please fill in all fields and confirm health warning.');
@@ -34,7 +36,7 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
     const sourceProofGallons = parseFloat(packageForm.proofGallons);
     const targetProof = parseFloat(packageForm.targetProof);
     const bottleSizeGal = 0.198129;
-    const sourceItem = inventory.find((item) => item.identifier === packageForm.batchId.trim() && item.account === 'Processing');
+    const sourceItem = inventory.find((item) => getIdentifier(item) === packageForm.batchId.trim() && item.account === 'Processing');
     if (!sourceItem) {
       setProductionError('Batch not found in Processing!');
       return;
@@ -53,7 +55,7 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId: packageForm.batchId, // Original source batch ID
+          batchId: packageForm.batchId,
           product: packageForm.product,
           proofGallons: finalProofGallons.toFixed(2),
           targetProof: targetProof.toFixed(2),
@@ -71,7 +73,7 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
         throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
       }
       const responseData = await res.json();
-      console.log('Package response:', responseData); // Log the response
+      console.log('Package response:', responseData);
       await refreshInventory();
       setPackageForm({
         batchId: '',
@@ -112,7 +114,7 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
       <h2>Processing</h2>
       <div>
         <h3>Package Product</h3>
-        <input type="text" placeholder="Batch ID in Processing" value={packageForm.batchId} onChange={(e) => setPackageForm({ ...packageForm, batchId: e.target.value })} />
+        <input type="text" placeholder="Batch ID in Processing (e.g., Spirits-NGS123)" value={packageForm.batchId} onChange={(e) => setPackageForm({ ...packageForm, batchId: e.target.value })} />
         <select value={packageForm.product} onChange={(e) => setPackageForm({ ...packageForm, product: e.target.value })}>
           <option value="Old Black Bear Vodka">Old Black Bear Vodka (Vodka)</option>
           <option value="Old Black Bear Gin">Old Black Bear Gin (Gin)</option>
@@ -140,12 +142,12 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
         </thead>
         <tbody>
           {inventory.filter((item) => item.account === 'Processing' && item.status === 'Processing').map((item) => (
-            <tr key={item.identifier || `${item.type}-${item.receivedDate}`}>
+            <tr key={getIdentifier(item)}>
               <td>
-                {editingBatchId === item.identifier ? (
+                {editingBatchId === getIdentifier(item) ? (
                   <input type="text" value={editedBatchId} onChange={(e) => setEditedBatchId(e.target.value)} />
                 ) : (
-                  item.identifier
+                  getIdentifier(item)
                 )}
               </td>
               <td>{item.type}</td>
@@ -156,13 +158,13 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
               <td>{item.source || 'N/A'}</td>
               <td>{item.dspNumber || 'N/A'}</td>
               <td>
-                {editingBatchId === item.identifier ? (
+                {editingBatchId === getIdentifier(item) ? (
                   <>
-                    <button onClick={() => handleBatchIdUpdate(item.identifier!)}>Save</button>
+                    <button onClick={() => handleBatchIdUpdate(getIdentifier(item))}>Save</button>
                     <button onClick={() => setEditingBatchId(null)}>Cancel</button>
                   </>
                 ) : (
-                  <button onClick={() => { setEditingBatchId(item.identifier!); setEditedBatchId(item.identifier!); }}>Edit</button>
+                  <button onClick={() => { setEditingBatchId(getIdentifier(item)); setEditedBatchId(getIdentifier(item)); }}>Edit</button>
                 )}
               </td>
             </tr>
@@ -178,12 +180,12 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
         </thead>
         <tbody>
           {inventory.filter((item) => item.account === 'Processing' && item.status === 'Packaged').map((item) => (
-            <tr key={item.identifier || `${item.type}-${item.receivedDate}`}>
+            <tr key={getIdentifier(item)}>
               <td>
-                {editingBatchId === item.identifier ? (
+                {editingBatchId === getIdentifier(item) ? (
                   <input type="text" value={editedBatchId} onChange={(e) => setEditedBatchId(e.target.value)} />
                 ) : (
-                  item.identifier
+                  getIdentifier(item)
                 )}
               </td>
               <td>{item.type}</td>
@@ -194,13 +196,13 @@ const Processing: React.FC<ProcessingProps> = ({ inventory, refreshInventory }) 
               <td>{item.source || 'N/A'}</td>
               <td>{item.dspNumber || 'N/A'}</td>
               <td>
-                {editingBatchId === item.identifier ? (
+                {editingBatchId === getIdentifier(item) ? (
                   <>
-                    <button onClick={() => handleBatchIdUpdate(item.identifier!)}>Save</button>
+                    <button onClick={() => handleBatchIdUpdate(getIdentifier(item))}>Save</button>
                     <button onClick={() => setEditingBatchId(null)}>Cancel</button>
                   </>
                 ) : (
-                  <button onClick={() => { setEditingBatchId(item.identifier!); setEditedBatchId(item.identifier!); }}>Edit</button>
+                  <button onClick={() => { setEditingBatchId(getIdentifier(item)); setEditedBatchId(getIdentifier(item)); }}>Edit</button>
                 )}
               </td>
             </tr>

@@ -7,8 +7,8 @@ interface InventoryProps {
   refreshInventory: () => Promise<void>;
 }
 
-const InventoryItemDetails: React.FC<InventoryProps> = () => {
-  const { identifier } = useParams<{ identifier: string }>();
+const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) => {
+  const { identifier } = useParams<{ identifier: string }>(); // Still using identifier from URL for now
   const navigate = useNavigate();
   const [item, setItem] = useState<InventoryItem | null>(null);
   const [adjustForm, setAdjustForm] = useState<{ newQuantity: string; reason: string; date: string }>({
@@ -21,13 +21,15 @@ const InventoryItemDetails: React.FC<InventoryProps> = () => {
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
+  const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
+
   useEffect(() => {
     const fetchItem = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/inventory?identifier=${identifier}`);
+        const res = await fetch(`${API_BASE_URL}/api/inventory`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        const foundItem = data.find((i: InventoryItem) => i.identifier === identifier);
+        const foundItem = data.find((i: InventoryItem) => getIdentifier(i) === identifier);
         if (foundItem) {
           setItem(foundItem);
           setAdjustForm(prev => ({ ...prev, newQuantity: foundItem.quantity || '' }));
@@ -56,7 +58,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          identifier: item.identifier,
+          identifier: getIdentifier(item), // Use combined item-lotNumber
           newQuantity: adjustForm.newQuantity,
           reason: adjustForm.reason,
           date: adjustForm.date,
@@ -67,6 +69,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = () => {
       setItem(prev => prev ? { ...prev, quantity: updatedItem.newQuantity, totalCost: updatedItem.newTotalCost } : null);
       setShowAdjustForm(false);
       setProductionError(null);
+      await refreshInventory(); // Refresh inventory after adjustment
     } catch (err: any) {
       console.error('Adjust inventory error:', err);
       setProductionError('Failed to adjust item: ' + err.message);
@@ -96,8 +99,8 @@ const InventoryItemDetails: React.FC<InventoryProps> = () => {
         margin: '0 auto',
         boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}> {/* Fixed typo: flexedirection -> flexDirection */}
-          <div><strong>Identifier:</strong> {item?.identifier}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div><strong>Item-Lot:</strong> {item ? getIdentifier(item) : 'N/A'}</div>
           <div><strong>Type:</strong> {item?.type}</div>
           <div><strong>Description:</strong> {item?.description || 'N/A'}</div>
           <div><strong>Quantity:</strong> {item?.quantity} {item?.unit}</div>
@@ -111,7 +114,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = () => {
           <div><strong>Status:</strong> {item?.status || 'Stored'}</div>
           <div><strong>DSP Number:</strong> {item?.dspNumber || 'N/A'}</div>
         </div>
-        {showAdjustForm && item && ( // Added item check to satisfy TypeScript
+        {showAdjustForm && item && (
           <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#F5F5F5', borderRadius: '4px' }}>
             <h3 style={{ color: '#2E4655', fontSize: '20px', marginBottom: '15px' }}>Adjust Inventory</h3>
             <div style={{ marginBottom: '10px' }}>
