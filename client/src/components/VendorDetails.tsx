@@ -361,7 +361,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
               {purchaseOrders.map((order) => (
                 <tr key={order.poNumber}>
                   <td>{order.poNumber}</td>
-                  <td>{order.site || 'N/A'}</td>
+                  <td>{order.siteId || 'N/A'}</td> {/* Changed from site to siteId */}
                   <td>{order.poDate}</td>
                   <td>{order.comments || 'N/A'}</td>
                   <td>
