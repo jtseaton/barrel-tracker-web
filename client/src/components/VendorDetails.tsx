@@ -100,7 +100,11 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
       setEditing(false);
       await refreshVendors();
       setProductionError(null);
-      navigate(`/vendors/${editedVendor.name}`);
+      if (location.state?.fromReceive) {
+        navigate('/receive', { state: { vendor: editedVendor.name } });
+      } else {
+        navigate(`/vendors/${editedVendor.name}`);
+      }
     } catch (err: any) {
       console.error('Save vendor error:', err);
       setProductionError('Failed to save vendor: ' + err.message);
