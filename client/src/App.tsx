@@ -16,9 +16,10 @@ import PurchaseOrderForm from './components/PurchaseOrderForm';
 import PurchaseOrderList from './components/PurchaseOrderList';
 import Products from './components/Products';
 import ProductDetails from './components/ProductDetails';
+import InventoryItemDetails from './components/InventoryItemDetails';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
-import { InventoryItem } from './types/interfaces';
+import { InventoryItem, Vendor } from './types/interfaces'; // Updated import
 import './App.css';
 
 // Stub components
@@ -27,6 +28,13 @@ const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production pag
 const Locations: React.FC = () => <div><h2>Locations</h2><p>Locations page coming soon</p></div>;
 const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
 
+interface InventoryProps {
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
+}
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
   const [menuOpen, setMenuOpen] = useState(true);
@@ -34,6 +42,7 @@ const AppContent: React.FC = () => {
   const [showProductionSubmenu, setShowProductionSubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]); // Uses shared Vendor type
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -48,38 +57,26 @@ const AppContent: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    setTimeout(() => setIsLoading(false), 4000);
-    refreshInventory();
-  }, []);
+  const refreshVendors = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/vendors`);
+      if (!res.ok) throw new Error('Failed to fetch vendors');
+      const data = await res.json();
+      setVendors(data);
+    } catch (err) {
+      console.error('Fetch vendors error:', err);
+    }
+  };
 
   useEffect(() => {
-    const path = location.pathname;
-    if (path === '/' || path === '/processing' || path === '/sales-distribution' || path === '/users' || path === '/reporting') {
-      setShowInventorySubmenu(false);
-      setShowProductionSubmenu(false);
-      setActiveSection(path === '/' ? 'Home' : path.slice(1).replace('-', ' & ').replace(/(^\w|\s\w)/g, m => m.toUpperCase()));
-    } else if (path === '/inventory' || path === '/receive' || path === '/transfers' || path === '/items' || path.startsWith('/items/') || path.startsWith('/vendors')) {
-      setShowInventorySubmenu(true);
-      setShowProductionSubmenu(false);
-      if (path === '/inventory') setActiveSection('Inventory');
-      else if (path === '/receive') setActiveSection('Inventory');
-      else if (path === '/transfers') setActiveSection('Transfers');
-      else if (path === '/items' || path.startsWith('/items/')) setActiveSection('Items');
-      else if (path.startsWith('/vendors')) setActiveSection('Vendors');
-    } else if (path === '/production' || path === '/products' || path === '/facility' || path === '/production-page' || path === '/locations' || path === '/equipment' || path === '/planning' || path === '/facility-designer') {
-      setShowProductionSubmenu(true);
-      setShowInventorySubmenu(false);
-      if (path === '/production') setActiveSection('Production');
-      else if (path === '/products') setActiveSection('Products');
-      else if (path === '/facility') setActiveSection('Facility');
-      else if (path === '/production-page') setActiveSection('Production');
-      else if (path === '/locations') setActiveSection('Locations');
-      else if (path === '/equipment') setActiveSection('Equipment');
-      else if (path === '/planning') setActiveSection('Planning');
-      else if (path === '/facility-designer') setActiveSection('Facility Designer');
-    }
-  }, [location.pathname]);
+    const loadData = async () => {
+      await Promise.all([refreshInventory(), refreshVendors()]);
+      setTimeout(() => setIsLoading(false), 4000);
+    };
+    loadData();
+  }, []);
+
+  // ... (rest of your useEffect for navigation unchanged)
 
   const handleInventoryClick = () => {
     if (activeSection === 'Inventory' && showInventorySubmenu) {
@@ -219,7 +216,7 @@ const AppContent: React.FC = () => {
                 {activeSection === 'Equipment' && <Equipment />}
                 {activeSection === 'Planning' && <div><h2>Planning</h2><p>Coming soon</p></div>}
                 {activeSection === 'Facility Designer' && <div><h2>Facility Designer</h2><p>Coming soon</p></div>}
-                {activeSection === 'Vendors' && <Vendors />}
+                {activeSection === 'Vendors' && <Vendors vendors={vendors} refreshVendors={refreshVendors} />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing inventory={inventory} refreshInventory={refreshInventory} />}
                 {activeSection === 'Sales & Distribution' && <Sales />}
@@ -229,12 +226,13 @@ const AppContent: React.FC = () => {
             }
           />
           <Route path="/inventory" element={<Inventory inventory={inventory} refreshInventory={refreshInventory} />} />
-          <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} />} />
+          <Route path="/inventory/:identifier" element={<InventoryItemDetails inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
-          <Route path="/vendors" element={<Vendors />} />
-          <Route path="/vendors/:name" element={<VendorDetails />} />
+          <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} vendors={vendors} refreshVendors={refreshVendors} />} />
+          <Route path="/vendors" element={<Vendors vendors={vendors} refreshVendors={refreshVendors} />} />
+          <Route path="/vendors/:name" element={<VendorDetails vendors={vendors} refreshVendors={refreshVendors} refreshInventory={refreshInventory} />} />
           <Route path="/vendors/:name/purchase-orders" element={<PurchaseOrderList />} />
           <Route path="/vendors/:name/purchase-orders/new" element={<PurchaseOrderForm />} />
           <Route path="/vendors/:name/purchase-orders/:poNumber" element={<PurchaseOrderForm />} />
