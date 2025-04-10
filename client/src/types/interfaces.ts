@@ -134,24 +134,24 @@ export interface ReceivableItem {
 }
 
 export interface InventoryItem {
-  item: string; // Replaces identifier
-  lotNumber: string; // New field
+  item: string;
+  lotNumber: string;
   account: Account;
   type: MaterialType;
   quantity: string;
   unit: Unit;
-  proof?: string;
+  proof?: string; // Optional, string | undefined
   proofGallons?: string;
   receivedDate: string;
   source?: string;
   dspNumber?: string;
   status: Status;
-  description?: string;
+  description?: string; // Optional, string | undefined
   cost?: string;
   totalCost?: string;
   poNumber?: string;
   siteId: string;
-  locationId?: number; // Optional
+  locationId?: number;
 }
 
 export interface PurchaseOrder {
