@@ -1,6 +1,6 @@
 export enum Status {
   Received = 'Received',
-  Stored = 'Stored',
+  Stored = 'Storage', // Changed to match CFR, though we'll phase this into Account
   Processing = 'Processing',
   Packaged = 'Packaged',
 }
@@ -10,7 +10,8 @@ export enum Unit {
   Gallons = 'gallons',
   Count = 'count',
 }
-export const TEST_VALUE = 'test'; // Add this line
+
+export const TEST_VALUE = 'test';
 
 export enum MaterialType {
   Grain = 'Grain',
@@ -30,4 +31,10 @@ export enum ProductClass {
   Beer = 'Beer',
   Wine = 'Wine',
   Spirits = 'Spirits',
+}
+
+export enum Account {
+  Storage = 'Storage',
+  Processing = 'Processing',
+  Production = 'Production',
 }

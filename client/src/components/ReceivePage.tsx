@@ -1,26 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor } from '../types/interfaces';
-import { MaterialType, Unit } from '../types/enums';
+import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor, ReceiveForm, PurchaseOrderItem } from '../types/interfaces'; // Added ReceiveForm, PurchaseOrderItem
+import { MaterialType, Unit, Account } from '../types/enums';
 import { Site, Location } from '../types/interfaces';
 
-const OUR_DSP = 'DSP-AL-20010';
-
 interface ReceivePageProps {
   refreshInventory: () => Promise<void>;
   vendors: Vendor[];
   refreshVendors: () => Promise<void>;
-}
-
-interface ReceivePageProps {
-  refreshInventory: () => Promise<void>;
-  vendors: Vendor[];
-  refreshVendors: () => Promise<void>;
-}
-
-interface OtherCharge {
-  name: string;
-  cost: string;
 }
 
 interface Item {
@@ -29,76 +16,47 @@ interface Item {
   enabled: number;
 }
 
-interface ReceiveForm {
-  identifier: string;
-  account: string;
-  materialType: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof: string;
-  source: string;
-  siteId: string;  // New
-  locationId: string;  // New
-  receivedDate: string;
-  description: string;
-  cost: string;
-  poNumber?: string;
-}
-
-const OTHER_CHARGES_OPTIONS = [
-  'Credit Card Processing',
-  'Freight',
-  'Shipping',
-  'Skid',
-  'Milling',
-  'Tote Service',
-  'Storage',
-  'Discount',
-];
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [sites, setSites] = useState<Site[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010'); // Default to Athens AL
-  const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
-  const [otherCharges, setOtherCharges] = useState<OtherCharge[]>([]);
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
-    account: 'Stored',
+    account: Account.Storage,
     materialType: MaterialType.Grain,
     quantity: '',
     unit: Unit.Pounds,
     proof: '',
     source: location.state?.vendor || '',
-    siteId: 'DSP-AL-20010',
-    locationId: '',
+    dspNumber: '',
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
     cost: '',
     poNumber: '',
+    siteId: 'DSP-AL-20010',
+    locationId: '',
   });
+  const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [useSingleItem, setUseSingleItem] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
-  const [newItem, setNewItem] = useState<string>('');
-  const [newItemType, setNewItemType] = useState<MaterialType>(MaterialType.Grain);
-  const [showNewItemModal, setShowNewItemModal] = useState(false);
-  const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
+  const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010');
+  const [sites, setSites] = useState<Site[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [filteredVendors, setFilteredVendors] = useState<Vendor[]>(vendors);
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
-  const [newVendor, setNewVendor] = useState<Vendor>({ name: '', enabled: 1, contact: '', address: '', type: 'Supplier' });
-  const [showNewVendorModal, setShowNewVendorModal] = useState(false);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [selectedPO, setSelectedPO] = useState<string>('');
   const [productionError, setProductionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [selectedPO, setSelectedPO] = useState<string | null>(null);
+  const [poItemToSplit, setPoItemToSplit] = useState<PurchaseOrderItem | null>(null);
   const [lotItems, setLotItems] = useState<ReceiveItem[]>([]);
-  const [showLotModal, setShowLotModal] = useState(false);
-  const [poItemToSplit, setPoItemToSplit] = useState<{ name: string; quantity: number } | null>(null);
-
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+  const [newItem, setNewItem] = useState('');
+  const [newItemType, setNewItemType] = useState<MaterialType>(MaterialType.Grain);
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
+  const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -112,7 +70,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         setProductionError('Failed to fetch items: ' + err.message);
       }
     };
-  
+
     const fetchPOs = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`);
@@ -123,7 +81,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         setProductionError('Failed to fetch POs: ' + err.message);
       }
     };
-  
+
     const fetchSites = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/sites`);
@@ -134,7 +92,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         setProductionError('Failed to fetch sites: ' + err.message);
       }
     };
-  
+
     const fetchLocations = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}&account=${encodeURIComponent(singleForm.account)}`);
@@ -142,59 +100,95 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         const data = await res.json();
         setLocations(data);
         if (data.length > 0 && !singleForm.locationId) {
-          setSingleForm(prev => ({ ...prev, locationId: data[0].locationId.toString() }));
+          setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: data[0].locationId.toString() }));
         }
       } catch (err: any) {
         setProductionError('Failed to fetch locations: ' + err.message);
       }
     };
-  
+
     fetchSites();
     fetchItems();
     if (singleForm.source) fetchPOs();
     fetchLocations();
     setFilteredVendors(vendors);
-  }, [API_BASE_URL, singleForm.source, singleForm.account, selectedSite, vendors]); 
+  }, [API_BASE_URL, singleForm.source, singleForm.account, selectedSite, vendors]);
 
-  const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>, index?: number) => {
+  const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (useSingleItem) {
-      setSingleForm({ ...singleForm, identifier: value });
-      setShowItemSuggestions(true);
-      setFilteredItems(value.trim() ? items.filter(item => item.name.toLowerCase().includes(value.toLowerCase())) : items);
-    } else if (index !== undefined) {
-      const updatedItems = [...receiveItems];
-      updatedItems[index].identifier = value;
-      setReceiveItems(updatedItems);
-      setShowItemSuggestions(true);
-      setFilteredItems(value.trim() ? items.filter(item => item.name.toLowerCase().includes(value.toLowerCase())) : items);
-    }
+    setSingleForm((prev: ReceiveForm) => ({ ...prev, source: value }));
+    setFilteredVendors(vendors.filter(v => v.name.toLowerCase().includes(value.toLowerCase())));
+    setShowVendorSuggestions(true);
+  };
+
+  const handleVendorSelect = (vendor: Vendor) => {
+    setSingleForm((prev: ReceiveForm) => ({ ...prev, source: vendor.name }));
+    setShowVendorSuggestions(false);
   };
 
   const handleItemSelect = (item: Item, index?: number) => {
     const normalizedType = item.type ? item.type.charAt(0).toUpperCase() + item.type.slice(1).toLowerCase() : 'Other';
     const materialType = Object.values(MaterialType).includes(normalizedType as MaterialType) ? normalizedType as MaterialType : MaterialType.Other;
     if (useSingleItem) {
-      setSingleForm({ ...singleForm, identifier: item.name, materialType });
+      setSingleForm((prev: ReceiveForm) => ({ ...prev, identifier: item.name, materialType }));
     } else if (index !== undefined) {
       const updatedItems = [...receiveItems];
       updatedItems[index] = { 
         ...updatedItems[index], 
         identifier: item.name, 
         materialType,
-        siteId: selectedSite, // Added
-        locationId: singleForm.locationId || updatedItems[index].locationId // Preserve or set
+        siteId: selectedSite,
+        locationId: singleForm.locationId || updatedItems[index].locationId,
       };
       setReceiveItems(updatedItems);
     }
     setShowItemSuggestions(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index?: number) => {
-    if (e.key === 'Enter' && filteredItems.length > 0) {
-      e.preventDefault();
-      handleItemSelect(filteredItems[0], index);
+  const handlePOSelect = (poNumber: string) => {
+    const po = purchaseOrders.find(p => p.poNumber === poNumber); // Fixed typo: peNumber -> poNumber
+    if (!po) return;
+    setSelectedPO(poNumber);
+    const nonSpiritsItems = po.items
+      .filter(item => item.materialType !== MaterialType.Spirits)
+      .map(item => ({
+        identifier: item.name,
+        materialType: item.materialType,
+        quantity: item.quantity.toString(),
+        unit: Unit.Pounds,
+        cost: '',
+        poNumber,
+        siteId: selectedSite,
+        locationId: singleForm.locationId || '',
+      }));
+    const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
+    if (spiritsItems.length > 0) {
+      setPoItemToSplit(spiritsItems[0]);
     }
+    setReceiveItems(nonSpiritsItems);
+    setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+  };
+
+  const handleLotSplit = () => {
+    if (!poItemToSplit) return;
+    const totalGallons = lotItems.reduce((sum, item) => sum + parseFloat(item.quantity || '0'), 0);
+    if (totalGallons !== poItemToSplit.quantity) {
+      setProductionError(`Total gallons (${totalGallons}) must match PO quantity (${poItemToSplit.quantity})`);
+      return;
+    }
+    setReceiveItems(prev => [
+      ...prev,
+      ...lotItems.map(item => ({
+        ...item,
+        materialType: MaterialType.Spirits,
+        unit: Unit.Gallons,
+        poNumber: selectedPO || undefined,
+        siteId: selectedSite,
+        locationId: singleForm.locationId || '',
+      })),
+    ]);
+    setPoItemToSplit(null);
+    setLotItems([]);
   };
 
   const handleCreateItem = async () => {
@@ -213,15 +207,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setItems(updatedItems);
       setFilteredItems(updatedItems);
       if (useSingleItem) {
-        setSingleForm({ ...singleForm, identifier: newItem, materialType: newItemType });
+        setSingleForm((prev: ReceiveForm) => ({ ...prev, identifier: newItem, materialType: newItemType }));
       } else {
         setReceiveItems([...receiveItems, { 
           identifier: newItem, 
           materialType: newItemType, 
           quantity: '', 
           unit: Unit.Pounds,
-          siteId: selectedSite,          // Added
-          locationId: singleForm.locationId || '', // Added, fallback to empty if unset
+          siteId: selectedSite,
+          locationId: singleForm.locationId || '',
         }]);
       }
       setNewItem('');
@@ -233,104 +227,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     }
   };
 
-  const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSingleForm({ ...singleForm, source: value });
-    setShowVendorSuggestions(true);
-    setFilteredVendors(value.trim() ? vendors.filter(vendor => vendor.name.toLowerCase().includes(value.toLowerCase())) : vendors);
-  };
-
-  const handleVendorSelect = (vendor: Vendor) => {
-    setSingleForm({ ...singleForm, source: vendor.name });
-    setShowVendorSuggestions(false);
-  };
-
-  const handleCreateVendor = async () => {
-    if (!newVendor.name) {
-      setProductionError('Vendor name is required');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/vendors`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newVendor),
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      await refreshVendors();
-      setSingleForm({ ...singleForm, source: newVendor.name });
-      setNewVendor({ name: '', enabled: 1, contact: '', address: '', type: 'Supplier' });
-      setShowNewVendorModal(false);
-      setShowVendorSuggestions(false);
-      setProductionError(null);
-    } catch (err: any) {
-      setProductionError('Failed to create vendor: ' + err.message);
-    }
-  };
-
-  const handlePOSelect = (poNumber: string) => {
-    setSelectedPO(poNumber);
-    setSingleForm({ ...singleForm, poNumber });
-    const po = purchaseOrders.find(p => p.poNumber === poNumber);
-    if (po) {
-      const nonSpiritsItems = po.items
-      .filter(item => item.materialType !== MaterialType.Spirits)
-      .map(item => ({
-        identifier: item.name,
-        materialType: item.materialType,
-        quantity: item.quantity.toString(),
-        unit: Unit.Pounds,
-        cost: '',
-        poNumber: poNumber,
-        siteId: selectedSite,
-        locationId: singleForm.locationId || '',
-      }));
-      const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
-      setReceiveItems(nonSpiritsItems);
-      if (spiritsItems.length > 0) {
-        setPoItemToSplit({ name: spiritsItems[0].name, quantity: spiritsItems[0].quantity });
-        setShowLotModal(true);
-      } else {
-        setUseSingleItem(false);
-      }
-    }
-  };
-
-  const handleLotSplit = () => {
-    if (!poItemToSplit || lotItems.length === 0 || lotItems.some(item => !item.identifier || !item.quantity)) {
-      setProductionError('All lots must have a Lot Number and Quantity');
-      return;
-    }
-    const totalQuantity = lotItems.reduce((sum, item) => sum + parseFloat(item.quantity || '0'), 0);
-    if (totalQuantity !== poItemToSplit.quantity) {
-      setProductionError(`Total quantity (${totalQuantity}) must equal PO quantity (${poItemToSplit.quantity})`);
-      return;
-    }
-    setReceiveItems(prev => [
-      ...prev,
-      ...lotItems.map(item => ({
-        ...item,
-        materialType: MaterialType.Spirits,
-        unit: Unit.Gallons,
-        poNumber: selectedPO || undefined,
-        siteId: selectedSite,
-        locationId: singleForm.locationId || '',
-      })),
-    ]);
-    setLotItems([]);
-    setShowLotModal(false);
-    setPoItemToSplit(null);
-    setUseSingleItem(false);
-  };
-
-  const addChargeRow = () => {
-    setOtherCharges([...otherCharges, { name: '', cost: '' }]);
-  };
-
-  const removeChargeRow = (index: number) => {
-    setOtherCharges(otherCharges.filter((_, i) => i !== index));
-  };
-
   const addItemRow = () => {
     setReceiveItems([...receiveItems, { 
       identifier: '', 
@@ -339,11 +235,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       unit: Unit.Pounds,
       cost: '',
       siteId: selectedSite,
-      locationId: singleForm.locationId || '', // Default to current location or empty
+      locationId: singleForm.locationId || '',
     }]);
-  };
-  const removeItemRow = (index: number) => {
-    setReceiveItems(receiveItems.filter((_, i) => i !== index));
   };
 
   const handleReceive = async () => {
@@ -363,14 +256,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setProductionError('Invalid data in inventory items: check Spirits proof, Other description, or numeric values');
       return;
     }
-    const invalidCharges = otherCharges.filter(charge => 
-      !charge.name || (charge.cost && (isNaN(parseFloat(charge.cost)) || parseFloat(charge.cost) < 0))
-    );
-    if (invalidCharges.length) {
-      setProductionError('Invalid other charges: ensure name is selected and cost is valid');
-      return;
-    }
-
     const totalOtherCost = otherCharges.reduce((sum, charge) => 
       sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
     const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
@@ -383,7 +268,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
       return {
         identifier: item.materialType === MaterialType.Spirits ? item.identifier : (item.identifier || 'N/A'),
-        account: item.materialType === MaterialType.Spirits ? singleForm.account : 'Stored',
+        account: item.materialType === MaterialType.Spirits ? singleForm.account : Account.Storage,
         type: item.materialType,
         quantity: item.quantity,
         unit: item.unit,
@@ -391,8 +276,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
         receivedDate: singleForm.receivedDate,
         source: singleForm.source,
-        siteId: singleForm.siteId,  // New
-        locationId: parseInt(singleForm.locationId),  // New
+        siteId: singleForm.siteId,
+        locationId: parseInt(singleForm.locationId),
         status: Status.Received,
         description: item.description,
         cost: finalUnitCost,
@@ -400,7 +285,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         poNumber: item.poNumber,
       };
     });
-  
+
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
@@ -420,638 +305,566 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#2E4655', borderRadius: '8px', maxWidth: '800px', margin: '20px auto', maxHeight: '80vh', overflowY: 'auto' }}>
-      <h2 style={{ color: '#ffffff', marginBottom: '20px' }}>Receive Inventory</h2>
-      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        {productionError && <p style={{ color: '#f44336', marginBottom: '15px', textAlign: 'center' }}>{productionError}</p>}
-        {successMessage && (
-          <div style={{ color: '#4CAF50', textAlign: 'center', marginBottom: '15px' }}>
-            <p>{successMessage}</p>
-            <img src="/doggo-slurp.gif" alt="Dog slurping" style={{ width: '100px', height: '100px' }} />
-          </div>
-        )}
-        <div style={{ marginBottom: '15px' }}>
-  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Site:</label>
-  <select
-    value={selectedSite}
-    onChange={(e) => {
-      setSelectedSite(e.target.value);
-      setSingleForm(prev => ({ ...prev, siteId: e.target.value, locationId: '' }));
-    }}
-    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-  >
-    {sites.map(site => (
-      <option key={site.siteId} value={site.siteId}>{site.name}</option>
-    ))}
-  </select>
-</div>
-<div style={{ marginBottom: '15px' }}>
-  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location:</label>
-  <select
-    value={singleForm.locationId}
-    onChange={(e) => setSingleForm(prev => ({ ...prev, locationId: e.target.value }))}
-    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-  >
-    {locations.map(loc => (
-      <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-    ))}
-  </select>
-</div>
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ fontWeight: 'bold', color: '#555', marginRight: '10px' }}>Receive Mode:</label>
-          <button
-            onClick={() => { setUseSingleItem(true); setReceiveItems([]); }}
-            style={{ backgroundColor: useSingleItem ? '#4CAF50' : '#ddd', color: useSingleItem ? 'white' : '#555', padding: '5px 10px', border: 'none', borderRadius: '4px', marginRight: '10px' }}
-          >
-            Single Item
-          </button>
-          <button
-            onClick={() => { setUseSingleItem(false); if (!receiveItems.length) addItemRow(); }}
-            style={{ backgroundColor: !useSingleItem ? '#4CAF50' : '#ddd', color: !useSingleItem ? 'white' : '#555', padding: '5px 10px', border: 'none', borderRadius: '4px' }}
-          >
-            Multiple Items
-          </button>
-        </div>
-        <div style={{ position: 'relative', marginBottom: '15px' }}>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
-          <input
-            type="text"
-            value={singleForm.source}
-            onChange={handleVendorInputChange}
-            placeholder="Type to search vendors"
-            onFocus={() => setShowVendorSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
-            style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-          />
-          {showVendorSuggestions && (
-            <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              {filteredVendors.map((vendor) => (
-                <li
-                  key={vendor.name}
-                  onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
-                  style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.source === vendor.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                >
-                  {vendor.name}
-                </li>
-              ))}
-              <li
-                onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
-                style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
-              >
-                Add New Vendor
-              </li>
-              {filteredVendors.length === 0 && singleForm.source && (
-                <li style={{ padding: '8px 10px', borderBottom: '1px solid #eee', color: '#555' }}>
-                  No matches found for "{singleForm.source}"
-                </li>
-              )}
-            </ul>
-          )}
-        </div>
-        {singleForm.source && (
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <h1 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px' }}>Receive Inventory</h1>
+      {productionError && <div style={{ color: 'red', marginBottom: '10px' }}>{productionError}</div>}
+      {successMessage && <div style={{ color: 'green', marginBottom: '10px' }}>{successMessage}</div>}
+
+      <div style={{ marginBottom: '20px' }}>
+        <button
+          onClick={() => setUseSingleItem(true)}
+          style={{ backgroundColor: useSingleItem ? '#2196F3' : '#ddd', color: useSingleItem ? 'white' : '#555', padding: '10px 20px', border: 'none', borderRadius: '4px', marginRight: '10px' }}
+        >
+          Single Item
+        </button>
+        <button
+          onClick={() => setUseSingleItem(false)}
+          style={{ backgroundColor: !useSingleItem ? '#2196F3' : '#ddd', color: !useSingleItem ? 'white' : '#555', padding: '10px 20px', border: 'none', borderRadius: '4px' }}
+        >
+          Multiple Items
+        </button>
+      </div>
+
+      {useSingleItem ? (
+        <div>
+          {/* Site Selector */}
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Open Purchase Orders:</label>
-            {purchaseOrders.length > 0 ? (
-              <ul style={{ listStyle: 'none', padding: 0, maxHeight: '150px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#fff' }}>
-                {purchaseOrders.map(po => (
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Site:</label>
+            <select
+              value={selectedSite}
+              onChange={(e) => {
+                setSelectedSite(e.target.value);
+                setSingleForm((prev: ReceiveForm) => ({ ...prev, siteId: e.target.value, locationId: '' }));
+              }}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              {sites.map(site => (
+                <option key={site.siteId} value={site.siteId}>{site.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Physical Location Selector */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location:</label>
+            <select
+              value={singleForm.locationId}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              <option value="">Select a location</option>
+              {locations.map(loc => (
+                <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Vendor Selector */}
+          <div style={{ position: 'relative', marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+            <input
+              type="text"
+              value={singleForm.source}
+              onChange={handleVendorInputChange}
+              placeholder="Type to search vendors"
+              onFocus={() => setShowVendorSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+            {showVendorSuggestions && (
+              <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                {filteredVendors.map((vendor) => (
                   <li
-                    key={po.poNumber}
-                    onClick={() => handlePOSelect(po.poNumber)}
-                    style={{
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      backgroundColor: selectedPO === po.poNumber ? '#e0e0e0' : '#fff',
-                      borderBottom: '1px solid #eee',
-                    }}
+                    key={vendor.name}
+                    onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
+                    style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.source === vendor.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
                   >
-                    {po.poNumber} - {po.poDate} ({po.items.length} items)
+                    {vendor.name}
                   </li>
                 ))}
+                <li
+                  onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+                  style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                >
+                  Add New Vendor
+                </li>
               </ul>
-            ) : (
-              <p style={{ color: '#555' }}>No open POs for {singleForm.source}</p>
             )}
           </div>
-        )}
-        {useSingleItem ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-            <div style={{ position: 'relative' }}>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item:</label>
-              <input
-                type="text"
-                value={singleForm.identifier}
-                onChange={handleItemInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Type to search items"
-                onFocus={() => setShowItemSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-              />
-              {showItemSuggestions && (
-                <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                  {filteredItems.length > 0 ? (
-                    filteredItems.map((item) => (
-                      <li
-                        key={item.name}
-                        onMouseDown={(e) => { e.preventDefault(); handleItemSelect(item); }}
-                        style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.identifier === item.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                      >
-                        {item.name}
-                      </li>
-                    ))
-                  ) : (
-                    singleForm.identifier && (
-                      <li style={{ padding: '8px 10px', borderBottom: '1px solid #eee' }}>
-                        No matches found.{' '}
-                        <button
-                          type="button"
-                          onClick={() => { setNewItem(singleForm.identifier); setShowNewItemModal(true); setShowItemSuggestions(false); }}
-                          style={{ backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
-                        >
-                          Create "{singleForm.identifier}"
-                        </button>
-                      </li>
-                    )
-                  )}
-                </ul>
-              )}
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Material Type:</label>
-              <select
-                value={singleForm.materialType}
-                onChange={(e) => setSingleForm({ ...singleForm, materialType: e.target.value as MaterialType })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-              >
-                {Object.values(MaterialType).map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
-              <input
-                type="number"
-                value={singleForm.quantity}
-                onChange={(e) => setSingleForm({ ...singleForm, quantity: e.target.value })}
-                step="0.01"
-                min="0"
-                placeholder="Enter quantity"
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Unit:</label>
-              <select
-                value={singleForm.unit}
-                onChange={(e) => setSingleForm({ ...singleForm, unit: e.target.value as Unit })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-              >
-                {Object.values(Unit).map((unit) => (
-                  <option key={unit} value={unit}>{unit}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Cost (USD):</label>
-              <input
-                type="number"
-                value={singleForm.cost}
-                onChange={(e) => setSingleForm({ ...singleForm, cost: e.target.value })}
-                step="0.01"
-                min="0"
-                placeholder="Enter cost"
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-              />
-            </div>
-            {singleForm.materialType === MaterialType.Spirits && (
-              <>
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account:</label>
-                  <select
-                    value={singleForm.account}
-                    onChange={(e) => setSingleForm({ ...singleForm, account: e.target.value })}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+
+          {/* Item/Lot Number */}
+          <div style={{ position: 'relative', marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item/Lot Number:</label>
+            <input
+              type="text"
+              value={singleForm.identifier}
+              onChange={(e) => {
+                setSingleForm((prev: ReceiveForm) => ({ ...prev, identifier: e.target.value }));
+                setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                setShowItemSuggestions(true);
+              }}
+              onFocus={() => setShowItemSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+            {showItemSuggestions && (
+              <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                {filteredItems.map(item => (
+                  <li
+                    key={item.name}
+                    onMouseDown={() => handleItemSelect(item)}
+                    style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.identifier === item.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
                   >
-                    <option value="Stored">Stored</option>
-                    <option value="Processing">Processing</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Proof:</label>
-                  <input
-                    type="number"
-                    value={singleForm.proof}
-                    onChange={(e) => setSingleForm({ ...singleForm, proof: e.target.value })}
-                    step="0.01"
-                    min="0"
-                    max="200"
-                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </>
+                    {item.name}
+                  </li>
+                ))}
+                <li
+                  onMouseDown={() => setShowNewItemModal(true)}
+                  style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                >
+                  Add New Item
+                </li>
+              </ul>
             )}
-            {singleForm.materialType === MaterialType.Other && (
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Description:</label>
+          </div>
+
+          {/* Material Type */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Material Type:</label>
+            <select
+              value={singleForm.materialType}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, materialType: e.target.value as MaterialType }))}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              {Object.values(MaterialType).map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Quantity */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
+            <input
+              type="number"
+              value={singleForm.quantity}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, quantity: e.target.value }))}
+              step="0.01"
+              min="0"
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          {/* Unit */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Unit:</label>
+            <select
+              value={singleForm.unit}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, unit: e.target.value as Unit }))}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              {Object.values(Unit).map(unit => (
+                <option key={unit} value={unit}>{unit}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Spirits-specific fields */}
+          {singleForm.materialType === MaterialType.Spirits && (
+            <>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account:</label>
+                <select
+                  value={singleForm.account}
+                  onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, account: e.target.value as Account }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                >
+                  <option value={Account.Storage}>Storage</option>
+                  <option value={Account.Processing}>Processing</option>
+                  <option value={Account.Production}>Production</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Proof:</label>
                 <input
-                  type="text"
-                  value={singleForm.description}
-                  onChange={(e) => setSingleForm({ ...singleForm, description: e.target.value })}
+                  type="number"
+                  value={singleForm.proof || ''}
+                  onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, proof: e.target.value }))}
+                  step="0.01"
+                  min="0"
+                  max="200"
                   style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
                 />
               </div>
-            )}
+            </>
+          )}
+
+          {/* Other-specific fields */}
+          {singleForm.materialType === MaterialType.Other && (
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Description:</label>
+              <input
+                type="text"
+                value={singleForm.description || ''}
+                onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, description: e.target.value }))}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+              />
+            </div>
+          )}
+
+          {/* Received Date */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
+            <input
+              type="date"
+              value={singleForm.receivedDate}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, receivedDate: e.target.value }))}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
           </div>
-        ) : (
-          <div>
-            <h3 style={{ color: '#555', marginBottom: '10px' }}>Inventory Items</h3>
-            {receiveItems.map((item, index) => (
-              <div key={`item-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    value={item.identifier}
-                    onChange={(e) => handleItemInputChange(e, index)}
-                    onKeyDown={(e) => handleKeyDown(e, index)}
-                    placeholder="Item"
-                    onFocus={() => setShowItemSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                  />
-                  {showItemSuggestions && index === receiveItems.length - 1 && (
-                    <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                      {filteredItems.length > 0 ? (
-                        filteredItems.map((i) => (
+
+          {/* Cost */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Cost:</label>
+            <input
+              type="number"
+              value={singleForm.cost || ''}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, cost: e.target.value }))}
+              step="0.01"
+              min="0"
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          {/* PO Number */}
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
+            <select
+              value={singleForm.poNumber || ''}
+              onChange={(e) => {
+                const poNumber = e.target.value;
+                setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+                if (poNumber) handlePOSelect(poNumber);
+              }}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              <option value="">Select PO (optional)</option>
+              {purchaseOrders.map(po => (
+                <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Submit Button */}
+          <button
+            onClick={handleReceive}
+            style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+          >
+            Receive Item
+          </button>
+        </div>
+      ) : (
+        <div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+            <thead>
+              <tr>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Item/Lot Number</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Material Type</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Quantity</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Unit</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Cost</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receiveItems.map((item, index) => (
+                <tr key={index}>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    <input
+                      type="text"
+                      value={item.identifier}
+                      onChange={(e) => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].identifier = e.target.value;
+                        setReceiveItems(updatedItems);
+                        setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                        setShowItemSuggestions(true);
+                      }}
+                      onFocus={() => setShowItemSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                    />
+                    {showItemSuggestions && (
+                      <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                        {filteredItems.map(i => (
                           <li
                             key={i.name}
-                            onMouseDown={(e) => { e.preventDefault(); handleItemSelect(i, index); }}
+                            onMouseDown={() => handleItemSelect(i, index)}
                             style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: item.identifier === i.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
                           >
                             {i.name}
                           </li>
-                        ))
-                      ) : (
-                        item.identifier && (
-                          <li style={{ padding: '8px 10px', borderBottom: '1px solid #eee' }}>
-                            No matches.{' '}
-                            <button
-                              type="button"
-                              onClick={() => { setNewItem(item.identifier); setShowNewItemModal(true); setShowItemSuggestions(false); }}
-                              style={{ backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
-                            >
-                              Create "{item.identifier}"
-                            </button>
-                          </li>
-                        )
-                      )}
-                    </ul>
-                  )}
-                </div>
-                <select
-                  value={item.materialType}
-                  onChange={(e) => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].materialType = e.target.value as MaterialType;
-                    setReceiveItems(updatedItems);
-                  }}
-                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                >
-                  {Object.values(MaterialType).map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={item.quantity}
-                  onChange={(e) => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].quantity = e.target.value;
-                    setReceiveItems(updatedItems);
-                  }}
-                  step="0.01"
-                  min="0"
-                  placeholder="Qty"
-                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                />
-                <select
-                  value={item.unit}
-                  onChange={(e) => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].unit = e.target.value as Unit;
-                    setReceiveItems(updatedItems);
-                  }}
-                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                >
-                  {Object.values(Unit).map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={item.cost || ''}
-                  onChange={(e) => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].cost = e.target.value;
-                    setReceiveItems(updatedItems);
-                  }}
-                  step="0.01"
-                  min="0"
-                  placeholder="Cost"
-                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeItemRow(index)}
-                  style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
-                >
-                  X
-                </button>
-                {item.materialType === MaterialType.Spirits && (
-                  <input
-                    type="number"
-                    value={item.proof || ''}
-                    onChange={(e) => {
-                      const updatedItems = [...receiveItems];
-                      updatedItems[index].proof = e.target.value;
-                      setReceiveItems(updatedItems);
-                    }}
-                    step="0.01"
-                    min="0"
-                    max="200"
-                    placeholder="Proof"
-                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', gridColumn: 'span 6' }}
-                  />
-                )}
-                {item.materialType === MaterialType.Other && (
-                  <input
-                    type="text"
-                    value={item.description || ''}
-                    onChange={(e) => {
-                      const updatedItems = [...receiveItems];
-                      updatedItems[index].description = e.target.value;
-                      setReceiveItems(updatedItems);
-                    }}
-                    placeholder="Description"
-                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', gridColumn: 'span 6' }}
-                  />
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addItemRow}
-              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
-            >
-              Add Item
-            </button>
-            <h3 style={{ color: '#555', marginTop: '20px', marginBottom: '10px' }}>Other Charges</h3>
-            {otherCharges.map((charge, index) => (
-              <div key={`charge-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
-                <select
-                  value={charge.name}
-                  onChange={(e) => {
-                    const updatedCharges = [...otherCharges];
-                    updatedCharges[index].name = e.target.value;
-                    setOtherCharges(updatedCharges);
-                  }}
-                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                >
-                  <option value="">Select Charge</option>
-                  {OTHER_CHARGES_OPTIONS.map(option => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={charge.cost}
-                  onChange={(e) => {
-                    const updatedCharges = [...otherCharges];
-                    updatedCharges[index].cost = e.target.value;
-                    setOtherCharges(updatedCharges);
-                  }}
-                  step="0.01"
-                  min="0"
-                  placeholder="Cost"
-                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeChargeRow(index)}
-                  style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
-                >
-                  X
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addChargeRow}
-              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
-            >
-              Add Charge
-            </button>
-          </div>
-        )}
-        {showLotModal && poItemToSplit && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
-            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '500px' }}>
-              <h3>Split Spirits into Lots</h3>
-              <p>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>          
-              {lotItems.map((lot, index) => (
-                <div key={`lot-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="Lot Number"
-                    value={lot.identifier || ''}
-                    onChange={(e) => {
-                      const updatedLots = [...lotItems];
-                      updatedLots[index].identifier = e.target.value;
-                      setLotItems(updatedLots);
-                    }}
-                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Quantity (gallons)"
-                    value={lot.quantity || ''}
-                    onChange={(e) => {
-                      const updatedLots = [...lotItems];
-                      updatedLots[index].quantity = e.target.value;
-                      setLotItems(updatedLots);
-                    }}
-                    step="0.01"
-                    min="0"
-                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setLotItems(lotItems.filter((_, i) => i !== index))}
-                    style={{ backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}
-                  >
-                    X
-                  </button>
-                  </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setLotItems([...lotItems, { 
-                      identifier: '', 
-                      quantity: '', 
-                      materialType: MaterialType.Spirits, 
-                      unit: Unit.Gallons,
-                      siteId: selectedSite,          // Added
-                      locationId: singleForm.locationId || '', // Added
-                    }])}
-                    style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
-                  >
-                    Add Lot
-                  </button>
-              <div style={{ marginTop: '15px' }}>
-                <button
-                  type="button"
-                  onClick={handleLotSplit}
-                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Submit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowLotModal(false); setLotItems([]); setPoItemToSplit(null); }}
-                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}
-                >
-                  Cancel
-                </button>
-              </div>
-              {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
-            </div>
-          </div>
-        )}
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px', marginTop: '15px' }}>Received Date:</label>
-          <input
-            type="date"
-            value={singleForm.receivedDate}
-            onChange={(e) => setSingleForm({ ...singleForm, receivedDate: e.target.value })}
-            style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-          />
-        </div>
-        {showNewItemModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
-            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <h3 style={{ color: '#333', marginBottom: '15px' }}>Create New Item</h3>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Item Name:
-                <input
-                  type="text"
-                  value={newItem}
-                  onChange={(e) => setNewItem(e.target.value)}
-                  placeholder="Enter item name"
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Material Type:
-                <select
-                  value={newItemType}
-                  onChange={(e) => setNewItemType(e.target.value as MaterialType)}
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                >
-                  {Object.values(MaterialType).map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </label>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button
-                  type="button"
-                  onClick={handleCreateItem}
-                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowNewItemModal(false); setNewItem(''); setNewItemType(MaterialType.Grain); }}
-                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {showNewVendorModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
-            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <h3 style={{ color: '#333', marginBottom: '15px' }}>Add New Vendor</h3>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Vendor Name:
-                <input
-                  type="text"
-                  value={newVendor.name}
-                  onChange={(e) => setNewVendor({ ...newVendor, name: e.target.value })}
-                  placeholder="Enter vendor name"
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Contact (optional):
-                <input
-                  type="text"
-                  value={newVendor.contact || ''}
-                  onChange={(e) => setNewVendor({ ...newVendor, contact: e.target.value })}
-                  placeholder="Enter contact info"
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: '10px' }}>
-                Address (optional):
-                <input
-                  type="text"
-                  value={newVendor.address || ''}
-                  onChange={(e) => setNewVendor({ ...newVendor, address: e.target.value })}
-                  placeholder="Enter address"
-                  style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
-              </label>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button
-                  type="button"
-                  onClick={handleCreateVendor}
-                  style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Add Vendor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowNewVendorModal(false); setNewVendor({ name: '', enabled: 1, contact: '', address: '', type: 'Supplier' }); }}
-                  style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
-              {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
-            </div>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '15px' }}>
+                        ))}
+                        <li
+                          onMouseDown={() => setShowNewItemModal(true)}
+                          style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                        >
+                          Add New Item
+                        </li>
+                      </ul>
+                    )}
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    <select
+                      value={item.materialType}
+                      onChange={(e) => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].materialType = e.target.value as MaterialType;
+                        setReceiveItems(updatedItems);
+                      }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                    >
+                      {Object.values(MaterialType).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    <input
+                      type="number"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].quantity = e.target.value;
+                        setReceiveItems(updatedItems);
+                      }}
+                      step="0.01"
+                      min="0"
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    <select
+                      value={item.unit}
+                      onChange={(e) => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].unit = e.target.value as Unit;
+                        setReceiveItems(updatedItems);
+                      }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                    >
+                      {Object.values(Unit).map(unit => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    <input
+                      type="number"
+                      value={item.cost || ''}
+                      onChange={(e) => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].cost = e.target.value;
+                        setReceiveItems(updatedItems);
+                      }}
+                      step="0.01"
+                      min="0"
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    <button
+                      onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
+                      style={{ backgroundColor: '#F86752', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <button
-            type="button"
+            onClick={addItemRow}
+            style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginBottom: '20px' }}
+          >
+            Add Item
+          </button>
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+            <input
+              type="text"
+              value={singleForm.source}
+              onChange={handleVendorInputChange}
+              placeholder="Type to search vendors"
+              onFocus={() => setShowVendorSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+            {showVendorSuggestions && (
+              <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                {filteredVendors.map((vendor) => (
+                  <li
+                    key={vendor.name}
+                    onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
+                    style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.source === vendor.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
+                  >
+                    {vendor.name}
+                  </li>
+                ))}
+                <li
+                  onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+                  style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                >
+                  Add New Vendor
+                </li>
+              </ul>
+            )}
+          </div>
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
+            <input
+              type="date"
+              value={singleForm.receivedDate}
+              onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, receivedDate: e.target.value }))}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
+            <select
+              value={singleForm.poNumber || ''}
+              onChange={(e) => {
+                const poNumber = e.target.value;
+                setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+                if (poNumber) handlePOSelect(poNumber);
+              }}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              <option value="">Select PO (optional)</option>
+              {purchaseOrders.map(po => (
+                <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
+              ))}
+            </select>
+          </div>
+          <button
             onClick={handleReceive}
-            style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
+            style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
           >
-            Receive
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            style={{ backgroundColor: '#f44336', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
-          >
-            Cancel
+            Receive Items
           </button>
         </div>
-      </div>
+      )}
+
+      {showNewItemModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '400px' }}>
+            <h3>Create New Item</h3>
+            <input
+              type="text"
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              placeholder="Item Name"
+              style={{ width: '100%', padding: '8px', marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+            <select
+              value={newItemType}
+              onChange={(e) => setNewItemType(e.target.value as MaterialType)}
+              style={{ width: '100%', padding: '8px', marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+            >
+              {Object.values(MaterialType).map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleCreateItem}
+              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '10px' }}
+            >
+              Create
+            </button>
+            <button
+              onClick={() => setShowNewItemModal(false)}
+              style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {poItemToSplit && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '500px' }}>
+            <h3>Split Spirits into Lots</h3>
+            <p>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>
+            {lotItems.map((lot, index) => (
+              <div key={`lot-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={lot.identifier}
+                  onChange={(e) => {
+                    const updatedLots = [...lotItems];
+                    updatedLots[index].identifier = e.target.value;
+                    setLotItems(updatedLots);
+                  }}
+                  placeholder="Lot Number"
+                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                />
+                <input
+                  type="number"
+                  value={lot.quantity}
+                  onChange={(e) => {
+                    const updatedLots = [...lotItems];
+                    updatedLots[index].quantity = e.target.value;
+                    setLotItems(updatedLots);
+                  }}
+                  placeholder="Gallons"
+                  step="0.01"
+                  min="0"
+                  style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+                />
+                <button
+                  onClick={() => setLotItems(lotItems.filter((_, i) => i !== index))}
+                  style={{ backgroundColor: '#F86752', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setLotItems([...lotItems, { 
+                identifier: '', 
+                quantity: '', 
+                materialType: MaterialType.Spirits, 
+                unit: Unit.Gallons,
+                siteId: selectedSite,
+                locationId: singleForm.locationId || '',
+              }])}
+              style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+            >
+              Add Lot
+            </button>
+            <div style={{ marginTop: '20px' }}>
+              <button
+                onClick={handleLotSplit}
+                style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '10px' }}
+              >
+                Save Lots
+              </button>
+              <button
+                onClick={() => {
+                  setPoItemToSplit(null);
+                  setLotItems([]);
+                }}
+                style={{ backgroundColor: '#F86752', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
