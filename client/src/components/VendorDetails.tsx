@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Vendor, InventoryItem, PurchaseOrder } from '../types/interfaces'; // Updated to InventoryItem
+import { Vendor, InventoryItem, PurchaseOrder } from '../types/interfaces';
 
 interface VendorDetailsProps {
   vendors: Vendor[];
@@ -24,10 +24,12 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
   });
   const [productionError, setProductionError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'receipts' | 'orders'>('info');
-  const [receipts, setReceipts] = useState<InventoryItem[]>([]); // Updated to InventoryItem
+  const [receipts, setReceipts] = useState<InventoryItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+
+  const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
 
   useEffect(() => {
     if (name && name !== 'new') {
@@ -59,7 +61,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
       const res = await fetch(`${API_BASE_URL}/api/inventory?source=${name}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      setReceipts(data.filter((item: InventoryItem) => ['Received', 'Stored'].includes(item.status || ''))); // Updated to InventoryItem
+      setReceipts(data.filter((item: InventoryItem) => ['Received', 'Stored'].includes(item.status || '')));
       setProductionError(null);
     } catch (err: any) {
       console.error('Fetch receipts error:', err);
@@ -226,8 +228,8 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
             Type:
             {editing ? (
               <select
-                value={editedVendor.type}
-                onChange={(e) => setEditedVendor({ ...editedVendor, type: e.target.value as Vendor['type'] })}
+                value={editedVendor.type || ''} // Default to empty string if undefined
+                onChange={(e) => setEditedVendor({ ...editedVendor, type: e.target.value })}
                 style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
               >
                 <option value="Supplier">Supplier</option>
@@ -236,14 +238,14 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
                 <option value="Delivery">Delivery</option>
               </select>
             ) : (
-              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.type}</span>
+              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.type || 'N/A'}</span>
             )}
           </label>
           <label style={{ color: '#EEC930', fontSize: '18px' }}>
             Address:
             {editing ? (
               <textarea
-                value={editedVendor.address}
+                value={editedVendor.address || ''} // Default to empty string if undefined
                 onChange={(e) => setEditedVendor({ ...editedVendor, address: e.target.value })}
                 style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px', boxSizing: 'border-box' }}
               />
@@ -256,7 +258,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
             {editing ? (
               <input
                 type="email"
-                value={editedVendor.email}
+                value={editedVendor.email || ''} // Default to empty string if undefined
                 onChange={(e) => setEditedVendor({ ...editedVendor, email: e.target.value })}
                 style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
               />
@@ -269,7 +271,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
             {editing ? (
               <input
                 type="tel"
-                value={editedVendor.phone}
+                value={editedVendor.phone || ''} // Default to empty string if undefined
                 onChange={(e) => setEditedVendor({ ...editedVendor, phone: e.target.value })}
                 style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
               />
@@ -318,7 +320,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
           <table>
             <thead>
               <tr>
-                <th>Identifier</th>
+                <th>Item-Lot</th>
                 <th>Type</th>
                 <th>Quantity</th>
                 <th>Date Received</th>
@@ -326,8 +328,8 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
             </thead>
             <tbody>
               {receipts.map((receipt) => (
-                <tr key={receipt.identifier}>
-                  <td>{receipt.identifier}</td>
+                <tr key={getIdentifier(receipt)}>
+                  <td>{getIdentifier(receipt)}</td>
                   <td>{receipt.type}</td>
                   <td>{receipt.quantity}</td>
                   <td>{receipt.receivedDate}</td>
@@ -349,7 +351,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
           </button>
           <table>
             <thead>
-              <tr>
+              <tr> 
                 <th>PO Number</th>
                 <th>Site</th>
                 <th>PO Date</th>
@@ -361,8 +363,8 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
               {purchaseOrders.map((order) => (
                 <tr key={order.poNumber}>
                   <td>{order.poNumber}</td>
-                  <td>{order.siteId || 'N/A'}</td> {/* Changed from site to siteId */}
-                  <td>{order.poDate}</td>
+                  <td>{order.siteId || 'N/A'}</td>
+                  <td>{order.poDate || 'N/A'}</td>
                   <td>{order.comments || 'N/A'}</td>
                   <td>
                     <button
