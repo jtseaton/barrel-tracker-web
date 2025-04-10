@@ -38,11 +38,16 @@ db.serialize(() => {
       proofGallons TEXT,
       receivedDate TEXT,
       source TEXT,
-      dspNumber TEXT,
+      dspNumber TEXT,           -- Legacy, can phase out if siteId replaces it
+      siteId TEXT,
+      locationId INTEGER,
       status TEXT,
       description TEXT,
       cost TEXT,
-      UNIQUE(identifier, type, account)
+      totalCost REAL DEFAULT 0,
+      UNIQUE(identifier, type, account, siteId),
+      FOREIGN KEY (siteId) REFERENCES sites(siteId),
+      FOREIGN KEY (locationId) REFERENCES locations(locationId)
     )
   `);
   db.run(`
@@ -94,7 +99,36 @@ db.serialize(() => {
       items TEXT  -- JSON string of items
     )
   `);
-
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sites (
+      siteId TEXT PRIMARY KEY,  -- e.g., DSP-AL-20010, BREW-BHM-001
+      name TEXT NOT NULL,       -- e.g., Athens AL DSP
+      type TEXT,                -- e.g., DSP, Brewery
+      address TEXT,
+      enabled INTEGER DEFAULT 1
+    )
+  `);
+  
+  db.run(`
+    CREATE TABLE IF NOT EXISTS locations (
+      locationId INTEGER PRIMARY KEY AUTOINCREMENT,
+      siteId TEXT,
+      account TEXT,             -- e.g., Stored, Processing
+      name TEXT NOT NULL,       -- e.g., Spirits Storage, Grain Storage
+      enabled INTEGER DEFAULT 1,
+      FOREIGN KEY (siteId) REFERENCES sites(siteId)
+    )
+  `);
+  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
+  ['DSP-AL-20010', 'Athens AL DSP', 'DSP', '123 Distillery Rd, Athens, AL']);
+  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
+    ['BREW-BHM-001', 'Birmingham Brewery', 'Brewery', '456 Brew St, Birmingham, AL']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, account, name) VALUES (?, ?, ?)`, 
+    ['DSP-AL-20010', 'Stored', 'Spirits Storage']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, account, name) VALUES (?, ?, ?)`, 
+    ['DSP-AL-20010', 'Stored', 'Grain Storage']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, account, name) VALUES (?, ?, ?)`, 
+    ['DSP-AL-20010', 'Processing', 'Fermentation Tanks']);
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
   });
@@ -521,8 +555,8 @@ app.post('/api/receive', (req, res) => {
   const poNumber = items[0]?.poNumber;
 
   const validateItem = (item) => {
-    const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost } = item;
-    if (!account || !type || !quantity || !unit || !receivedDate || !status) return 'Missing required fields';
+    const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
+    if (!account || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) return 'Missing required fields';
     if (type === 'Spirits' && (!identifier || !proof)) return 'Spirits require identifier and proof';
     if (type === 'Other' && !description) return 'Description required for Other type';
     const parsedQuantity = parseFloat(quantity);
@@ -540,14 +574,14 @@ app.post('/api/receive', (req, res) => {
   db.serialize(() => {
     db.run('BEGIN TRANSACTION');
     items.forEach(item => {
-      const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, dspNumber, status, description, cost, totalCost } = item;
+      const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
-      const finalTotalCost = totalCost || '0.00'; // Use provided totalCost
-      const finalUnitCost = cost || '0.00'; // Use provided unit cost
+      const finalTotalCost = totalCost || '0.00';
+      const finalUnitCost = cost || '0.00';
 
       db.get(
-        'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ?',
-        [identifier, type, account],
+        'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?',
+        [identifier, type, account, siteId],
         (err, row) => {
           if (err) {
             db.run('ROLLBACK');
@@ -560,9 +594,9 @@ app.post('/api/receive', (req, res) => {
             const newTotalCost = (existingTotalCost + parseFloat(finalTotalCost)).toFixed(2);
             const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
             db.run(
-              `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ? 
-               WHERE identifier = ? AND type = ? AND account = ?`,
-              [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, identifier, type, account],
+              `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, locationId = ?
+               WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?`,
+              [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, locationId, identifier, type, account, siteId],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
@@ -572,9 +606,9 @@ app.post('/api/receive', (req, res) => {
             );
           } else {
             db.run(
-              `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, dspNumber, status, description)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', dspNumber || null, status, description || null],
+              `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, siteId, locationId, status, description)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', siteId, locationId, status, description || null],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
@@ -938,6 +972,31 @@ app.post('/api/update-batch-id', (req, res) => {
 app.post('/api/physical-inventory', (req, res) => {
   const timestamp = new Date().toISOString();
   res.json({ message: 'Physical inventory recorded', timestamp });
+});
+
+app.get('/api/sites', (req, res) => {
+  db.all('SELECT * FROM sites WHERE enabled = 1', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.get('/api/locations', (req, res) => {
+  const { siteId, account } = req.query;
+  let query = 'SELECT * FROM locations WHERE enabled = 1';
+  let params = [];
+  if (siteId) {
+    query += ' AND siteId = ?';
+    params.push(siteId);
+  }
+  if (account) {
+    query += ' AND account = ?';
+    params.push(account);
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
 });
 
 app.get('/api/daily-summary', (req, res) => {

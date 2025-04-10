@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PurchaseOrder, ReceiveItem, InventoryItem, Status, Vendor } from '../types/interfaces';
+import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor } from '../types/interfaces';
 import { MaterialType, Unit } from '../types/enums';
+import { Site, Location } from '../types/interfaces';
 
 const OUR_DSP = 'DSP-AL-20010';
+
+interface ReceivePageProps {
+  refreshInventory: () => Promise<void>;
+  vendors: Vendor[];
+  refreshVendors: () => Promise<void>;
+}
 
 interface ReceivePageProps {
   refreshInventory: () => Promise<void>;
@@ -30,21 +37,11 @@ interface ReceiveForm {
   unit: Unit;
   proof: string;
   source: string;
-  dspNumber: string;
+  siteId: string;  // New
+  locationId: string;  // New
   receivedDate: string;
   description: string;
   cost: string;
-  poNumber?: string;
-}
-
-interface ReceivableItem {
-  identifier: string;
-  materialType: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof?: string;
-  description?: string;
-  cost?: string;
   poNumber?: string;
 }
 
@@ -62,6 +59,9 @@ const OTHER_CHARGES_OPTIONS = [
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [sites, setSites] = useState<Site[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010'); // Default to Athens AL
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [otherCharges, setOtherCharges] = useState<OtherCharge[]>([]);
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
@@ -72,7 +72,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     unit: Unit.Pounds,
     proof: '',
     source: location.state?.vendor || '',
-    dspNumber: OUR_DSP,
+    siteId: 'DSP-AL-20010',
+    locationId: '',
     receivedDate: new Date().toISOString().split('T')[0],
     description: '',
     cost: '',
@@ -111,7 +112,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         setProductionError('Failed to fetch items: ' + err.message);
       }
     };
-
+  
     const fetchPOs = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`);
@@ -122,11 +123,38 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         setProductionError('Failed to fetch POs: ' + err.message);
       }
     };
-
+  
+    const fetchSites = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sites`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        setSites(data);
+      } catch (err: any) {
+        setProductionError('Failed to fetch sites: ' + err.message);
+      }
+    };
+  
+    const fetchLocations = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}&account=${encodeURIComponent(singleForm.account)}`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        setLocations(data);
+        if (data.length > 0 && !singleForm.locationId) {
+          setSingleForm(prev => ({ ...prev, locationId: data[0].locationId.toString() }));
+        }
+      } catch (err: any) {
+        setProductionError('Failed to fetch locations: ' + err.message);
+      }
+    };
+  
+    fetchSites();
     fetchItems();
     if (singleForm.source) fetchPOs();
+    fetchLocations();
     setFilteredVendors(vendors);
-  }, [API_BASE_URL, singleForm.source, vendors]);
+  }, [API_BASE_URL, singleForm.source, singleForm.account, selectedSite, vendors]); 
 
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>, index?: number) => {
     const value = e.target.value;
@@ -150,7 +178,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setSingleForm({ ...singleForm, identifier: item.name, materialType });
     } else if (index !== undefined) {
       const updatedItems = [...receiveItems];
-      updatedItems[index] = { ...updatedItems[index], identifier: item.name, materialType };
+      updatedItems[index] = { 
+        ...updatedItems[index], 
+        identifier: item.name, 
+        materialType,
+        siteId: selectedSite, // Added
+        locationId: singleForm.locationId || updatedItems[index].locationId // Preserve or set
+      };
       setReceiveItems(updatedItems);
     }
     setShowItemSuggestions(false);
@@ -181,7 +215,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       if (useSingleItem) {
         setSingleForm({ ...singleForm, identifier: newItem, materialType: newItemType });
       } else {
-        setReceiveItems([...receiveItems, { identifier: newItem, materialType: newItemType, quantity: '', unit: Unit.Pounds }]);
+        setReceiveItems([...receiveItems, { 
+          identifier: newItem, 
+          materialType: newItemType, 
+          quantity: '', 
+          unit: Unit.Pounds,
+          siteId: selectedSite,          // Added
+          locationId: singleForm.locationId || '', // Added, fallback to empty if unset
+        }]);
       }
       setNewItem('');
       setNewItemType(MaterialType.Grain);
@@ -233,15 +274,17 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     const po = purchaseOrders.find(p => p.poNumber === poNumber);
     if (po) {
       const nonSpiritsItems = po.items
-        .filter(item => item.materialType !== MaterialType.Spirits)
-        .map(item => ({
-          identifier: item.name,
-          materialType: item.materialType,
-          quantity: item.quantity.toString(),
-          unit: Unit.Pounds,
-          cost: '',
-          poNumber: poNumber,
-        }));
+      .filter(item => item.materialType !== MaterialType.Spirits)
+      .map(item => ({
+        identifier: item.name,
+        materialType: item.materialType,
+        quantity: item.quantity.toString(),
+        unit: Unit.Pounds,
+        cost: '',
+        poNumber: poNumber,
+        siteId: selectedSite,
+        locationId: singleForm.locationId || '',
+      }));
       const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
       setReceiveItems(nonSpiritsItems);
       if (spiritsItems.length > 0) {
@@ -270,6 +313,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         materialType: MaterialType.Spirits,
         unit: Unit.Gallons,
         poNumber: selectedPO || undefined,
+        siteId: selectedSite,
+        locationId: singleForm.locationId || '',
       })),
     ]);
     setLotItems([]);
@@ -293,17 +338,18 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       quantity: '', 
       unit: Unit.Pounds,
       cost: '',
+      siteId: selectedSite,
+      locationId: singleForm.locationId || '', // Default to current location or empty
     }]);
   };
-
   const removeItemRow = (index: number) => {
     setReceiveItems(receiveItems.filter((_, i) => i !== index));
   };
 
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
-    if (!itemsToReceive.length || itemsToReceive.some(item => !item.identifier || !item.materialType || !item.quantity || !item.unit)) {
-      setProductionError('All inventory items must have Item/Lot Number, Material Type, Quantity, and Unit');
+    if (!itemsToReceive.length || itemsToReceive.some(item => !item.identifier || !item.materialType || !item.quantity || !item.unit || !item.siteId || !item.locationId)) {
+      setProductionError('All inventory items must have Item/Lot Number, Material Type, Quantity, Unit, Site, and Location');
       return;
     }
     const invalidItems = itemsToReceive.filter(item =>
@@ -345,7 +391,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
         receivedDate: singleForm.receivedDate,
         source: singleForm.source,
-        dspNumber: item.materialType === MaterialType.Spirits ? singleForm.dspNumber : undefined,
+        siteId: singleForm.siteId,  // New
+        locationId: parseInt(singleForm.locationId),  // New
         status: Status.Received,
         description: item.description,
         cost: finalUnitCost,
@@ -353,7 +400,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         poNumber: item.poNumber,
       };
     });
-
+  
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
@@ -383,6 +430,33 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             <img src="/doggo-slurp.gif" alt="Dog slurping" style={{ width: '100px', height: '100px' }} />
           </div>
         )}
+        <div style={{ marginBottom: '15px' }}>
+  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Site:</label>
+  <select
+    value={selectedSite}
+    onChange={(e) => {
+      setSelectedSite(e.target.value);
+      setSingleForm(prev => ({ ...prev, siteId: e.target.value, locationId: '' }));
+    }}
+    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+  >
+    {sites.map(site => (
+      <option key={site.siteId} value={site.siteId}>{site.name}</option>
+    ))}
+  </select>
+</div>
+<div style={{ marginBottom: '15px' }}>
+  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location:</label>
+  <select
+    value={singleForm.locationId}
+    onChange={(e) => setSingleForm(prev => ({ ...prev, locationId: e.target.value }))}
+    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
+  >
+    {locations.map(loc => (
+      <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+    ))}
+  </select>
+</div>
         <div style={{ marginBottom: '15px' }}>
           <label style={{ fontWeight: 'bold', color: '#555', marginRight: '10px' }}>Receive Mode:</label>
           <button
@@ -572,15 +646,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                     step="0.01"
                     min="0"
                     max="200"
-                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>DSP Number:</label>
-                  <input
-                    type="text"
-                    value={singleForm.dspNumber}
-                    onChange={(e) => setSingleForm({ ...singleForm, dspNumber: e.target.value })}
                     style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' }}
                   />
                 </div>
@@ -792,7 +857,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
             <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '500px' }}>
               <h3>Split Spirits into Lots</h3>
-              <p>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>
+              <p>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>          
               {lotItems.map((lot, index) => (
                 <div key={`lot-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
                   <input
@@ -826,15 +891,22 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   >
                     X
                   </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setLotItems([...lotItems, { identifier: '', quantity: '', materialType: MaterialType.Spirits, unit: Unit.Gallons }])}
-                style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
-              >
-                Add Lot
-              </button>
+                  </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setLotItems([...lotItems, { 
+                      identifier: '', 
+                      quantity: '', 
+                      materialType: MaterialType.Spirits, 
+                      unit: Unit.Gallons,
+                      siteId: selectedSite,          // Added
+                      locationId: singleForm.locationId || '', // Added
+                    }])}
+                    style={{ backgroundColor: '#2196F3', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '10px' }}
+                  >
+                    Add Lot
+                  </button>
               <div style={{ marginTop: '15px' }}>
                 <button
                   type="button"
