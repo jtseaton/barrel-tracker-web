@@ -135,13 +135,13 @@ const PurchaseOrderForm: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/purchase-orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(purchaseOrder),
+        body: JSON.stringify(purchaseOrder), // Line 140
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`); // Line 142
       setIsSaved(true);
       setProductionError(null);
     } catch (err: any) {
-      console.error('Save purchase order error:', err);
+      console.error('Save purchase order error:', err); // Line 144
       setProductionError('Failed to save purchase order: ' + err.message);
     }
   };
