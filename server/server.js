@@ -552,11 +552,12 @@ app.delete('/api/products', (req, res) => {
 
 app.post('/api/receive', (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [req.body];
-  const poNumber = items[0]?.poNumber;
-
+  const validAccounts = ['Storage', 'Processing', 'Production'];
   const validateItem = (item) => {
     const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
-    if (!account || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) return 'Missing required fields';
+    if (!account || !validAccounts.includes(account) || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
+      return 'Missing or invalid required fields (account must be Storage, Processing, or Production)';
+    }
     if (type === 'Spirits' && (!identifier || !proof)) return 'Spirits require identifier and proof';
     if (type === 'Other' && !description) return 'Description required for Other type';
     const parsedQuantity = parseFloat(quantity);
