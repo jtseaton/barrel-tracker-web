@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Added useNavigate
+import { Link, useNavigate } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, DailySummaryItem } from '../types/interfaces';
 import { fetchDailySummary } from '../utils/fetchUtils';
 
@@ -25,7 +25,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const [showLossModal, setShowLossModal] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
 
-  const navigate = useNavigate(); // Added for navigation
+  const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
@@ -94,13 +94,15 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     }
   };
 
-  const handleItemClick = (identifier: string) => {
-    navigate(`/inventory/${identifier}`); // Navigate to details page
+  const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
+
+  const handleItemClick = (item: InventoryItem) => {
+    navigate(`/inventory/${getIdentifier(item)}`);
   };
 
   const filteredInventory = inventory.filter(item => 
     ['Received', 'Stored'].includes(item.status) && (
-      (item.identifier || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.description || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
@@ -118,7 +120,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <div style={{ marginBottom: '20px' }}>
         <input
           type="text"
-          placeholder="Search by Identifier, Type, or Description"
+          placeholder="Search by Item-Lot, Type, or Description"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           style={{ padding: '10px', width: '300px', fontSize: '16px', borderRadius: '4px', border: '1px solid #ccc' }}
@@ -129,7 +131,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', color: '#000' }}>
             <h3>Move Inventory</h3>
-            <input type="text" placeholder="Identifier" value={moveForm.identifier} onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
+            <input type="text" placeholder="Item-Lot (e.g., Grain-NGS123)" value={moveForm.identifier} onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
             <select value={moveForm.toAccount} onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }}>
               <option value="Production">Production</option>
               <option value="Storage">Storage</option>
@@ -147,7 +149,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', color: '#000' }}>
             <h3>Record Loss</h3>
-            <input type="text" placeholder="Identifier" value={lossForm.identifier} onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
+            <input type="text" placeholder="Item-Lot (e.g., Grain-NGS123)" value={lossForm.identifier} onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
             <input type="number" placeholder="Quantity Lost" value={lossForm.quantityLost} onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })} step="0.01" style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
             <input type="number" placeholder="Proof Gallons Lost" value={lossForm.proofGallonsLost} onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })} step="0.01" style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
             <input type="text" placeholder="Reason" value={lossForm.reason} onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
@@ -181,7 +183,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFF', color: '#000', borderRadius: '8px' }}>
         <thead>
           <tr style={{ backgroundColor: '#EEC930' }}>
-            <th style={{ padding: '10px' }}>Identifier</th>
+            <th style={{ padding: '10px' }}>Item-Lot</th>
             <th style={{ padding: '10px' }}>Type</th>
             <th style={{ padding: '10px' }}>Description</th>
             <th style={{ padding: '10px' }}>Quantity</th>
@@ -197,11 +199,11 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         <tbody>
           {filteredInventory.map((item) => (
             <tr
-              key={item.identifier || `${item.type}-${item.receivedDate}`}
-              onClick={() => handleItemClick(item.identifier || '')} // Navigate to details page
+              key={getIdentifier(item)}
+              onClick={() => handleItemClick(item)}
               style={{ cursor: 'pointer', borderBottom: '1px solid #ddd' }}
             >
-              <td style={{ padding: '10px' }}>{item.identifier || 'N/A'}</td>
+              <td style={{ padding: '10px' }}>{getIdentifier(item) || 'N/A'}</td>
               <td style={{ padding: '10px' }}>{item.type}</td>
               <td style={{ padding: '10px' }}>{item.description || 'N/A'}</td>
               <td style={{ padding: '10px' }}>{item.quantity || '0.00'}</td>
@@ -221,7 +223,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFF', color: '#000', borderRadius: '8px' }}>
         <thead>
           <tr style={{ backgroundColor: '#EEC930' }}>
-            <th style={{ padding: '10px' }}>Identifier</th>
+            <th style={{ padding: '10px' }}>Item-Lot</th>
             <th style={{ padding: '10px' }}>Type</th>
             <th style={{ padding: '10px' }}>Quantity (WG)</th>
             <th style={{ padding: '10px' }}>Proof</th>
@@ -234,11 +236,11 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         <tbody>
           {inventory.filter((item) => item.account === 'Processing' && item.status === 'Packaged').map((item) => (
             <tr
-              key={item.identifier || `${item.type}-${item.receivedDate}`}
-              onClick={() => handleItemClick(item.identifier || '')} // Navigate to details page
+              key={getIdentifier(item)}
+              onClick={() => handleItemClick(item)}
               style={{ cursor: 'pointer', borderBottom: '1px solid #ddd' }}
             >
-              <td style={{ padding: '10px' }}>{item.identifier || 'N/A'}</td>
+              <td style={{ padding: '10px' }}>{getIdentifier(item) || 'N/A'}</td>
               <td style={{ padding: '10px' }}>{item.type}</td>
               <td style={{ padding: '10px' }}>{item.quantity || '0.00'}</td>
               <td style={{ padding: '10px' }}>{item.proof || '0.00'}</td>

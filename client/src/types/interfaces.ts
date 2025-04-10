@@ -41,69 +41,6 @@ export interface DailySummaryItem {
   totalProofGallons: string;
 }
 
-export interface ReceiveForm {
-  identifier: string;
-  account: Account; // Updated to use enum
-  materialType: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof?: string;
-  source: string;
-  dspNumber?: string;
-  receivedDate: string;
-  description?: string;
-  cost?: string;
-  poNumber?: string;
-  siteId: string;
-  locationId: string;
-}
-
-export interface ReceiveItem {
-  identifier: string;
-  materialType: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof?: string;
-  description?: string;
-  cost?: string;
-  poNumber?: string;
-  siteId: string;
-  locationId: string;
-}
-
-export interface ReceivableItem {
-  identifier: string;
-  materialType: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof?: string;
-  description?: string;
-  cost?: string;
-  poNumber?: string;
-  siteId: string;
-  locationId: string;
-}
-
-export interface InventoryItem {
-  identifier: string;
-  account: Account; // Updated to use enum
-  type: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof?: string;
-  proofGallons?: string;
-  receivedDate: string;
-  source?: string;
-  dspNumber?: string;
-  status: Status;
-  description?: string;
-  cost?: string;
-  poNumber?: string;
-  totalCost?: string;
-  siteId: string;
-  locationId: number;
-}
-
 export interface MoveForm {
   identifier: string;
   toAccount: string;
@@ -150,44 +87,107 @@ export interface Recipe {
   instructions: string;
 }
 
+export interface ReceiveForm {
+  item: string; // Replaces identifier
+  lotNumber: string; // New field
+  account: Account;
+  materialType: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  source: string;
+  dspNumber?: string;
+  receivedDate: string;
+  description?: string;
+  cost?: string;
+  poNumber?: string;
+  siteId: string;
+  locationId?: string; // Optional
+}
+
+export interface ReceiveItem {
+  item: string; // Replaces identifier
+  lotNumber: string; // New field
+  materialType: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  description?: string;
+  cost?: string;
+  poNumber?: string;
+  siteId: string;
+  locationId?: string; // Optional
+}
+
+export interface ReceivableItem {
+  item: string; // Replaces identifier
+  lotNumber: string; // New field
+  materialType: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  description?: string;
+  cost?: string;
+  poNumber?: string;
+  siteId: string;
+  locationId?: string; // Optional
+}
+
+export interface InventoryItem {
+  item: string; // Replaces identifier
+  lotNumber: string; // New field
+  account: Account;
+  type: MaterialType;
+  quantity: string;
+  unit: Unit;
+  proof?: string;
+  proofGallons?: string;
+  receivedDate: string;
+  source?: string;
+  dspNumber?: string;
+  status: Status;
+  description?: string;
+  cost?: string;
+  totalCost?: string;
+  poNumber?: string;
+  siteId: string;
+  locationId?: number; // Optional
+}
+
 export interface PurchaseOrder {
   poNumber: string;
-  poDate: string;
   supplier: string;
-  status: 'Open' | 'Closed';
-  siteId?: string;
-  comments?: string;
   items: PurchaseOrderItem[];
+  siteId?: string; // Added for VendorDetails.tsx
+  poDate?: string; // Added for VendorDetails.tsx
+  comments?: string; // Added for VendorDetails.tsx
 }
 
 export interface PurchaseOrderItem {
   name: string;
-  quantity: number;
   materialType: MaterialType;
+  quantity: number;
 }
 
 export interface Vendor {
   name: string;
-  enabled: number;
-  contact?: string;
-  address?: string;
-  type: 'Supplier' | 'Customer' | 'Distributor' | 'Delivery';
-  email?: string;
-  phone?: string;
+  enabled?: number;
+  type?: string; // Added for VendorDetails.tsx
+  address?: string; // Added for VendorDetails.tsx
+  email?: string; // Added for VendorDetails.tsx
+  phone?: string; // Added for VendorDetails.tsx
 }
 
 export interface Site {
   siteId: string;
   name: string;
-  type: string;
-  address?: string;
-  enabled: number;
+  enabled?: number;
 }
 
 export interface Location {
   locationId: number;
   siteId: string;
-  account: string; // Kept as string to match DB, could use Account if normalized
+  account: Account;
   name: string;
   enabled: number;
 }
