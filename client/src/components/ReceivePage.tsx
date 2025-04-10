@@ -254,6 +254,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       quantity: '',
       unit: Unit.Pounds,
       cost: '',
+      description: '', // Add description
       siteId: selectedSite,
       locationId: singleForm.locationId || '',
     }]);
@@ -261,59 +262,66 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
-    if (!itemsToReceive.length || itemsToReceive.some(item => !item.item || !item.lotNumber || !item.materialType || !item.quantity || !item.unit || !item.siteId)) {
-      setProductionError('All inventory items must have Item, Lot Number, Material Type, Quantity, Unit, and Site');
+    if (!itemsToReceive.length || itemsToReceive.some(item => !item.item || !item.materialType || !item.quantity || !item.unit || !item.siteId)) {
+      setProductionError('All inventory items must have Item, Material Type, Quantity, Unit, and Site');
       return;
     }
     const invalidItems = itemsToReceive.filter(item =>
-      (item.materialType === MaterialType.Spirits && !item.proof) ||
-      (item.materialType === MaterialType.Other && !item.description?.trim()) ||
+      (item.materialType === MaterialType.Spirits && (!item.proof || item.proof.trim() === '')) ||
+      (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
       isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0 ||
       (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
       (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
     );
     if (invalidItems.length) {
-      setProductionError('Invalid data in inventory items: check Spirits proof, Other description, or numeric values');
+      setProductionError('Invalid data: Spirits need proof, Other needs description, and numeric values must be valid');
       return;
     }
     const totalOtherCost = otherCharges.reduce((sum, charge) => 
       sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
     const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
-
+  
     const inventoryItems: InventoryItem[] = itemsToReceive.map(item => {
       const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
       const quantity = parseFloat(item.quantity);
       const unitCost = totalItemCost / quantity || 0;
       const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
       const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
+      const identifier = item.lotNumber && item.lotNumber.trim() ? item.lotNumber : item.item;
       return {
+        identifier,
         item: item.item,
-        lotNumber: item.lotNumber,
+        lotNumber: item.lotNumber || '',
         account: item.materialType === MaterialType.Spirits ? singleForm.account : Account.Storage,
         type: item.materialType,
         quantity: item.quantity,
         unit: item.unit,
-        proof: item.proof,
+        proof: item.proof || (item.materialType === MaterialType.Spirits ? '0' : undefined), // Changed null to undefined
         proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
         receivedDate: singleForm.receivedDate,
-        source: singleForm.source,
+        source: singleForm.source || 'Unknown',
         siteId: singleForm.siteId,
-        locationId: item.locationId ? parseInt(item.locationId) : undefined,
+        locationId: item.locationId ? parseInt(item.locationId) : 1,
         status: Status.Received,
-        description: item.description,
+        description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined), // Changed null to undefined
         cost: finalUnitCost,
         totalCost: finalTotalCost,
         poNumber: item.poNumber,
       };
     });
-
+  
+    console.log('Payload to /api/receive:', JSON.stringify(useSingleItem ? inventoryItems[0] : inventoryItems, null, 2));
+  
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(useSingleItem ? inventoryItems[0] : inventoryItems),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
       setSuccessMessage('Items received successfully!');
       await refreshInventory();
       setTimeout(() => {
@@ -322,6 +330,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       }, 1000);
     } catch (err: any) {
       setProductionError('Failed to receive items: ' + err.message);
+      console.error('Receive error:', err);
     }
   };
 
@@ -656,151 +665,165 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </div>
         ) : (
           <div>
-            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                <thead>
-                  <tr>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receiveItems.map((item, index) => (
-                    <tr key={index}>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
-                        <input
-                          type="text"
-                          value={item.item}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].item = e.target.value;
-                            setReceiveItems(updatedItems);
-                            setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                            setShowItemSuggestions(true);
-                          }}
-                          onFocus={() => setShowItemSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        />
-                        {showItemSuggestions && (
-                          <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                            {filteredItems.map(i => (
-                              <li
-                                key={i.name}
-                                onMouseDown={() => handleItemSelect(i, index)}
-                                style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                              >
-                                {i.name}
-                              </li>
-                            ))}
+          <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <thead>
+                <tr>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
+                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {receiveItems.map((item, index) => (
+                  <tr key={index}>
+                    <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
+                      <input
+                        type="text"
+                        value={item.item}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].item = e.target.value;
+                          setReceiveItems(updatedItems);
+                          setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                          setShowItemSuggestions(true);
+                        }}
+                        onFocus={() => setShowItemSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      />
+                      {showItemSuggestions && (
+                        <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                          {filteredItems.map(i => (
                             <li
-                              onMouseDown={() => setShowNewItemModal(true)}
-                              style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                              key={i.name}
+                              onMouseDown={() => handleItemSelect(i, index)}
+                              style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
                             >
-                              Add New Item
+                              {i.name}
                             </li>
-                          </ul>
-                        )}
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        <input
-                          type="text"
-                          value={item.lotNumber}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].lotNumber = e.target.value;
-                            setReceiveItems(updatedItems);
-                          }}
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        />
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        <select
-                          value={item.materialType}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].materialType = e.target.value as MaterialType;
-                            setReceiveItems(updatedItems);
-                          }}
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        >
-                          {Object.values(MaterialType).map(type => (
-                            <option key={type} value={type}>{type}</option>
                           ))}
-                        </select>
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].quantity = e.target.value;
-                            setReceiveItems(updatedItems);
-                          }}
-                          step="0.01"
-                          min="0"
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        />
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        <select
-                          value={item.unit}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].unit = e.target.value as Unit;
-                            setReceiveItems(updatedItems);
-                          }}
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        >
-                          {Object.values(Unit).map(unit => (
-                            <option key={unit} value={unit}>{unit}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={item.cost || ''}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].cost = e.target.value;
-                            setReceiveItems(updatedItems);
-                          }}
-                          step="0.01"
-                          min="0"
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        />
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
-                          style={{
-                            backgroundColor: '#F86752',
-                            color: '#fff',
-                            padding: '8px 16px',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            transition: 'background-color 0.3s',
-                          }}
-                          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          <li
+                            onMouseDown={() => setShowNewItemModal(true)}
+                            style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                          >
+                            Add New Item
+                          </li>
+                        </ul>
+                      )}
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <input
+                        type="text"
+                        value={item.lotNumber}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].lotNumber = e.target.value;
+                          setReceiveItems(updatedItems);
+                        }}
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <select
+                        value={item.materialType}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].materialType = e.target.value as MaterialType;
+                          setReceiveItems(updatedItems);
+                        }}
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      >
+                        {Object.values(MaterialType).map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].quantity = e.target.value;
+                          setReceiveItems(updatedItems);
+                        }}
+                        step="0.01"
+                        min="0"
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <select
+                        value={item.unit}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].unit = e.target.value as Unit;
+                          setReceiveItems(updatedItems);
+                        }}
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      >
+                        {Object.values(Unit).map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <input
+                        type="number"
+                        value={item.cost || ''}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].cost = e.target.value;
+                          setReceiveItems(updatedItems);
+                        }}
+                        step="0.01"
+                        min="0"
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <input
+                        type="text"
+                        value={item.description || ''}
+                        onChange={(e) => {
+                          const updatedItems = [...receiveItems];
+                          updatedItems[index].description = e.target.value;
+                          setReceiveItems(updatedItems);
+                        }}
+                        placeholder={item.materialType === MaterialType.Other ? 'Required for Other' : 'Optional'}
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
+                        style={{
+                          backgroundColor: '#F86752',
+                          color: '#fff',
+                          padding: '8px 16px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          transition: 'background-color 0.3s',
+                        }}
+                        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
               <button
                 onClick={addItemRow}
