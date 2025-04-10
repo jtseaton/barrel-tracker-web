@@ -1,5 +1,5 @@
-import { Status, Unit, MaterialType, ProductClass } from './enums';
-export { Status, Unit, MaterialType, ProductClass };
+import { Status, Unit, MaterialType, ProductClass, Account } from './enums';
+export { Status, Unit, MaterialType, ProductClass, Account };
 
 export interface Transaction {
   action: string;
@@ -43,7 +43,7 @@ export interface DailySummaryItem {
 
 export interface ReceiveForm {
   identifier: string;
-  account: string;
+  account: Account; // Updated to use enum
   materialType: MaterialType;
   quantity: string;
   unit: Unit;
@@ -54,8 +54,8 @@ export interface ReceiveForm {
   description?: string;
   cost?: string;
   poNumber?: string;
-  siteId: string;     // Added
-  locationId: string; // Added
+  siteId: string;
+  locationId: string;
 }
 
 export interface ReceiveItem {
@@ -67,8 +67,8 @@ export interface ReceiveItem {
   description?: string;
   cost?: string;
   poNumber?: string;
-  siteId: string;     // Added
-  locationId: string; // Added
+  siteId: string;
+  locationId: string;
 }
 
 export interface ReceivableItem {
@@ -86,7 +86,7 @@ export interface ReceivableItem {
 
 export interface InventoryItem {
   identifier: string;
-  account: string;
+  account: Account; // Updated to use enum
   type: MaterialType;
   quantity: string;
   unit: Unit;
@@ -100,8 +100,8 @@ export interface InventoryItem {
   cost?: string;
   poNumber?: string;
   totalCost?: string;
-  siteId: string;     // Added
-  locationId: number; // Added
+  siteId: string;
+  locationId: number;
 }
 
 export interface MoveForm {
@@ -187,7 +187,7 @@ export interface Site {
 export interface Location {
   locationId: number;
   siteId: string;
-  account: string;
+  account: string; // Kept as string to match DB, could use Account if normalized
   name: string;
   enabled: number;
 }
