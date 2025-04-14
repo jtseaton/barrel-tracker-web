@@ -550,7 +550,7 @@ app.delete('/api/products', (req, res) => {
   res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` });
 });
 
-app.post('/api/receive', (req, res) => {
+app.post('/api/receive', async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [req.body];
   const validAccounts = ['Storage', 'Processing', 'Production'];
   const validateItem = (item) => {
@@ -572,87 +572,76 @@ app.post('/api/receive', (req, res) => {
   const errors = items.map(validateItem).filter(e => e);
   if (errors.length) return res.status(400).json({ error: errors[0] });
 
-  db.serialize(() => {
-    db.run('BEGIN TRANSACTION');
-    items.forEach(item => {
+  try {
+    await new Promise((resolve, reject) => {
+      db.run('BEGIN TRANSACTION', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    for (const item of items) {
       const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
 
-      db.get(
-        'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?',
-        [identifier, type, account, siteId],
-        (err, row) => {
-          if (err) {
-            db.run('ROLLBACK');
-            return res.status(500).json({ error: err.message });
+      const row = await new Promise((resolve, reject) => {
+        db.get(
+          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?',
+          [identifier, type, account, siteId],
+          (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
           }
-          if (row) {
-            const existingQuantity = parseFloat(row.quantity);
-            const existingTotalCost = parseFloat(row.totalCost || '0');
-            const newQuantity = (existingQuantity + parseFloat(quantity)).toFixed(2);
-            const newTotalCost = (existingTotalCost + parseFloat(finalTotalCost)).toFixed(2);
-            const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
-            db.run(
-              `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, locationId = ?
-               WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?`,
-              [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, locationId, identifier, type, account, siteId],
-              (err) => {
-                if (err) {
-                  db.run('ROLLBACK');
-                  return res.status(500).json({ error: err.message });
-                }
-              }
-            );
-          } else {
-            db.run(
-              `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, siteId, locationId, status, description)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', siteId, locationId, status, description || null],
-              (err) => {
-                if (err) {
-                  db.run('ROLLBACK');
-                  return res.status(500).json({ error: err.message });
-                }
-              }
-            );
-          }
-        }
-      );
-    });
-
-    if (poNumber) {
-      db.get('SELECT items FROM purchase_orders WHERE poNumber = ?', [poNumber], (err, row) => {
-        if (err) {
-          db.run('ROLLBACK');
-          return res.status(500).json({ error: err.message });
-        }
-        if (row) {
-          const poItems = JSON.parse(row.items || '[]');
-          const allReceived = poItems.every(poItem => 
-            items.some(recItem => recItem.identifier === poItem.name && parseFloat(recItem.quantity) >= poItem.quantity)
-          );
-          if (allReceived) {
-            db.run('UPDATE purchase_orders SET status = "Closed" WHERE poNumber = ?', [poNumber], (err) => {
-              if (err) {
-                db.run('ROLLBACK');
-                return res.status(500).json({ error: err.message });
-              }
-            });
-          }
-        }
+        );
       });
+
+      if (row) {
+        const existingQuantity = parseFloat(row.quantity);
+        const existingTotalCost = parseFloat(row.totalCost || '0');
+        const newQuantity = (existingQuantity + parseFloat(quantity)).toFixed(2);
+        const newTotalCost = (existingTotalCost + parseFloat(finalTotalCost)).toFixed(2);
+        const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
+        await new Promise((resolve, reject) => {
+          db.run(
+            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, locationId = ?
+             WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?`,
+            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, locationId, identifier, type, account, siteId],
+            (err) => {
+              if (err) reject(err);
+              else resolve();
+            }
+          );
+        });
+      } else {
+        await new Promise((resolve, reject) => {
+          db.run(
+            `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, siteId, locationId, status, description)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', siteId, locationId, status, description || null],
+            (err) => {
+              if (err) reject(err);
+              else resolve();
+            }
+          );
+        });
+      }
     }
 
-    db.run('COMMIT', (err) => {
-      if (err) {
-        db.run('ROLLBACK');
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ message: 'Receive successful' });
+    await new Promise((resolve, reject) => {
+      db.run('COMMIT', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
-  });
+
+    res.json({ message: 'Receive successful' });
+  } catch (err) {
+    console.error('Error in /api/receive:', err);
+    await new Promise((resolve) => db.run('ROLLBACK', resolve));
+    res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
 });
 
 app.post('/api/produce', (req, res) => {
