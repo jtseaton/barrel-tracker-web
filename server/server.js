@@ -971,6 +971,33 @@ app.get('/api/sites', (req, res) => {
   });
 });
 
+app.post('/api/locations', (req, res) => {
+  const { name, siteId, account, enabled = 1 } = req.body;
+  if (!name || !siteId || !account) {
+    return res.status(400).json({ error: 'Name, siteId, and account are required' });
+  }
+  db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, row) => {
+    if (err) {
+      console.error('Check site error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) {
+      return res.status(400).json({ error: 'Invalid siteId' });
+    }
+    db.run(
+      'INSERT INTO locations (name, siteId, account, enabled) VALUES (?, ?, ?, ?)',
+      [name, siteId, account, enabled],
+      function(err) {
+        if (err) {
+          console.error('Insert location error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({ locationId: this.lastID, name, siteId, account, enabled });
+      }
+    );
+  });
+});
+
 app.get('/api/locations', (req, res) => {
   const { siteId, account } = req.query;
   let query = 'SELECT * FROM locations WHERE enabled = 1';
