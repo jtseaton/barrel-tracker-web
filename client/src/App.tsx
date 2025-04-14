@@ -17,15 +17,15 @@ import PurchaseOrderList from './components/PurchaseOrderList';
 import Products from './components/Products';
 import ProductDetails from './components/ProductDetails';
 import InventoryItemDetails from './components/InventoryItemDetails';
+import Locations from './components/Locations'; // Ensure the correct Locations component is imported
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
-import { InventoryItem, Vendor } from './types/interfaces'; // Updated import
+import { InventoryItem, Vendor } from './types/interfaces';
 import './App.css';
 
-// Stub components (already defined, kept as-is)
+// Stub components (removed Locations stub, kept others)
 const Facility: React.FC = () => <div><h2>Facility</h2><p>Facility page coming soon</p></div>;
 const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
-const Locations: React.FC = () => <div><h2>Locations</h2><p>Locations page coming soon</p></div>;
 const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
 
 interface InventoryProps {
@@ -40,11 +40,10 @@ const AppContent: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(true);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [showProductionSubmenu, setShowProductionSubmenu] = useState(false);
-  // New state for Management submenu
   const [showManagementSubmenu, setShowManagementSubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]); // Uses shared Vendor type
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -102,7 +101,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // New handler for Management click
   const handleManagementClick = () => {
     if (activeSection === 'Management' && showManagementSubmenu) {
       setShowManagementSubmenu(false);
@@ -111,14 +109,14 @@ const AppContent: React.FC = () => {
     } else {
       setActiveSection('Management');
       setShowManagementSubmenu(true);
-      navigate('/management'); // Navigate to a base management route
+      navigate('/management');
     }
   };
 
   const handleBackClick = () => {
     setShowInventorySubmenu(false);
     setShowProductionSubmenu(false);
-    setShowManagementSubmenu(false); // Reset Management submenu
+    setShowManagementSubmenu(false);
     setActiveSection('Home');
     navigate('/');
   };
@@ -164,7 +162,6 @@ const AppContent: React.FC = () => {
               { name: 'Products', path: '/products' },
               { name: 'Facility', path: '/facility' },
               { name: 'Production', path: '/production-page' },
-              { name: 'Locations', path: '/locations' },
               { name: 'Equipment', path: '/equipment' },
               { name: 'Facility Designer', path: '/facility-designer', disabled: true },
             ].map((item) => (
@@ -180,10 +177,10 @@ const AppContent: React.FC = () => {
                 )}
               </li>
             ))
-          ) : showManagementSubmenu ? ( // New Management submenu
+          ) : showManagementSubmenu ? (
             [
               { name: 'Back', action: handleBackClick },
-              { name: 'Locations', path: '/locations' }, // Only Locations for now
+              { name: 'Locations', path: '/locations' },
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
@@ -204,7 +201,7 @@ const AppContent: React.FC = () => {
               { name: 'Sales & Distribution', subMenu: null },
               { name: 'Users', subMenu: null },
               { name: 'Reporting', subMenu: null },
-              { name: 'Management', subMenu: true }, // New top-level menu item
+              { name: 'Management', subMenu: true },
             ].map((section) => (
               <li key={section.name}>
                 <button
@@ -213,13 +210,13 @@ const AppContent: React.FC = () => {
                       handleProductionClick();
                     } else if (section.name === 'Inventory') {
                       handleInventoryClick();
-                    } else if (section.name === 'Management') { // Handle Management click
+                    } else if (section.name === 'Management') {
                       handleManagementClick();
                     } else {
                       setActiveSection(section.name);
                       setShowInventorySubmenu(false);
                       setShowProductionSubmenu(false);
-                      setShowManagementSubmenu(false); // Reset Management submenu
+                      setShowManagementSubmenu(false);
                       navigate(section.name === 'Home' ? '/' : `/${section.name.toLowerCase().replace(' & ', '-')}`);
                     }
                   }}
@@ -255,7 +252,7 @@ const AppContent: React.FC = () => {
                 {activeSection === 'Sales & Distribution' && <Sales />}
                 {activeSection === 'Users' && <Users />}
                 {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
-                {activeSection === 'Management' && location.pathname === '/management' && <div><h2>Management</h2><p>Select an option from the menu</p></div>} {/* Base Management page */}
+                {activeSection === 'Management' && location.pathname === '/management' && <div><h2>Management</h2><p>Select an option from the menu</p></div>}
               </>
             }
           />
@@ -279,7 +276,7 @@ const AppContent: React.FC = () => {
           <Route path="/equipment" element={<Equipment />} />
           <Route path="/planning" element={<div><h2>Planning</h2><p>Coming soon</p></div>} />
           <Route path="/facility-designer" element={<div><h2>Facility Designer</h2><p>Coming soon</p></div>} />
-          <Route path="/management" element={<div><h2>Management</h2><p>Select an option from the menu</p></div>} /> {/* New Management route */}
+          <Route path="/management" element={<div><h2>Management</h2><p>Select an option from the menu</p></div>} />
         </Routes>
       </div>
     </div>
