@@ -181,13 +181,15 @@ export interface Vendor {
 export interface Site {
   siteId: string;
   name: string;
+  type?: string;
+  address?: string;
   enabled?: number;
 }
 
 export interface Location {
   locationId: number;
   siteId: string;
-  account: Account;
+  account: string;
   name: string;
   enabled: number;
 }
