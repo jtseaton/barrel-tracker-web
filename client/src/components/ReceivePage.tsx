@@ -950,57 +950,72 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   </tr>
                 </thead>
                 <tbody>
-                  {receiveItems.map((item, index) => (
-                    <tr key={index}>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
-                        <input
-                          type="text"
-                          value={item.item}
-                          onChange={(e) => {
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].item = e.target.value;
-                            setReceiveItems(updatedItems);
-                            setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                {receiveItems.map((item, index) => (
+                <tr key={index}>
+                  <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={item.item}
+                      onChange={(e) => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].item = e.target.value;
+                        setReceiveItems(updatedItems);
+                        setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                      }}
+                      onFocus={() => setActiveItemDropdownIndex(index)}
+                      onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+                      style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                    />
+                    {activeItemDropdownIndex === index && (
+                      <ul
+                        style={{
+                          border: '1px solid #ddd',
+                          maxHeight: '150px',
+                          overflowY: 'auto',
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          backgroundColor: '#fff',
+                          width: '200px',
+                          listStyle: 'none',
+                          padding: 0,
+                          margin: 0,
+                          zIndex: 3000, // Ensure it appears above Other Charges
+                          borderRadius: '4px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                        }}
+                      >
+                        {filteredItems.map((i) => (
+                          <li
+                            key={i.name}
+                            onMouseDown={() => handleItemSelect(i, index)}
+                            style={{
+                              padding: '8px 10px',
+                              cursor: 'pointer',
+                              backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
+                              borderBottom: '1px solid #eee',
+                            }}
+                          >
+                            {i.name}
+                          </li>
+                        ))}
+                        <li
+                          onMouseDown={() => setShowNewItemModal(true)}
+                          style={{
+                            padding: '8px 10px',
+                            cursor: 'pointer',
+                            backgroundColor: '#fff',
+                            borderBottom: '1px solid #eee',
+                            color: '#2196F3',
+                            fontWeight: 'bold',
                           }}
-                          onFocus={() => setActiveItemDropdownIndex(index)}
-                          onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                        />
-                        {activeItemDropdownIndex === index && (
-                          <ul style={{ 
-                            border: '1px solid #ddd', 
-                            maxHeight: '150px', 
-                            overflowY: 'auto', 
-                            position: 'absolute', 
-                            top: '100%',
-                            left: 0, 
-                            backgroundColor: '#fff', 
-                            width: '200px', 
-                            listStyle: 'none', 
-                            padding: 0, 
-                            margin: 0, 
-                            zIndex: 2000,
-                            borderRadius: '4px', 
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
-                          }}>
-                            {filteredItems.map(i => (
-                              <li
-                                key={i.name}
-                                onMouseDown={() => handleItemSelect(i, index)}
-                                style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                              >
-                                {i.name}
-                              </li>
-                            ))}
-                            <li
-                              onMouseDown={() => setShowNewItemModal(true)}
-                              style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
-                            >
-                              Add New Item
-                            </li>
-                          </ul>
-                        )}
-                      </td>
+                        >
+                          Add New Item
+                        </li>
+                      </ul>
+                    )}
+                  </td>
+                
                       <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
                         <input
                           type="text"
