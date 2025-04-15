@@ -22,6 +22,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const navigate = useNavigate();
   const location = useLocation();
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
+    identifier: '',
     item: '',
     lotNumber: '',
     account: Account.Storage,
@@ -177,6 +178,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     const nonSpiritsItems = po.items
       .filter(item => item.materialType !== MaterialType.Spirits)
       .map(item => ({
+        identifier: item.name || 'UNKNOWN_ITEM', // Set identifier based on item name for non-Spirits
         item: item.name,
         lotNumber: '',
         materialType: item.materialType,
@@ -186,6 +188,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         poNumber,
         siteId: selectedSite,
         locationId: singleForm.locationId || '',
+        description: '', // Add description to match ReceiveItem
       }));
     const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
     if (spiritsItems.length > 0) {
@@ -236,6 +239,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         setSingleForm((prev: ReceiveForm) => ({ ...prev, item: newItem, materialType: newItemType }));
       } else {
         setReceiveItems([...receiveItems, { 
+          identifier: 'Unknown',
           item: newItem,
           lotNumber: '',
           materialType: newItemType,
@@ -256,6 +260,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const addItemRow = () => {
     setReceiveItems([...receiveItems, { 
+      identifier: '',
       item: '',
       lotNumber: '',
       materialType: MaterialType.Grain,
@@ -275,14 +280,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       return;
     }
     const invalidItems = itemsToReceive.filter(item =>
-      (item.materialType === MaterialType.Spirits && (!item.proof || item.proof.trim() === '')) ||
+      (item.materialType === MaterialType.Spirits && (!item.lotNumber || !item.lotNumber.trim() || !item.proof || item.proof.trim() === '')) || // Added lotNumber validation for Spirits
       (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
       isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0 ||
       (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
       (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
     );
     if (invalidItems.length) {
-      setProductionError('Invalid data: Spirits need proof, Other needs description, and numeric values must be valid');
+      setProductionError('Invalid data: Spirits need lot number and proof, Other needs description, and numeric values must be valid');
       return;
     }
     const totalOtherCost = otherCharges.reduce((sum, charge) => 
@@ -295,7 +300,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       const unitCost = totalItemCost / quantity || 0;
       const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
       const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
-      const identifier = item.lotNumber && item.lotNumber.trim() ? item.lotNumber : item.item;
+      const identifier = item.materialType === MaterialType.Spirits 
+        ? (item.lotNumber || 'UNKNOWN_LOT') 
+        : (item.item || 'UNKNOWN_ITEM');
       return {
         identifier,
         item: item.item,
@@ -304,14 +311,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         type: item.materialType,
         quantity: item.quantity,
         unit: item.unit,
-        proof: item.proof || (item.materialType === MaterialType.Spirits ? '0' : undefined), // Changed null to undefined
+        proof: item.proof || (item.materialType === MaterialType.Spirits ? '0' : undefined),
         proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
         receivedDate: singleForm.receivedDate,
         source: singleForm.source || 'Unknown',
         siteId: singleForm.siteId,
         locationId: item.locationId ? parseInt(item.locationId) : 1,
         status: Status.Received,
-        description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined), // Changed null to undefined
+        description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
         cost: finalUnitCost,
         totalCost: finalTotalCost,
         poNumber: item.poNumber,
@@ -1047,6 +1054,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               <button
                 type="button"
                 onClick={() => setLotItems([...lotItems, { 
+                  identifier: '',
                   item: poItemToSplit.name,
                   lotNumber: '',
                   quantity: '',
