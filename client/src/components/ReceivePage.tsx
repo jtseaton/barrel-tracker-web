@@ -456,15 +456,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             </div>
 
 {/* Physical Location Selector */}
-<div style={{ position: 'relative' }}>
-  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
+<div className="selector-container">
+  <label className="selector-label">Physical Location (required):</label>
   <select
     value={singleForm.locationId}
     onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
     onFocus={() => setShowLocationSuggestions(true)}
     onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 50)}
     required
-    style={{ width: '100%', padding: '10px', border: '2px solid #2196F3', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px', backgroundColor: '#f9f9f9' }}
+    className="location-select"
   >
     <option value="">Select a location</option>
     {locations.map(loc => (
@@ -472,42 +472,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     ))}
   </select>
   {showLocationSuggestions && (
-    <ul style={{ 
-      width: '90%', 
-      maxHeight: '120px', 
-      overflowY: 'auto', 
-      position: 'absolute', 
-      backgroundColor: '#fff', 
-      listStyle: 'none', 
-      padding: '5px 10px', 
-      margin: '2px 0 0 10px', 
-      zIndex: 1000, 
-      fontSize: '13px'
-    }}>
+    <ul className="suggestion-list">
       {locations.map((loc) => (
         <li
           key={loc.locationId}
           className="location-suggestion-item"
           onMouseDown={() => handleLocationSelect(loc)}
-          style={{ 
-            padding: '6px 8px', 
-            cursor: 'pointer', 
-            backgroundColor: singleForm.locationId === loc.locationId.toString() ? '#e8f0fe' : '#fff'
-          }}
         >
           {loc.name}
         </li>
       ))}
       <li
-        className="location-suggestion-item"
+        className="location-suggestion-item add-new"
         onMouseDown={() => handleAddNewLocation()}
-        style={{ 
-          padding: '6px 8px', 
-          cursor: 'pointer', 
-          backgroundColor: '#fff', 
-          color: '#2196F3', 
-          fontWeight: 'bold'
-        }}
       >
         Add New Location
       </li>
