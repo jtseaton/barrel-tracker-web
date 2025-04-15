@@ -113,7 +113,6 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS locations (
       locationId INTEGER PRIMARY KEY AUTOINCREMENT,
       siteId TEXT,
-      account TEXT,             -- e.g., Stored, Processing
       name TEXT NOT NULL,       -- e.g., Spirits Storage, Grain Storage
       enabled INTEGER DEFAULT 1,
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
@@ -123,12 +122,12 @@ db.serialize(() => {
   ['DSP-AL-20010', 'Athens AL DSP', 'DSP', '123 Distillery Rd, Athens, AL']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
     ['BREW-BHM-001', 'Birmingham Brewery', 'Brewery', '456 Brew St, Birmingham, AL']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, account, name) VALUES (?, ?, ?)`, 
-    ['DSP-AL-20010', 'Stored', 'Spirits Storage']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, account, name) VALUES (?, ?, ?)`, 
-    ['DSP-AL-20010', 'Stored', 'Grain Storage']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, account, name) VALUES (?, ?, ?)`, 
-    ['DSP-AL-20010', 'Processing', 'Fermentation Tanks']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?, ?)`, 
+    ['DSP-AL-20010', 'Spirits Storage']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?, ?)`, 
+    ['DSP-AL-20010', 'Grain Storage']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?, ?)`, 
+    ['DSP-AL-20010', 'Fermentation Tanks']);
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
   });
@@ -972,9 +971,9 @@ app.get('/api/sites', (req, res) => {
 });
 
 app.post('/api/locations', (req, res) => {
-  const { name, siteId, account, enabled = 1 } = req.body;
-  if (!name || !siteId || !account) {
-    return res.status(400).json({ error: 'Name, siteId, and account are required' });
+  const { name, siteId, enabled = 1 } = req.body;
+  if (!name || !siteId) {
+    return res.status(400).json({ error: 'Name, siteId are required' });
   }
   db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, row) => {
     if (err) {
@@ -985,14 +984,14 @@ app.post('/api/locations', (req, res) => {
       return res.status(400).json({ error: 'Invalid siteId' });
     }
     db.run(
-      'INSERT INTO locations (name, siteId, account, enabled) VALUES (?, ?, ?, ?)',
-      [name, siteId, account, enabled],
+      'INSERT INTO locations (name, siteId, enabled) VALUES (?, ?, ?, ?)',
+      [name, siteId, enabled],
       function(err) {
         if (err) {
           console.error('Insert location error:', err);
           return res.status(500).json({ error: err.message });
         }
-        res.json({ locationId: this.lastID, name, siteId, account, enabled });
+        res.json({ locationId: this.lastID, name, siteId, enabled });
       }
     );
   });
