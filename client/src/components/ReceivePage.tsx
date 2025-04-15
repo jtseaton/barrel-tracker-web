@@ -540,7 +540,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               </div>
              {/* Physical Location Selector */}
               <div style={{ position: 'relative' }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
                   Physical Location (required):
                 </label>
                 <input
@@ -558,8 +565,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                     );
                     setShowLocationSuggestions(true);
                   }}
-                  onFocus={() => setShowLocationSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 300)}
+                  onFocus={() => {
+                    if (!showLocationSuggestions) {
+                      setShowLocationSuggestions(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      setShowLocationSuggestions(false);
+                    }, 300);
+                  }}
                   placeholder="Type to search locations"
                   style={{
                     width: '100%',
