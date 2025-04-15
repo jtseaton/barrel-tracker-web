@@ -10,8 +10,17 @@ interface InventoryProps {
   refreshInventory: () => Promise<void>;
 }
 
+interface Location {
+  locationId: number;
+  siteId: string;
+  account: string;
+  name: string;
+  enabled: number;
+}
+
 const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) => {
   const [dailySummary, setDailySummary] = useState<DailySummaryItem[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]); // State for locations
   const [moveForm, setMoveForm] = useState<MoveForm>({ identifier: '', toAccount: 'Storage', proofGallons: '' });
   const [lossForm, setLossForm] = useState<LossForm>({
     identifier: '',
@@ -26,23 +35,50 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const [productionError, setProductionError] = useState<string | null>(null);
 
   const navigate = useNavigate();
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
+  // Fetch inventory on mount
   useEffect(() => {
     refreshInventory();
   }, [refreshInventory]);
 
+  // Log inventory for debugging
   useEffect(() => {
     console.log('Inventory prop received:', inventory);
     const receivedStored = inventory.filter((item) => ['Received', 'Stored'].includes(item.status));
     console.log('Filtered Received/Stored:', receivedStored);
   }, [inventory]);
 
+  // Fetch daily summary
   useEffect(() => {
     fetchDailySummary()
       .then(setDailySummary)
       .catch((err) => console.error('Daily summary error:', err));
   }, []);
+
+  // Fetch locations for the site
+  useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(OUR_DSP)}`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        console.log('Fetched locations:', data);
+        setLocations(data);
+      } catch (err: any) {
+        console.error('Failed to fetch locations:', err);
+        setProductionError('Failed to fetch locations: ' + err.message);
+      }
+    };
+    fetchLocations();
+  }, [API_BASE_URL]);
+
+  // Helper function to map locationId to location name
+  const getLocationName = (locationId: number | undefined) => {
+    if (!locationId) return 'Unknown Location';
+    const location = locations.find(loc => loc.locationId === locationId);
+    return location ? location.name : 'Unknown Location';
+  };
 
   const handleMove = async () => {
     if (!moveForm.identifier || !moveForm.proofGallons) {
@@ -95,6 +131,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   };
 
   const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
+
   const handleItemClick = (item: InventoryItem) => {
     navigate(`/inventory/${getIdentifier(item)}`);
   };
@@ -111,9 +148,17 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     <div style={{ padding: '20px', backgroundColor: '#2E4655', color: '#FFFFFF', fontFamily: 'Arial, sans-serif' }}>
       <h2 style={{ color: '#EEC930', textAlign: 'center' }}>Inventory Management</h2>
       <div style={{ marginBottom: '20px' }}>
-        <Link to="/receive"><button style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>Receive Inventory</button></Link>
-        <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>Move Inventory</button>
-        <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>Record Loss</button>
+        <Link to="/receive">
+          <button style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>
+            Receive Inventory
+          </button>
+        </Link>
+        <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>
+          Move Inventory
+        </button>
+        <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>
+          Record Loss
+        </button>
       </div>
 
       <div style={{ marginBottom: '20px' }}>
@@ -126,20 +171,117 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         />
       </div>
 
+      {productionError && (
+        <div style={{ color: '#F86752', backgroundColor: '#ffe6e6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>
+          {productionError}
+        </div>
+      )}
+
+      <h3 style={{ color: '#EEC930' }}>Received/Stored Inventory</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginBottom: '20px' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Item-Lot</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Type</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Proof Gallons</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Received Date</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Location</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Source</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Status</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Description</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit Cost</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Total Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredInventory.map((item, index) => (
+              <tr key={index} onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
+                <td style={{ padding: '10px' }}>{getIdentifier(item)}</td>
+                <td style={{ padding: '10px' }}>{item.type}</td>
+                <td style={{ padding: '10px' }}>{item.quantity}</td>
+                <td style={{ padding: '10px' }}>{item.unit}</td>
+                <td style={{ padding: '10px' }}>{item.proofGallons || 'N/A'}</td>
+                <td style={{ padding: '10px' }}>{item.receivedDate}</td>
+                <td style={{ padding: '10px' }}>{getLocationName(item.locationId)}</td>
+                <td style={{ padding: '10px' }}>{item.source || 'Unknown'}</td>
+                <td style={{ padding: '10px' }}>{item.status}</td>
+                <td style={{ padding: '10px' }}>{item.description || 'N/A'}</td>
+                <td style={{ padding: '10px' }}>{item.cost || 'N/A'}</td>
+                <td style={{ padding: '10px' }}>{item.totalCost || 'N/A'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style={{ color: '#EEC930' }}>Daily Summary</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Date</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Account</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Type</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Total Proof Gallons</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dailySummary.map((item, index) => (
+              <tr key={index}>
+                <td style={{ padding: '10px' }}>{item.date}</td>
+                <td style={{ padding: '10px' }}>{item.account}</td>
+                <td style={{ padding: '10px' }}>{item.type}</td>
+                <td style={{ padding: '10px' }}>{parseFloat(item.totalProofGallons).toFixed(2)}</td>
+                <td style={{ padding: '10px' }}>{getLocationName(item.locationId)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {showMoveModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', color: '#000' }}>
             <h3>Move Inventory</h3>
-            <input type="text" placeholder="Item-Lot (e.g., Grain-NGS123)" value={moveForm.identifier} onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <select value={moveForm.toAccount} onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }}>
-              <option value="Production">Production</option>
+            <input
+              type="text"
+              placeholder="Item-Lot (e.g., Grain-NGS123)"
+              value={moveForm.identifier}
+              onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <select
+              value={moveForm.toAccount}
+              onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            >
               <option value="Storage">Storage</option>
               <option value="Processing">Processing</option>
+              <option value="Production">Production</option>
             </select>
-            <input type="number" placeholder="Proof Gallons" value={moveForm.proofGallons} onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })} step="0.01" style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <button onClick={handleMove} style={{ padding: '10px 20px', backgroundColor: '#F86752', color: '#FFF', border: 'none', borderRadius: '4px' }}>Submit</button>
-            <button onClick={() => setShowMoveModal(false)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#000', color: '#EEC930', border: 'none', borderRadius: '4px' }}>Cancel</button>
-            {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
+            <input
+              type="number"
+              placeholder="Proof Gallons"
+              value={moveForm.proofGallons}
+              onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <button
+              onClick={handleMove}
+              style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px', marginRight: '10px' }}
+            >
+              Move
+            </button>
+            <button
+              onClick={() => setShowMoveModal(false)}
+              style={{ padding: '10px 20px', backgroundColor: '#ccc', color: '#000', border: 'none', borderRadius: '4px' }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -148,109 +290,55 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', color: '#000' }}>
             <h3>Record Loss</h3>
-            <input type="text" placeholder="Item-Lot (e.g., Grain-NGS123)" value={lossForm.identifier} onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <input type="number" placeholder="Quantity Lost" value={lossForm.quantityLost} onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })} step="0.01" style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <input type="number" placeholder="Proof Gallons Lost" value={lossForm.proofGallonsLost} onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })} step="0.01" style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <input type="text" placeholder="Reason" value={lossForm.reason} onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <input type="date" value={lossForm.date} onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })} style={{ display: 'block', marginBottom: '10px', padding: '5px', width: '100%' }} />
-            <button onClick={handleRecordLoss} style={{ padding: '10px 20px', backgroundColor: '#F86752', color: '#FFF', border: 'none', borderRadius: '4px' }}>Submit</button>
-            <button onClick={() => setShowLossModal(false)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#000', color: '#EEC930', border: 'none', borderRadius: '4px' }}>Cancel</button>
-            {productionError && <p style={{ color: 'red', marginTop: '10px' }}>{productionError}</p>}
+            <input
+              type="text"
+              placeholder="Item-Lot (e.g., Grain-NGS123)"
+              value={lossForm.identifier}
+              onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <input
+              type="number"
+              placeholder="Quantity Lost"
+              value={lossForm.quantityLost}
+              onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <input
+              type="number"
+              placeholder="Proof Gallons Lost"
+              value={lossForm.proofGallonsLost}
+              onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <input
+              type="text"
+              placeholder="Reason for Loss"
+              value={lossForm.reason}
+              onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <input
+              type="date"
+              value={lossForm.date}
+              onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+            />
+            <button
+              onClick={handleRecordLoss}
+              style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px', marginRight: '10px' }}
+            >
+              Record Loss
+            </button>
+            <button
+              onClick={() => setShowLossModal(false)}
+              style={{ padding: '10px 20px', backgroundColor: '#ccc', color: '#000', border: 'none', borderRadius: '4px' }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
-
-      <h2 style={{ color: '#EEC930', marginTop: '20px' }}>Daily Summary (Proof Gallons)</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFF', color: '#000', marginBottom: '20px', borderRadius: '8px' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#EEC930' }}>
-            <th style={{ padding: '10px' }}>Account</th>
-            <th style={{ padding: '10px' }}>Total Proof Gallons</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dailySummary.length > 0 ? dailySummary.map((item) => (
-            <tr key={item.account} style={{ borderBottom: '1px solid #ddd' }}>
-              <td style={{ padding: '10px' }}>{item.account}</td>
-              <td style={{ padding: '10px' }}>{item.totalProofGallons || '0.00'}</td>
-            </tr>
-          )) : <tr><td colSpan={2} style={{ padding: '10px', textAlign: 'center' }}>Loading summary...</td></tr>}
-        </tbody>
-      </table>
-
-      <h2 style={{ color: '#EEC930' }}>Received/Stored Inventory</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFF', color: '#000', borderRadius: '8px' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#EEC930' }}>
-            <th style={{ padding: '10px' }}>Item-Lot</th>
-            <th style={{ padding: '10px' }}>Type</th>
-            <th style={{ padding: '10px' }}>Description</th>
-            <th style={{ padding: '10px' }}>Quantity</th>
-            <th style={{ padding: '10px' }}>Unit</th>
-            <th style={{ padding: '10px' }}>Proof</th>
-            <th style={{ padding: '10px' }}>Total Cost</th>
-            <th style={{ padding: '10px' }}>Date Received</th>
-            <th style={{ padding: '10px' }}>Source</th>
-            <th style={{ padding: '10px' }}>Location</th>
-            <th style={{ padding: '10px' }}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredInventory.map((item) => (
-            <tr
-              key={getIdentifier(item)}
-              onClick={() => handleItemClick(item)}
-              style={{ cursor: 'pointer', borderBottom: '1px solid #ddd' }}
-            >
-              <td style={{ padding: '10px' }}>{getIdentifier(item) || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.type}</td>
-              <td style={{ padding: '10px' }}>{item.description || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.quantity || '0.00'}</td>
-              <td style={{ padding: '10px' }}>{item.unit || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.proof || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.totalCost ? `$${parseFloat(item.totalCost).toFixed(2)}` : 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.receivedDate || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.source || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.account || 'Storage'}</td>
-              <td style={{ padding: '10px' }}>{item.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <h2 style={{ color: '#EEC930', marginTop: '20px' }}>Finished Packaged Inventory</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFF', color: '#000', borderRadius: '8px' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#EEC930' }}>
-            <th style={{ padding: '10px' }}>Item-Lot</th>
-            <th style={{ padding: '10px' }}>Type</th>
-            <th style={{ padding: '10px' }}>Quantity (WG)</th>
-            <th style={{ padding: '10px' }}>Proof</th>
-            <th style={{ padding: '10px' }}>Proof Gallons</th>
-            <th style={{ padding: '10px' }}>Date Packaged</th>
-            <th style={{ padding: '10px' }}>Source</th>
-            <th style={{ padding: '10px' }}>Location</th>
-          </tr>
-        </thead>
-        <tbody>
-          {inventory.filter((item) => item.account === 'Processing' && item.status === 'Packaged').map((item) => (
-            <tr
-              key={getIdentifier(item)}
-              onClick={() => handleItemClick(item)}
-              style={{ cursor: 'pointer', borderBottom: '1px solid #ddd' }}
-            >
-              <td style={{ padding: '10px' }}>{getIdentifier(item) || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.type}</td>
-              <td style={{ padding: '10px' }}>{item.quantity || '0.00'}</td>
-              <td style={{ padding: '10px' }}>{item.proof || '0.00'}</td>
-              <td style={{ padding: '10px' }}>{item.proofGallons || '0.00'}</td>
-              <td style={{ padding: '10px' }}>{item.receivedDate || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.source || 'N/A'}</td>
-              <td style={{ padding: '10px' }}>{item.account || 'Storage'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 };
