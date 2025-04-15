@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor, ReceiveForm, PurchaseOrderItem } from '../types/interfaces';
 import { MaterialType, Unit, Account } from '../types/enums';
@@ -21,6 +21,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const locationState = location.state as { newSiteId?: string; newLocationId?: string };
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
     item: '',
@@ -46,10 +47,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
+  const [filteredSites, setFilteredSites] = useState<Site[]>([]);
   const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
-  const [filteredSites, setFilteredSites] = useState<Site[]>(sites);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [filteredLocations, setFilteredLocations] = useState<Location[]>(locations);
+  const [filteredLocations, setFilteredLocations] = useState<Location[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>(vendors);
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
@@ -63,8 +64,70 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [newItemType, setNewItemType] = useState<MaterialType>(MaterialType.Grain);
   const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
+  const [isFetchingLocations, setIsFetchingLocations] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
 
-  const locationState = useLocation().state as { newSiteId?: string; newLocationId?: string };
+  // Debounce utility
+  const debounce = (func: (...args: any[]) => void, wait: number) => {
+    let timeout: NodeJS.Timeout;
+    return (...args: any[]) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+
+  // Memoized fetchLocations with retry logic
+  const fetchLocations = useCallback(async (retryCount = 3, delay = 1000): Promise<void> => {
+    if (!selectedSite || isFetchingLocations) {
+      setLocations([]);
+      setFilteredLocations([]);
+      return;
+    }
+    setIsFetchingLocations(true);
+    try {
+      const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}`;
+      console.log('Fetching locations from:', url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(`HTTP error! status: ${res.status}, message: ${errorData.error || 'Unknown error'}`);
+      }
+      const data: Location[] = await res.json();
+      console.log('Fetched locations:', data);
+      setLocations(data);
+      setFilteredLocations(data);
+      setProductionError(null);
+    } catch (err: any) {
+      console.error('Fetch locations error:', err);
+      if (retryCount > 0 && err.name !== 'AbortError') {
+        console.log(`Retrying fetchLocations, attempts left: ${retryCount}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchLocations(retryCount - 1, delay * 2);
+      }
+      setProductionError(`Failed to fetch locations: ${err.message}`);
+      setLocations([]);
+      setFilteredLocations([]);
+    } finally {
+      setIsFetchingLocations(false);
+    }
+  }, [selectedSite, isFetchingLocations]);
+
+  // Handle location input change with debounce
+  const handleLocationInputChange = useCallback(
+    debounce((value: string) => {
+      setLocationSearch(value);
+      setFilteredLocations(
+        locations.filter((loc) =>
+          loc.name.toLowerCase().includes(value.toLowerCase())
+        )
+      );
+      setShowLocationSuggestions(true);
+    }, 300),
+    [locations]
+  );
 
   useEffect(() => {
     if (locationState?.newSiteId) {
@@ -76,7 +139,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchItems = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/items`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`${API_BASE_URL}/api/items`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         setItems(data);
@@ -88,7 +154,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchPOs = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(
+          `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         setPurchaseOrders(data);
@@ -99,44 +171,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchSites = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/sites`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`${API_BASE_URL}/api/sites`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         setSites(data);
+        setFilteredSites(data);
       } catch (err: any) {
         setProductionError('Failed to fetch sites: ' + err.message);
-      }
-    };
-
-    const fetchLocations = async () => {
-      try {
-        const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}`;
-        console.log('Fetching locations from:', url);
-        const res = await fetch(url);
-        if (!res.ok) {
-          const errorData = await res.json();
-          console.error('Fetch locations error response:', errorData);
-          throw new Error(`HTTP error! status: ${res.status}, message: ${errorData.error}`);
-        }
-        const data = await res.json();
-        console.log('Fetched locations:', data);
-        setLocations(data);
-      } catch (err: any) {
-        console.error('Fetch locations error:', err);
-        setProductionError('Failed to fetch locations: ' + err.message);
-      }
-    };
-
-    const fetchWithTimeout = async (url: string, timeout = 5000) => {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), timeout);
-      try {
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(id);
-        return res;
-      } catch (err) {
-        clearTimeout(id);
-        throw err;
       }
     };
 
@@ -145,10 +189,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     if (singleForm.source) fetchPOs();
     fetchLocations();
     setFilteredVendors(vendors);
-    setFilteredSites(sites);
-    setFilteredLocations(locations);
-  }, [locationState, singleForm.source, selectedSite, vendors, sites, locations]);
-
+  }, [locationState, singleForm.source, vendors, fetchLocations]);
 
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -183,18 +224,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const handleLocationSelect = (location: Location) => {
     setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: location.locationId.toString() }));
+    setLocationSearch(location.name);
     setShowLocationSuggestions(false);
   };
 
   const handleAddNewLocation = () => {
-    const newLocation: Location = {
-      locationId: locations.length + 1, // Temporary ID
-      siteId: selectedSite,
-      name: `New Location ${locations.length + 1}`,
-      enabled: 1,
-    };
-    setLocations([...locations, newLocation]);
-    setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: newLocation.locationId.toString() }));
+    navigate('/locations', {
+      state: { fromReceive: true, siteId: selectedSite },
+    });
     setShowLocationSuggestions(false);
   };
 
@@ -454,155 +491,154 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         {useSingleItem ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             {/* Site Selector */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Site (required):
-                </label>
-                <input
-                  type="text"
-                  value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setFilteredSites(
-                      sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
-                    );
-                    setShowSiteSuggestions(true);
-                    // Clear selectedSite if input doesn't match any site
-                    if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
-                      setSelectedSite('');
-                    }
-                  }}
-                  onFocus={() => setShowSiteSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
-                  placeholder="Type to search sites"
+            <div style={{ position: 'relative' }}>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Site (required):
+              </label>
+              <input
+                type="text"
+                value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFilteredSites(
+                    sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
+                  );
+                  setShowSiteSuggestions(true);
+                  if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
+                    setSelectedSite('');
+                    setSingleForm((prev) => ({ ...prev, locationId: '' }));
+                    setLocationSearch('');
+                    setFilteredLocations([]);
+                  }
+                }}
+                onFocus={() => setShowSiteSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
+                placeholder="Type to search sites"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px',
+                }}
+              />
+              {showSiteSuggestions && (
+                <ul
                   style={{
-                    width: '100%',
-                    padding: '10px',
                     border: '1px solid #ddd',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    position: 'absolute',
+                    backgroundColor: '#fff',
+                    width: '100%',
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 0,
+                    zIndex: 1000,
                     borderRadius: '4px',
-                    boxSizing: 'border-box',
-                    fontSize: '16px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   }}
-                />
-                {showSiteSuggestions && (
-                  <ul
-                    style={{
-                      border: '1px solid #ddd',
-                      maxHeight: '150px',
-                      overflowY: 'auto',
-                      position: 'absolute',
-                      backgroundColor: '#fff',
-                      width: '100%',
-                      listStyle: 'none',
-                      padding: 0,
-                      margin: 0,
-                      zIndex: 1000,
-                      borderRadius: '4px',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    }}
-                  >
-                    {filteredSites.map((site) => (
-                      <li
-                        key={site.siteId}
-                        onMouseDown={() => {
-                          setSelectedSite(site.siteId);
-                          setShowSiteSuggestions(false);
-                        }}
-                        style={{
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          backgroundColor:
-                            selectedSite === site.siteId ? '#e0e0e0' : '#fff',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        {site.name}
-                      </li>
-                    ))}
+                >
+                  {filteredSites.map((site) => (
                     <li
+                      key={site.siteId}
                       onMouseDown={() => {
-                        navigate('/sites', { state: { fromReceive: true } });
+                        setSelectedSite(site.siteId);
                         setShowSiteSuggestions(false);
                       }}
                       style={{
                         padding: '8px 10px',
                         cursor: 'pointer',
-                        backgroundColor: '#fff',
+                        backgroundColor:
+                          selectedSite === site.siteId ? '#e0e0e0' : '#fff',
                         borderBottom: '1px solid #eee',
-                        color: '#2196F3',
-                        fontWeight: 'bold',
                       }}
                     >
-                      Add New Site
+                      {site.name}
                     </li>
-                  </ul>
-                )}
-              </div>
-             {/* Physical Location Selector */}
-              <div style={{ position: 'relative' }}>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Physical Location (required):
-                </label>
-                <input
-                  type="text"
-                  value={
-                    locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
-                  }
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
-                    setFilteredLocations(
-                      locations.filter((loc) =>
-                        loc.name.toLowerCase().includes(value.toLowerCase())
-                      )
-                    );
-                    setShowLocationSuggestions(true);
-                  }}
-                  onFocus={() => {
-                    if (!showLocationSuggestions) {
-                      setShowLocationSuggestions(true);
-                    }
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => {
-                      setShowLocationSuggestions(false);
-                    }, 300);
-                  }}
-                  placeholder="Type to search locations"
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    boxSizing: 'border-box',
-                    fontSize: '16px',
-                  }}
-                />
-                {showLocationSuggestions && (
-                  <ul
+                  ))}
+                  <li
+                    onMouseDown={() => {
+                      navigate('/sites', { state: { fromReceive: true } });
+                      setShowSiteSuggestions(false);
+                    }}
                     style={{
-                      border: '1px solid #ddd',
-                      maxHeight: '150px',
-                      overflowY: 'auto',
-                      position: 'absolute',
+                      padding: '8px 10px',
+                      cursor: 'pointer',
                       backgroundColor: '#fff',
-                      width: '100%',
-                      listStyle: 'none',
-                      padding: 0,
-                      margin: 0,
-                      zIndex: 1000,
-                      borderRadius: '4px',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      borderBottom: '1px solid #eee',
+                      color: '#2196F3',
+                      fontWeight: 'bold',
                     }}
                   >
-                    {filteredLocations.map((location) => (
+                    Add New Site
+                  </li>
+                </ul>
+              )}
+            </div>
+            {/* Physical Location Selector */}
+            <div style={{ position: 'relative' }}>
+              <label
+                style={{
+                  fontWeight: 'bold',
+                  color: '#555',
+                  display: 'block',
+                  marginBottom: '5px',
+                }}
+              >
+                Physical Location (required):
+              </label>
+              <input
+                type="text"
+                value={locationSearch}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
+                  handleLocationInputChange(value);
+                }}
+                onFocus={() => {
+                  if (!isFetchingLocations) {
+                    setShowLocationSuggestions(true);
+                    setFilteredLocations(locations);
+                  }
+                }}
+                onBlur={() => {
+                  setTimeout(() => {
+                    setShowLocationSuggestions(false);
+                  }, 400); // Increased delay to allow clicking
+                }}
+                placeholder={isFetchingLocations ? 'Loading locations...' : 'Type to search locations'}
+                disabled={isFetchingLocations || !selectedSite}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px',
+                  backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
+                }}
+              />
+              {showLocationSuggestions && !isFetchingLocations && (
+                <ul
+                  style={{
+                    border: '1px solid #ddd',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    position: 'absolute',
+                    backgroundColor: '#fff',
+                    width: '100%',
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 0,
+                    zIndex: 1000,
+                    borderRadius: '4px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  {filteredLocations.length > 0 ? (
+                    filteredLocations.map((location) => (
                       <li
                         key={location.locationId}
                         onMouseDown={() => handleLocationSelect(location)}
@@ -618,28 +654,34 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                       >
                         {location.name}
                       </li>
-                    ))}
+                    ))
+                  ) : (
                     <li
-                      onMouseDown={() => {
-                        navigate('/locations', {
-                          state: { fromReceive: true, siteId: selectedSite },
-                        });
-                        setShowLocationSuggestions(false);
-                      }}
                       style={{
                         padding: '8px 10px',
-                        cursor: 'pointer',
-                        backgroundColor: '#fff',
+                        color: '#888',
                         borderBottom: '1px solid #eee',
-                        color: '#2196F3',
-                        fontWeight: 'bold',
                       }}
                     >
-                      Add New Location
+                      No locations found
                     </li>
-                  </ul>
-                )}
-              </div>
+                  )}
+                  <li
+                    onMouseDown={() => handleAddNewLocation()}
+                    style={{
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      backgroundColor: '#fff',
+                      borderBottom: '1px solid #eee',
+                      color: '#2196F3',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    Add New Location
+                  </li>
+                </ul>
+              )}
+            </div>
             {/* Vendor Selector */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
@@ -672,7 +714,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </ul>
               )}
             </div>
-
             {/* Item */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item:</label>
@@ -708,7 +749,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </ul>
               )}
             </div>
-
             {/* Lot Number */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Lot Number:</label>
@@ -719,7 +759,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-
             {/* Material Type */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Material Type:</label>
@@ -733,7 +772,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
             </div>
-
             {/* Quantity */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
@@ -746,7 +784,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-
             {/* Unit */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Unit:</label>
@@ -760,7 +797,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
             </div>
-
             {/* Spirits-specific fields */}
             {singleForm.materialType === MaterialType.Spirits && (
               <>
@@ -790,7 +826,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </div>
               </>
             )}
-
             {/* Other-specific fields */}
             {singleForm.materialType === MaterialType.Other && (
               <div style={{ gridColumn: 'span 2' }}>
@@ -803,7 +838,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 />
               </div>
             )}
-
             {/* Received Date */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
@@ -814,7 +848,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-
             {/* Cost */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Cost:</label>
@@ -827,7 +860,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-
             {/* PO Number */}
             <div style={{ gridColumn: 'span 2' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
@@ -846,7 +878,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
             </div>
-
             {/* Submit Button */}
             <div style={{ gridColumn: 'span 2', textAlign: 'center' }}>
               <button
@@ -1213,7 +1244,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             </div>
           </div>
         )}
-
         {showNewItemModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
@@ -1273,7 +1303,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             </div>
           </div>
         )}
-
         {poItemToSplit && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
