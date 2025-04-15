@@ -974,6 +974,24 @@ app.get('/api/sites', (req, res) => {
   });
 });
 
+app.post('/api/sites', (req, res) => {
+  const { siteId, name, type, address, enabled = 1 } = req.body;
+  if (!siteId || !name) {
+    return res.status(400).json({ error: 'Site ID and name are required' });
+  }
+  db.run(
+    'INSERT INTO sites (siteId, name, type, address, enabled) VALUES (?, ?, ?, ?, ?)',
+    [siteId, name, type || 'DSP', address || '', enabled],
+    function (err) {
+      if (err) {
+        console.error('Insert site error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ siteId, name, type, address, enabled });
+    }
+  );
+});
+
 app.post('/api/locations', (req, res) => {
   const { name, siteId, enabled = 1 } = req.body;
   if (!name || !siteId) {
