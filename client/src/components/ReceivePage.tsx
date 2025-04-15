@@ -455,14 +455,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               </select>
             </div>
 
-            {/* Physical Location Selector */}
+{/* Physical Location Selector */}
 <div style={{ position: 'relative' }}>
   <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
   <select
     value={singleForm.locationId}
     onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
     onFocus={() => setShowLocationSuggestions(true)}
-    onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 100)}
+    onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 50)}
     required
     style={{ width: '100%', padding: '10px', border: '2px solid #2196F3', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px', backgroundColor: '#f9f9f9' }}
   >
@@ -473,19 +473,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   </select>
   {showLocationSuggestions && (
     <ul style={{ 
-      border: '1px solid #ddd', 
-      maxHeight: '150px', 
+      width: '90%', 
+      maxHeight: '120px', 
       overflowY: 'auto', 
       position: 'absolute', 
       backgroundColor: '#fff', 
-      width: '100%', 
       listStyle: 'none', 
-      padding: '5px 0', 
-      margin: '5px 0 0 0', 
+      padding: '5px 10px', 
+      margin: '2px 0 0 10px', 
       zIndex: 1000, 
-      borderRadius: '4px', 
-      boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-      fontSize: '14px'
+      fontSize: '13px'
     }}>
       {locations.map((loc) => (
         <li
@@ -493,10 +490,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           className="location-suggestion-item"
           onMouseDown={() => handleLocationSelect(loc)}
           style={{ 
-            padding: '8px 12px', 
+            padding: '6px 8px', 
             cursor: 'pointer', 
-            backgroundColor: singleForm.locationId === loc.locationId.toString() ? '#e8f0fe' : '#fff', 
-            borderBottom: '1px solid #eee'
+            backgroundColor: singleForm.locationId === loc.locationId.toString() ? '#e8f0fe' : '#fff'
           }}
         >
           {loc.name}
@@ -506,10 +502,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         className="location-suggestion-item"
         onMouseDown={() => handleAddNewLocation()}
         style={{ 
-          padding: '8px 12px', 
+          padding: '6px 8px', 
           cursor: 'pointer', 
           backgroundColor: '#fff', 
-          borderBottom: '1px solid #eee', 
           color: '#2196F3', 
           fontWeight: 'bold'
         }}
