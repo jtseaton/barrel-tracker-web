@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InventoryItem, Vendor, Site } from '../types/interfaces';
+import {
+  InventoryItem,
+  Status,
+  MaterialType,
+  Unit,
+  Account,
+  Vendor,
+  Site,
+} from '../types/interfaces';
 
 interface InventoryProps {
-  inventory: InventoryItem[];
   vendors: Vendor[];
-  refreshInventory: () => Promise<void>;
   refreshVendors: () => Promise<void>;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ inventory, vendors, refreshInventory, refreshVendors }) => {
+const Inventory: React.FC<InventoryProps> = ({ vendors, refreshVendors }) => {
   const navigate = useNavigate();
-  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>(inventory);
-  const [sites, setSites] = useState<Site[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([]);
+  const [sites, setSites] = useState<Site[]>([]); // New state for sites
   const [filter, setFilter] = useState({
     identifier: '',
     item: '',
@@ -29,7 +36,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, vendors, refreshInvent
     cost: '',
     totalCost: '',
     poNumber: '',
-    siteName: '',
+    siteName: '', // New filter for site name
   });
   const [sortConfig, setSortConfig] = useState<{
     key: keyof InventoryItem | 'siteName';
@@ -39,6 +46,19 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, vendors, refreshInvent
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
+  const refreshInventory = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/inventory`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data: InventoryItem[] = await res.json();
+      setInventory(data);
+      setFilteredInventory(data);
+    } catch (err: any) {
+      setError('Failed to fetch inventory: ' + err.message);
+    }
+  };
+
+  // New function to fetch sites
   const fetchSites = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/sites`);
@@ -51,7 +71,8 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, vendors, refreshInvent
   };
 
   useEffect(() => {
-    fetchSites();
+    refreshInventory();
+    fetchSites(); // Fetch sites on mount
   }, []);
 
   useEffect(() => {
@@ -132,6 +153,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, vendors, refreshInvent
         item.poNumber?.toLowerCase().includes(filter.poNumber.toLowerCase())
       );
     }
+    // New filter for siteName
     if (filter.siteName) {
       filtered = filtered.filter((item) => {
         const site = sites.find((s) => s.siteId === item.siteId);
@@ -213,7 +235,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, vendors, refreshInvent
     { id: 'proofGallons', label: 'Proof Gallons' },
     { id: 'receivedDate', label: 'Received Date' },
     { id: 'source', label: 'Source' },
-    { id: 'siteName', label: 'Site' },
+    { id: 'siteName', label: 'Site' }, // Replaced status with siteName
     { id: 'description', label: 'Description' },
     { id: 'cost', label: 'Cost' },
     { id: 'totalCost', label: 'Total Cost' },

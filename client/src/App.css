@@ -4,7 +4,7 @@
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background-color: #2E4655; /* Dark teal background */
+  background-color: #2E4655;
 }
 
 .hamburger {
@@ -12,7 +12,7 @@
   top: 10px;
   left: 10px;
   z-index: 1001;
-  background-color: #F86752; /* Red-orange */
+  background-color: #F86752;
   color: #FFFFFF;
   border: none;
   padding: 10px;
@@ -23,7 +23,7 @@
 .menu {
   width: 300px;
   height: 100%;
-  background-color: #000000; /* Black menu */
+  background-color: #000000;
   position: fixed;
   top: 0;
   left: -300px;
@@ -39,7 +39,7 @@
   list-style: none;
   padding: 50px 20px 20px;
   margin: 0;
-  color: #EEC930; /* Yellow text */
+  color: #EEC930;
 }
 
 .menu li {
@@ -49,7 +49,7 @@
 .menu button, .menu a {
   background: none;
   border: none;
-  color: #EEC930; /* Yellow */
+  color: #EEC930;
   font-size: 16px;
   cursor: pointer;
   width: 100%;
@@ -64,11 +64,11 @@
 
 .menu button.active {
   font-weight: bold;
-  color: #F86752; /* Red-orange for active */
+  color: #F86752;
 }
 
 .menu a:hover, .menu button:hover {
-  color: #F86752; /* Red-orange on hover */
+  color: #F86752;
 }
 
 .content {
@@ -76,17 +76,16 @@
   padding: 20px;
   margin-left: 0;
   transition: margin-left 0.3s ease;
-  background-color: #FFFFFF; /* White content area */
-  color: #000000; /* Black text for general content */
+  background-color: #FFFFFF;
+  color: #000000;
 }
 
 .menu.open + .content {
   margin-left: 300px;
 }
 
-/* General button styling */
 button {
-  background-color: #F86752; /* Red-orange */
+  background-color: #F86752;
   color: #FFFFFF;
   padding: 8px 16px;
   border: none;
@@ -96,47 +95,132 @@ button {
 }
 
 button:hover {
-  background-color: #EEC930; /* Yellow on hover */
+  background-color: #EEC930;
   color: #000000;
 }
 
-/* Table styling */
-/* ... (everything above table styling stays the same) */
-
-/* Table styling */
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
-  background-color: #FFFFFF; /* White background */
-  color: #000000; /* Black text */
+  background-color: #FFFFFF;
+  color: #000000;
 }
 
 th {
   padding: 10px;
   text-align: left;
   border-bottom: 1px solid #000000;
-  background-color: #E0E0E0; /* Light gray header for contrast */
-  color: #000000; /* Black text */
+  background-color: #E0E0E0;
+  color: #000000;
 }
 
 td {
   padding: 10px;
   text-align: left;
   border-bottom: 1px solid #000000;
-  color: #000000; /* Black text */
+  color: #000000;
 }
 
-/* Ensure hyperlinks are visible */
 a {
-  color: #0066CC; /* Standard blue for links */
+  color: #0066CC;
   text-decoration: underline;
 }
 
 a:hover {
-  color: #F86752; /* Red-orange on hover, matches your theme */
+  color: #F86752;
 }
 
 .location-suggestion-item:hover {
   background-color: #f0f0f0;
+}
+
+.inventory-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  background-color: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.inventory-container h2 {
+  color: #EEC930;
+  font-size: 24px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.error {
+  color: #F86752;
+  background-color: #ffe6e6;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.inventory-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.inventory-actions button {
+  background-color: #F86752;
+  color: #FFFFFF;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.inventory-actions button:hover {
+  background-color: #EEC930;
+  color: #000000;
+}
+
+.inventory-table-container {
+  overflow-x: auto;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #FFFFFF;
+  color: #000000;
+}
+
+.inventory-table th {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #000000;
+  background-color: #E0E0E0;
+  color: #000000;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.inventory-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #000000;
+  color: #000000;
+}
+
+.inventory-table th input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.inventory-table tbody tr:hover {
+  background-color: #f5f5f5;
 }

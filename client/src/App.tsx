@@ -239,8 +239,6 @@ const AppContent: React.FC = () => {
                 {activeSection === 'Home' && <Home />}
                 {activeSection === 'Inventory' && (
                   <Inventory
-                    inventory={inventory}
-                    refreshInventory={refreshInventory}
                     vendors={vendors}
                     refreshVendors={refreshVendors}
                   />
@@ -267,8 +265,6 @@ const AppContent: React.FC = () => {
             path="/inventory"
             element={
               <Inventory
-                inventory={inventory}
-                refreshInventory={refreshInventory}
                 vendors={vendors}
                 refreshVendors={refreshVendors}
               />
