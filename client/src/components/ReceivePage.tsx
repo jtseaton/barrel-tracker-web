@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Add useRef to imports
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor, ReceiveForm, PurchaseOrderItem } from '../types/interfaces';
 import { MaterialType, Unit, Account } from '../types/enums';
@@ -19,6 +19,7 @@ interface Item {
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
+  const dropdownRef = useRef<HTMLDivElement>(null); // Ref to position dropdown
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as { newSiteId?: string; newLocationId?: string };
@@ -934,7 +935,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 )}
               </div>
             </div>
-            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+            <div style={{ marginBottom: '20px', position: 'relative', zIndex: 1000 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <thead>
                   <tr>
@@ -951,71 +952,72 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </thead>
                 <tbody>
                 {receiveItems.map((item, index) => (
-                <tr key={index}>
-                  <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
-                    <input
-                      type="text"
-                      value={item.item}
-                      onChange={(e) => {
-                        const updatedItems = [...receiveItems];
-                        updatedItems[index].item = e.target.value;
-                        setReceiveItems(updatedItems);
-                        setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                      }}
-                      onFocus={() => setActiveItemDropdownIndex(index)}
-                      onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-                      style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                    />
-                    {activeItemDropdownIndex === index && (
-                      <ul
-                        style={{
-                          border: '1px solid #ddd',
-                          maxHeight: '150px',
-                          overflowY: 'auto',
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          backgroundColor: '#fff',
-                          width: '200px',
-                          listStyle: 'none',
-                          padding: 0,
-                          margin: 0,
-                          zIndex: 3000, // Ensure it appears above Other Charges
-                          borderRadius: '4px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                        }}
-                      >
-                        {filteredItems.map((i) => (
-                          <li
-                            key={i.name}
-                            onMouseDown={() => handleItemSelect(i, index)}
+                  <tr key={index}>
+                    <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
+                      <div ref={index === activeItemDropdownIndex ? dropdownRef : null}>
+                        <input
+                          type="text"
+                          value={item.item}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].item = e.target.value;
+                            setReceiveItems(updatedItems);
+                            setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                          }}
+                          onFocus={() => setActiveItemDropdownIndex(index)}
+                          onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </div>
+                      {activeItemDropdownIndex === index && (
+                        <div
+                          style={{
+                            position: 'fixed',
+                            top: dropdownRef.current ? dropdownRef.current.getBoundingClientRect().bottom + window.scrollY : 0,
+                            left: dropdownRef.current ? dropdownRef.current.getBoundingClientRect().left + window.scrollX : 0,
+                            border: '1px solid #ddd',
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                            backgroundColor: '#fff',
+                            width: '200px',
+                            listStyle: 'none',
+                            padding: 0,
+                            margin: 0,
+                            zIndex: 4000, // Higher than any other element
+                            borderRadius: '4px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          }}
+                        >
+                          {filteredItems.map((i) => (
+                            <div
+                              key={i.name}
+                              onMouseDown={() => handleItemSelect(i, index)}
+                              style={{
+                                padding: '8px 10px',
+                                cursor: 'pointer',
+                                backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
+                                borderBottom: '1px solid #eee',
+                              }}
+                            >
+                              {i.name}
+                            </div>
+                          ))}
+                          <div
+                            onMouseDown={() => setShowNewItemModal(true)}
                             style={{
                               padding: '8px 10px',
                               cursor: 'pointer',
-                              backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
+                              backgroundColor: '#fff',
                               borderBottom: '1px solid #eee',
+                              color: '#2196F3',
+                              fontWeight: 'bold',
                             }}
                           >
-                            {i.name}
-                          </li>
-                        ))}
-                        <li
-                          onMouseDown={() => setShowNewItemModal(true)}
-                          style={{
-                            padding: '8px 10px',
-                            cursor: 'pointer',
-                            backgroundColor: '#fff',
-                            borderBottom: '1px solid #eee',
-                            color: '#2196F3',
-                            fontWeight: 'bold',
-                          }}
-                        >
-                          Add New Item
-                        </li>
-                      </ul>
-                    )}
-                  </td>
-                
+                            Add New Item
+                          </div>
+                        </div>
+                      )}
+                    </td>                
                       <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
                         <input
                           type="text"
