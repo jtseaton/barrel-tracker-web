@@ -65,27 +65,18 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
-  const [locationSearch, setLocationSearch] = useState('');
-
-  // Debounce utility
-  const debounce = (func: (...args: any[]) => void, wait: number) => {
-    let timeout: NodeJS.Timeout;
-    return (...args: any[]) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  };
 
   // Memoized fetchLocations with retry logic
-  const fetchLocations = useCallback(async (retryCount = 3, delay = 1000): Promise<void> => {
-    if (!selectedSite || isFetchingLocations) {
+  const fetchLocations = useCallback(async (siteId: string, retryCount = 3, delay = 1000): Promise<void> => {
+    if (!siteId) {
       setLocations([]);
       setFilteredLocations([]);
+      setIsFetchingLocations(false);
       return;
     }
     setIsFetchingLocations(true);
     try {
-      const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}`;
+      const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
       console.log('Fetching locations from:', url);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -105,7 +96,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       if (retryCount > 0 && err.name !== 'AbortError') {
         console.log(`Retrying fetchLocations, attempts left: ${retryCount}`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchLocations(retryCount - 1, delay * 2);
+        return fetchLocations(siteId, retryCount - 1, delay * 2);
       }
       setProductionError(`Failed to fetch locations: ${err.message}`);
       setLocations([]);
@@ -113,21 +104,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     } finally {
       setIsFetchingLocations(false);
     }
-  }, [selectedSite, isFetchingLocations]);
-
-  // Handle location input change with debounce
-  const handleLocationInputChange = useCallback(
-    debounce((value: string) => {
-      setLocationSearch(value);
-      setFilteredLocations(
-        locations.filter((loc) =>
-          loc.name.toLowerCase().includes(value.toLowerCase())
-        )
-      );
-      setShowLocationSuggestions(true);
-    }, 300),
-    [locations]
-  );
+  }, []);
 
   useEffect(() => {
     if (locationState?.newSiteId) {
@@ -187,9 +164,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     fetchSites();
     fetchItems();
     if (singleForm.source) fetchPOs();
-    fetchLocations();
     setFilteredVendors(vendors);
-  }, [locationState, singleForm.source, vendors, fetchLocations]);
+  }, [locationState, singleForm.source, vendors]);
+
+  // Fetch locations when selectedSite changes
+  useEffect(() => {
+    fetchLocations(selectedSite);
+  }, [selectedSite, fetchLocations]);
 
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -224,7 +205,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const handleLocationSelect = (location: Location) => {
     setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: location.locationId.toString() }));
-    setLocationSearch(location.name);
     setShowLocationSuggestions(false);
   };
 
@@ -507,7 +487,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
                     setSelectedSite('');
                     setSingleForm((prev) => ({ ...prev, locationId: '' }));
-                    setLocationSearch('');
                     setFilteredLocations([]);
                   }
                 }}
@@ -591,14 +570,23 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               </label>
               <input
                 type="text"
-                value={locationSearch}
+                value={
+                  singleForm.locationId
+                    ? locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
+                    : ''
+                }
                 onChange={(e) => {
                   const value = e.target.value;
                   setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
-                  handleLocationInputChange(value);
+                  setFilteredLocations(
+                    locations.filter((loc) =>
+                      loc.name.toLowerCase().includes(value.toLowerCase())
+                    )
+                  );
+                  setShowLocationSuggestions(true);
                 }}
                 onFocus={() => {
-                  if (!isFetchingLocations) {
+                  if (!isFetchingLocations && locations.length > 0) {
                     setShowLocationSuggestions(true);
                     setFilteredLocations(locations);
                   }
@@ -606,7 +594,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 onBlur={() => {
                   setTimeout(() => {
                     setShowLocationSuggestions(false);
-                  }, 400); // Increased delay to allow clicking
+                  }, 300);
                 }}
                 placeholder={isFetchingLocations ? 'Loading locations...' : 'Type to search locations'}
                 disabled={isFetchingLocations || !selectedSite}
