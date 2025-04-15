@@ -37,8 +37,11 @@ export interface TankSummary {
 }
 
 export interface DailySummaryItem {
+  date: string; // Add this
   account: string;
+  type: string; // Add this (for the next error)
   totalProofGallons: string;
+  locationId: number; // Add this (for the last error)
 }
 
 export interface MoveForm {
