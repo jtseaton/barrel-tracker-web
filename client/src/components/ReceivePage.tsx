@@ -46,7 +46,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
+  const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
+  const [filteredSites, setFilteredSites] = useState<Site[]>(sites);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [filteredLocations, setFilteredLocations] = useState<Location[]>(locations);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>(vendors);
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
@@ -61,7 +64,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
 
+  const locationState = useLocation().state as { newSiteId?: string; newLocationId?: string };
+
   useEffect(() => {
+    if (locationState?.newSiteId) {
+      setSelectedSite(locationState.newSiteId);
+    }
+    if (locationState?.newLocationId) {
+      setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId }));
+    }
+
     const fetchItems = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/items`);
@@ -133,7 +145,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     if (singleForm.source) fetchPOs();
     fetchLocations();
     setFilteredVendors(vendors);
-  }, [API_BASE_URL, singleForm.source, selectedSite, vendors]);
+    setFilteredSites(sites);
+    setFilteredLocations(locations);
+  }, [locationState, singleForm.source, selectedSite, vendors, sites, locations]);
+
 
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -439,35 +454,176 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         {useSingleItem ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             {/* Site Selector */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Site (required):</label>
-                <select
-                  value={selectedSite}
-                  onChange={(e) => setSelectedSite(e.target.value)}
-                  required
-                  style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                >
-                  <option value="">Select a site</option>
-                  {sites.map(site => (
-                    <option key={site.siteId} value={site.siteId}>{site.name}</option>
-                  ))}
-                  <option value="add-new">Add New Site</option>
-                </select>
+              <div style={{ position: 'relative' }}>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Site (required):
+                </label>
+                <input
+                  type="text"
+                  value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilteredSites(
+                      sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
+                    );
+                    setShowSiteSuggestions(true);
+                    // Clear selectedSite if input doesn't match any site
+                    if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
+                      setSelectedSite('');
+                    }
+                  }}
+                  onFocus={() => setShowSiteSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
+                  placeholder="Type to search sites"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    boxSizing: 'border-box',
+                    fontSize: '16px',
+                  }}
+                />
+                {showSiteSuggestions && (
+                  <ul
+                    style={{
+                      border: '1px solid #ddd',
+                      maxHeight: '150px',
+                      overflowY: 'auto',
+                      position: 'absolute',
+                      backgroundColor: '#fff',
+                      width: '100%',
+                      listStyle: 'none',
+                      padding: 0,
+                      margin: 0,
+                      zIndex: 1000,
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    {filteredSites.map((site) => (
+                      <li
+                        key={site.siteId}
+                        onMouseDown={() => {
+                          setSelectedSite(site.siteId);
+                          setShowSiteSuggestions(false);
+                        }}
+                        style={{
+                          padding: '8px 10px',
+                          cursor: 'pointer',
+                          backgroundColor:
+                            selectedSite === site.siteId ? '#e0e0e0' : '#fff',
+                          borderBottom: '1px solid #eee',
+                        }}
+                      >
+                        {site.name}
+                      </li>
+                    ))}
+                    <li
+                      onMouseDown={() => {
+                        navigate('/sites', { state: { fromReceive: true } });
+                        setShowSiteSuggestions(false);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: '#fff',
+                        borderBottom: '1px solid #eee',
+                        color: '#2196F3',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Add New Site
+                    </li>
+                  </ul>
+                )}
               </div>
-            {/* Physical Location Selector */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
-                <select
-                  value={singleForm.locationId}
-                  onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
-                  required
-                  style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                >
-                  <option value="">Select a location</option>
-                  {locations.map(loc => (
-                    <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-                  ))}
-                </select>
+             {/* Physical Location Selector */}
+              <div style={{ position: 'relative' }}>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Physical Location (required):
+                </label>
+                <input
+                  type="text"
+                  value={
+                    locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
+                    setFilteredLocations(
+                      locations.filter((loc) =>
+                        loc.name.toLowerCase().includes(value.toLowerCase())
+                      )
+                    );
+                    setShowLocationSuggestions(true);
+                  }}
+                  onFocus={() => setShowLocationSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 300)}
+                  placeholder="Type to search locations"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    boxSizing: 'border-box',
+                    fontSize: '16px',
+                  }}
+                />
+                {showLocationSuggestions && (
+                  <ul
+                    style={{
+                      border: '1px solid #ddd',
+                      maxHeight: '150px',
+                      overflowY: 'auto',
+                      position: 'absolute',
+                      backgroundColor: '#fff',
+                      width: '100%',
+                      listStyle: 'none',
+                      padding: 0,
+                      margin: 0,
+                      zIndex: 1000,
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    {filteredLocations.map((location) => (
+                      <li
+                        key={location.locationId}
+                        onMouseDown={() => handleLocationSelect(location)}
+                        style={{
+                          padding: '8px 10px',
+                          cursor: 'pointer',
+                          backgroundColor:
+                            singleForm.locationId === location.locationId.toString()
+                              ? '#e0e0e0'
+                              : '#fff',
+                          borderBottom: '1px solid #eee',
+                        }}
+                      >
+                        {location.name}
+                      </li>
+                    ))}
+                    <li
+                      onMouseDown={() => {
+                        navigate('/locations', {
+                          state: { fromReceive: true, siteId: selectedSite },
+                        });
+                        setShowLocationSuggestions(false);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: '#fff',
+                        borderBottom: '1px solid #eee',
+                        color: '#2196F3',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Add New Location
+                    </li>
+                  </ul>
+                )}
               </div>
             {/* Vendor Selector */}
             <div style={{ position: 'relative' }}>
