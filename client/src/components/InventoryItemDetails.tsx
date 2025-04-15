@@ -21,8 +21,8 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-  const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
-
+  const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
+  
   useEffect(() => {
     const fetchItem = async () => {
       try {

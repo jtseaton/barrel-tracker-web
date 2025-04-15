@@ -94,8 +94,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     }
   };
 
-  const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
-
+  const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
   const handleItemClick = (item: InventoryItem) => {
     navigate(`/inventory/${getIdentifier(item)}`);
   };

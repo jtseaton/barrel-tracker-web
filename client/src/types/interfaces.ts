@@ -88,6 +88,7 @@ export interface Recipe {
 }
 
 export interface ReceiveForm {
+  identifier: string;
   item: string; // Replaces identifier
   lotNumber: string; // New field
   account: Account;
@@ -106,6 +107,7 @@ export interface ReceiveForm {
 }
 
 export interface ReceiveItem {
+  identifier: string;
   item: string; // Replaces identifier
   lotNumber: string; // New field
   materialType: MaterialType;
@@ -120,6 +122,7 @@ export interface ReceiveItem {
 }
 
 export interface ReceivableItem {
+  identifier: string;
   item: string; // Replaces identifier
   lotNumber: string; // New field
   materialType: MaterialType;
@@ -134,6 +137,7 @@ export interface ReceivableItem {
 }
 
 export interface InventoryItem {
+  identifier: string;
   item: string;
   lotNumber: string;
   account: Account;
