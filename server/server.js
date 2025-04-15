@@ -1009,10 +1009,6 @@ app.get('/api/locations', (req, res) => {
     query += ' AND siteId = ?';
     params.push(siteId);
   }
-  if (account) {
-    query += ' AND account = ?';
-    params.push(account);
-  }
   db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
