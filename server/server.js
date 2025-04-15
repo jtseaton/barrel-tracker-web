@@ -119,19 +119,19 @@ db.serialize(() => {
     )
   `);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-  ['DSP-AL-20010', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
+  ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['BREW-BHM-001', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
+  ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['BREW-BHM-001', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
+  ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['BREW-BHM-001', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
+  ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-    ['DSP-AL-20010', 'Spirits Storage']);
+  ['DSP-AL-20010', 'Spirits Storage']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-    ['DSP-AL-20010', 'Grain Storage']);
+  ['DSP-AL-20010', 'Grain Storage']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-    ['DSP-AL-20010', 'Fermentation Tanks']);
+  ['DSP-AL-20010', 'Fermentation Tanks']);
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
   });
@@ -988,7 +988,7 @@ app.post('/api/locations', (req, res) => {
       return res.status(400).json({ error: 'Invalid siteId' });
     }
     db.run(
-      'INSERT INTO locations (name, siteId, enabled) VALUES (?, ?, ?, ?)',
+      'INSERT INTO locations (name, siteId, enabled) VALUES (?, ?, ?)',
       [name, siteId, enabled],
       function(err) {
         if (err) {
