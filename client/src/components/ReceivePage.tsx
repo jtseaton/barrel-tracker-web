@@ -37,7 +37,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     cost: '',
     poNumber: '',
     siteId: 'DSP-AL-20010',
-    locationId: '',
+    locationId: '', // Will be set by useEffect
   });
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [useSingleItem, setUseSingleItem] = useState(true);
@@ -115,6 +115,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       }
     };
 
+    const fetchWithTimeout = async (url: string, timeout = 5000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        return res;
+      } catch (err) {
+        clearTimeout(id);
+        throw err;
+      }
+    };
+
     fetchSites();
     fetchItems();
     if (singleForm.source) fetchPOs();
@@ -162,7 +175,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     const newLocation: Location = {
       locationId: locations.length + 1, // Temporary ID
       siteId: selectedSite,
-      account: singleForm.account,
       name: `New Location ${locations.length + 1}`,
       enabled: 1,
     };
@@ -172,13 +184,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   const handlePOSelect = (poNumber: string) => {
-    const po = purchaseOrders.find(p => p.poNumber === poNumber);
-    if (!po) return;
+    const po = purchaseOrders.find((p) => p.poNumber === poNumber);
+    if (!po) {
+      setProductionError('Selected PO not found');
+      return;
+    }
+    if (!po.items || po.items.length === 0) {
+      setProductionError('Selected PO has no items');
+      return;
+    }
     setSelectedPO(poNumber);
     const nonSpiritsItems = po.items
-      .filter(item => item.materialType !== MaterialType.Spirits)
-      .map(item => ({
-        identifier: item.name || 'UNKNOWN_ITEM', // Set identifier based on item name for non-Spirits
+      .filter((item) => item.materialType !== MaterialType.Spirits)
+      .map((item) => ({
+        identifier: item.name || 'UNKNOWN_ITEM',
         item: item.name,
         lotNumber: '',
         materialType: item.materialType,
@@ -187,12 +206,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         cost: '',
         poNumber,
         siteId: selectedSite,
-        locationId: singleForm.locationId || '',
-        description: '', // Add description to match ReceiveItem
+        locationId: singleForm.locationId || (locations.length > 0 ? locations[0].locationId.toString() : '1'),
+        description: '',
       }));
-    const spiritsItems = po.items.filter(item => item.materialType === MaterialType.Spirits);
+    const spiritsItems = po.items.filter((item) => item.materialType === MaterialType.Spirits);
     if (spiritsItems.length > 0) {
       setPoItemToSplit(spiritsItems[0]);
+    } else {
+      setPoItemToSplit(null);
     }
     setReceiveItems(nonSpiritsItems);
     setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
@@ -201,23 +222,26 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const handleLotSplit = () => {
     if (!poItemToSplit) return;
     const totalGallons = lotItems.reduce((sum, item) => sum + parseFloat(item.quantity || '0'), 0);
-    if (totalGallons !== poItemToSplit.quantity) {
-      setProductionError(`Total gallons (${totalGallons}) must match PO quantity (${poItemToSplit.quantity})`);
+    const poQuantity = parseFloat(poItemToSplit.quantity.toString());
+    if (Math.abs(totalGallons - poQuantity) > 0.01) {
+      setProductionError(`Total gallons (${totalGallons.toFixed(2)}) must match PO quantity (${poQuantity.toFixed(2)})`);
       return;
     }
-    setReceiveItems(prev => [
+    setReceiveItems((prev) => [
       ...prev,
-      ...lotItems.map(item => ({
+      ...lotItems.map((item) => ({
         ...item,
         materialType: MaterialType.Spirits,
         unit: Unit.Gallons,
         poNumber: selectedPO || undefined,
         siteId: selectedSite,
-        locationId: singleForm.locationId || '',
+        locationId: singleForm.locationId || (locations.length > 0 ? locations[0].locationId.toString() : '1'),
+        description: item.description || '',
       })),
     ]);
     setPoItemToSplit(null);
     setLotItems([]);
+    setProductionError(null);
   };
 
   const handleCreateItem = async () => {
@@ -259,50 +283,71 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   const addItemRow = () => {
-    setReceiveItems([...receiveItems, { 
-      identifier: '',
-      item: '',
-      lotNumber: '',
-      materialType: MaterialType.Grain,
-      quantity: '',
-      unit: Unit.Pounds,
-      cost: '',
-      description: '', // Add description
-      siteId: selectedSite,
-      locationId: singleForm.locationId || '',
-    }]);
+    setReceiveItems([
+      ...receiveItems,
+      {
+        identifier: '',
+        item: '',
+        lotNumber: '',
+        materialType: MaterialType.Grain,
+        quantity: '',
+        unit: Unit.Pounds,
+        cost: '',
+        description: '',
+        siteId: selectedSite,
+        locationId: singleForm.locationId || (locations.length > 0 ? locations[0].locationId.toString() : '1'),
+      },
+    ]);
   };
 
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
-    if (!itemsToReceive.length || itemsToReceive.some(item => !item.item || !item.materialType || !item.quantity || !item.unit || !item.siteId)) {
-      setProductionError('All inventory items must have Item, Material Type, Quantity, Unit, and Site');
+    // Strengthen validation to catch empty or undefined locationId
+    if (
+      !itemsToReceive.length ||
+      itemsToReceive.some(
+        (item) =>
+          !item.item ||
+          !item.materialType ||
+          !item.quantity ||
+          !item.unit ||
+          !item.siteId ||
+          !item.locationId || // Ensure locationId is defined and non-empty
+          item.locationId.trim() === ''
+      )
+    ) {
+      setProductionError('All inventory items must have Item, Material Type, Quantity, Unit, Site, and Location');
       return;
     }
-    const invalidItems = itemsToReceive.filter(item =>
-      (item.materialType === MaterialType.Spirits && (!item.lotNumber || !item.lotNumber.trim() || !item.proof || item.proof.trim() === '')) || // Added lotNumber validation for Spirits
-      (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
-      isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0 ||
-      (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
-      (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
+    const invalidItems = itemsToReceive.filter(
+      (item) =>
+        (item.materialType === MaterialType.Spirits &&
+          (!item.lotNumber || !item.lotNumber.trim() || !item.proof || item.proof.trim() === '')) ||
+        (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
+        isNaN(parseFloat(item.quantity)) ||
+        parseFloat(item.quantity) <= 0 ||
+        (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
+        (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
     );
     if (invalidItems.length) {
-      setProductionError('Invalid data: Spirits need lot number and proof, Other needs description, and numeric values must be valid');
+      setProductionError(
+        'Invalid data: Spirits need lot number and proof, Other needs description, and numeric values must be valid'
+      );
       return;
     }
-    const totalOtherCost = otherCharges.reduce((sum, charge) => 
-      sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
+    const totalOtherCost = otherCharges.reduce((sum, charge) => sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
     const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
   
-    const inventoryItems: InventoryItem[] = itemsToReceive.map(item => {
+    const inventoryItems: InventoryItem[] = itemsToReceive.map((item) => {
       const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
       const quantity = parseFloat(item.quantity);
       const unitCost = totalItemCost / quantity || 0;
       const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
       const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
-      const identifier = item.materialType === MaterialType.Spirits 
-        ? (item.lotNumber || 'UNKNOWN_LOT') 
-        : (item.item || 'UNKNOWN_ITEM');
+      const identifier =
+        item.materialType === MaterialType.Spirits ? item.lotNumber || 'UNKNOWN_LOT' : item.item || 'UNKNOWN_ITEM';
+      // Use a fallback locationId if item.locationId is undefined or empty
+      const locationId = item.locationId && item.locationId.trim() !== '' ? parseInt(item.locationId, 10) : 1;
       return {
         identifier,
         item: item.item,
@@ -316,7 +361,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         receivedDate: singleForm.receivedDate,
         source: singleForm.source || 'Unknown',
         siteId: singleForm.siteId,
-        locationId: item.locationId ? parseInt(item.locationId) : 1,
+        locationId, // Now guaranteed to be a number
         status: Status.Received,
         description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
         cost: finalUnitCost,
@@ -414,12 +459,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
             {/* Physical Location Selector */}
             <div style={{ position: 'relative' }}>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (optional):</label>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
               <select
                 value={singleForm.locationId}
                 onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
                 onFocus={() => setShowLocationSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 300)}
+                required
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               >
                 <option value="">Select a location</option>
@@ -838,6 +884,87 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </tbody>
             </table>
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ color: '#555', marginBottom: '10px' }}>Other Charges (e.g., Freight, Milling)</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                <thead>
+                  <tr>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otherCharges.map((charge, index) => (
+                    <tr key={index}>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="text"
+                          value={charge.description}
+                          onChange={(e) => {
+                            const updatedCharges = [...otherCharges];
+                            updatedCharges[index].description = e.target.value;
+                            setOtherCharges(updatedCharges);
+                          }}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="number"
+                          value={charge.cost}
+                          onChange={(e) => {
+                            const updatedCharges = [...otherCharges];
+                            updatedCharges[index].cost = e.target.value;
+                            setOtherCharges(updatedCharges);
+                          }}
+                          step="0.01"
+                          min="0"
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
+                          style={{
+                            backgroundColor: '#F86752',
+                            color: '#fff',
+                            padding: '8px 16px',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            transition: 'background-color 0.3s',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button
+                onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  marginTop: '10px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+              >
+                Add Charge
+              </button>
+            </div>
           </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
               <button

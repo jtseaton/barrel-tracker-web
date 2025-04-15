@@ -196,7 +196,6 @@ export interface Site {
 export interface Location {
   locationId: number;
   siteId: string;
-  account: string;
   name: string;
   enabled: number;
 }
