@@ -432,8 +432,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', height: 'calc(100vh - 40px)', overflowY: 'auto' }}>
-      <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px' }}>
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column' }}>
         <h1 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>Receive Inventory</h1>
         {productionError && <div style={{ color: '#F86752', backgroundColor: '#ffe6e6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{productionError}</div>}
         {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
@@ -520,7 +520,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                     listStyle: 'none',
                     padding: 0,
                     margin: 0,
-                    zIndex: 1000,
+                    zIndex: 2000,
                     borderRadius: '4px',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   }}
@@ -625,7 +625,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                     listStyle: 'none',
                     padding: 0,
                     margin: 0,
-                    zIndex: 1000,
+                    zIndex: 2000,
                     borderRadius: '4px',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   }}
@@ -687,7 +687,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
               {showVendorSuggestions && (
-                <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 2000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                   {filteredVendors.map((vendor) => (
                     <li
                       key={vendor.name}
@@ -721,7 +721,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
               {activeItemDropdownIndex === 0 && (
-                <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 2000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                   {filteredItems.map(item => (
                     <li
                       key={item.name}
@@ -914,7 +914,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                 />
                 {showVendorSuggestions && (
-                  <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                  <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 2000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                     {filteredVendors.map((vendor) => (
                       <li
                         key={vendor.name}
@@ -967,7 +967,22 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                           style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                         />
                         {activeItemDropdownIndex === index && (
-                          <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                          <ul style={{ 
+                            border: '1px solid #ddd', 
+                            maxHeight: '150px', 
+                            overflowY: 'auto', 
+                            position: 'absolute', 
+                            top: '100%',
+                            left: 0, 
+                            backgroundColor: '#fff', 
+                            width: '200px', 
+                            listStyle: 'none', 
+                            padding: 0, 
+                            margin: 0, 
+                            zIndex: 2000,
+                            borderRadius: '4px', 
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
+                          }}>
                             {filteredItems.map(i => (
                               <li
                                 key={i.name}
@@ -1035,12 +1050,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                               maxHeight: '150px',
                               overflowY: 'auto',
                               position: 'absolute',
+                              top: '100%',
+                              left: 0,
                               backgroundColor: '#fff',
                               width: '200px',
                               listStyle: 'none',
                               padding: 0,
                               margin: 0,
-                              zIndex: 1000,
+                              zIndex: 2000,
                               borderRadius: '4px',
                               boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                             }}
@@ -1306,7 +1323,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </select>
               </div>
             </div>
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ textAlign: 'center', paddingBottom: '20px' }}>
               <button
                 onClick={handleReceive}
                 style={{
@@ -1330,7 +1347,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </div>
         )}
         {showNewItemModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
               <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>Create New Item</h3>
               <input
@@ -1389,7 +1406,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </div>
         )}
         {poItemToSplit && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
               <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>Split Spirits into Lots</h3>
               <p style={{ textAlign: 'center', marginBottom: '15px' }}>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>
