@@ -44,7 +44,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [useSingleItem, setUseSingleItem] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
-  const [showItemSuggestions, setShowItemSuggestions] = useState(false);
+  const [activeItemDropdownIndex, setActiveItemDropdownIndex] = useState<number | null>(null);
   const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
@@ -54,6 +54,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>(vendors);
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [activeLocationDropdownIndex, setActiveLocationDropdownIndex] = useState<number | null>(null);
   const [productionError, setProductionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -66,7 +67,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
 
-  // Memoized fetchLocations with retry logic
   const fetchLocations = useCallback(async (siteId: string, retryCount = 3, delay = 1000): Promise<void> => {
     if (!siteId) {
       setLocations([]);
@@ -167,7 +167,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     setFilteredVendors(vendors);
   }, [locationState, singleForm.source, vendors]);
 
-  // Fetch locations when selectedSite changes
   useEffect(() => {
     fetchLocations(selectedSite);
   }, [selectedSite, fetchLocations]);
@@ -196,16 +195,23 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         item: item.name,
         materialType,
         siteId: selectedSite,
-        locationId: singleForm.locationId || updatedItems[index].locationId,
+        locationId: updatedItems[index].locationId || '',
       };
       setReceiveItems(updatedItems);
     }
-    setShowItemSuggestions(false);
+    setActiveItemDropdownIndex(null);
   };
 
-  const handleLocationSelect = (location: Location) => {
-    setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: location.locationId.toString() }));
-    setShowLocationSuggestions(false);
+  const handleLocationSelect = (location: Location, index?: number) => {
+    if (useSingleItem) {
+      setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: location.locationId.toString() }));
+      setShowLocationSuggestions(false);
+    } else if (index !== undefined) {
+      const updatedItems = [...receiveItems];
+      updatedItems[index].locationId = location.locationId.toString();
+      setReceiveItems(updatedItems);
+      setActiveLocationDropdownIndex(null);
+    }
   };
 
   const handleAddNewLocation = () => {
@@ -213,6 +219,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       state: { fromReceive: true, siteId: selectedSite },
     });
     setShowLocationSuggestions(false);
+    setActiveLocationDropdownIndex(null);
   };
 
   const handlePOSelect = (poNumber: string) => {
@@ -238,7 +245,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         cost: '',
         poNumber,
         siteId: selectedSite,
-        locationId: singleForm.locationId || (locations.length > 0 ? locations[0].locationId.toString() : '1'),
+        locationId: '',
         description: '',
       }));
     const spiritsItems = po.items.filter((item) => item.materialType === MaterialType.Spirits);
@@ -267,7 +274,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         unit: Unit.Gallons,
         poNumber: selectedPO || undefined,
         siteId: selectedSite,
-        locationId: singleForm.locationId || (locations.length > 0 ? locations[0].locationId.toString() : '1'),
+        locationId: item.locationId || '',
         description: item.description || '',
       })),
     ]);
@@ -302,7 +309,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           quantity: '',
           unit: Unit.Pounds,
           siteId: selectedSite,
-          locationId: singleForm.locationId || '',
+          locationId: '',
         }]);
       }
       setNewItem('');
@@ -327,7 +334,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         cost: '',
         description: '',
         siteId: selectedSite,
-        locationId: singleForm.locationId || (locations.length > 0 ? locations[0].locationId.toString() : '1'),
+        locationId: '',
       },
     ]);
   };
@@ -470,7 +477,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
         {useSingleItem ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            {/* Site Selector */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                 Site (required):
@@ -556,7 +562,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </ul>
               )}
             </div>
-            {/* Physical Location Selector */}
             <div style={{ position: 'relative' }}>
               <label
                 style={{
@@ -670,7 +675,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </ul>
               )}
             </div>
-            {/* Vendor Selector */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
               <input
@@ -702,7 +706,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </ul>
               )}
             </div>
-            {/* Item */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item:</label>
               <input
@@ -711,13 +714,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 onChange={(e) => {
                   setSingleForm((prev: ReceiveForm) => ({ ...prev, item: e.target.value }));
                   setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                  setShowItemSuggestions(true);
+                  setActiveItemDropdownIndex(0);
                 }}
-                onFocus={() => setShowItemSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+                onFocus={() => setActiveItemDropdownIndex(0)}
+                onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
-              {showItemSuggestions && (
+              {activeItemDropdownIndex === 0 && (
                 <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                   {filteredItems.map(item => (
                     <li
@@ -737,7 +740,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </ul>
               )}
             </div>
-            {/* Lot Number */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Lot Number:</label>
               <input
@@ -747,7 +749,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-            {/* Material Type */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Material Type:</label>
               <select
@@ -760,7 +761,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
             </div>
-            {/* Quantity */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
               <input
@@ -772,7 +772,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-            {/* Unit */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Unit:</label>
               <select
@@ -785,7 +784,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
             </div>
-            {/* Spirits-specific fields */}
             {singleForm.materialType === MaterialType.Spirits && (
               <>
                 <div>
@@ -814,7 +812,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </div>
               </>
             )}
-            {/* Other-specific fields */}
             {singleForm.materialType === MaterialType.Other && (
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Description:</label>
@@ -826,7 +823,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 />
               </div>
             )}
-            {/* Received Date */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
               <input
@@ -836,7 +832,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-            {/* Cost */}
             <div>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Cost:</label>
               <input
@@ -848,7 +843,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
             </div>
-            {/* PO Number */}
             <div style={{ gridColumn: 'span 2' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
               <select
@@ -866,7 +860,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
             </div>
-            {/* Submit Button */}
             <div style={{ gridColumn: 'span 2', textAlign: 'center' }}>
               <button
                 onClick={handleReceive}
@@ -891,11 +884,62 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </div>
         ) : (
           <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
+              <button
+                onClick={addItemRow}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+              >
+                Add Item
+              </button>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+                <input
+                  type="text"
+                  value={singleForm.source}
+                  onChange={handleVendorInputChange}
+                  placeholder="Type to search vendors"
+                  onFocus={() => setShowVendorSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+                  style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                />
+                {showVendorSuggestions && (
+                  <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                    {filteredVendors.map((vendor) => (
+                      <li
+                        key={vendor.name}
+                        onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
+                        style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.source === vendor.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
+                      >
+                        {vendor.name}
+                      </li>
+                    ))}
+                    <li
+                      onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+                      style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                    >
+                      Add New Vendor
+                    </li>
+                  </ul>
+                )}
+              </div>
+            </div>
             <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <thead>
                   <tr>
                     <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Location</th>
                     <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
                     <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
                     <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
@@ -917,13 +961,12 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                             updatedItems[index].item = e.target.value;
                             setReceiveItems(updatedItems);
                             setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                            setShowItemSuggestions(true);
                           }}
-                          onFocus={() => setShowItemSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+                          onFocus={() => setActiveItemDropdownIndex(index)}
+                          onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
                           style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                         />
-                        {showItemSuggestions && (
+                        {activeItemDropdownIndex === index && (
                           <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                             {filteredItems.map(i => (
                               <li
@@ -939,6 +982,110 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                               style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
                             >
                               Add New Item
+                            </li>
+                          </ul>
+                        )}
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
+                        <input
+                          type="text"
+                          value={
+                            item.locationId
+                              ? locations.find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].locationId = '';
+                            setReceiveItems(updatedItems);
+                            setFilteredLocations(
+                              locations.filter((loc) =>
+                                loc.name.toLowerCase().includes(value.toLowerCase())
+                              )
+                            );
+                          }}
+                          onFocus={() => {
+                            if (!isFetchingLocations && locations.length > 0) {
+                              setActiveLocationDropdownIndex(index);
+                              setFilteredLocations(locations);
+                            }
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setActiveLocationDropdownIndex(null);
+                            }, 300);
+                          }}
+                          placeholder={isFetchingLocations ? 'Loading locations...' : 'Select location'}
+                          disabled={isFetchingLocations || !selectedSite}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            boxSizing: 'border-box',
+                            fontSize: '16px',
+                            backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
+                          }}
+                        />
+                        {activeLocationDropdownIndex === index && !isFetchingLocations && (
+                          <ul
+                            style={{
+                              border: '1px solid #ddd',
+                              maxHeight: '150px',
+                              overflowY: 'auto',
+                              position: 'absolute',
+                              backgroundColor: '#fff',
+                              width: '200px',
+                              listStyle: 'none',
+                              padding: 0,
+                              margin: 0,
+                              zIndex: 1000,
+                              borderRadius: '4px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            }}
+                          >
+                            {filteredLocations.length > 0 ? (
+                              filteredLocations.map((location) => (
+                                <li
+                                  key={location.locationId}
+                                  onMouseDown={() => handleLocationSelect(location, index)}
+                                  style={{
+                                    padding: '8px 10px',
+                                    cursor: 'pointer',
+                                    backgroundColor:
+                                      item.locationId === location.locationId.toString()
+                                        ? '#e0e0e0'
+                                        : '#fff',
+                                    borderBottom: '1px solid #eee',
+                                  }}
+                                >
+                                  {location.name}
+                                </li>
+                              ))
+                            ) : (
+                              <li
+                                style={{
+                                  padding: '8px 10px',
+                                  color: '#888',
+                                  borderBottom: '1px solid #eee',
+                                }}
+                              >
+                                No locations found
+                              </li>
+                            )}
+                            <li
+                              onMouseDown={() => handleAddNewLocation()}
+                              style={{
+                                padding: '8px 10px',
+                                cursor: 'pointer',
+                                backgroundColor: '#fff',
+                                borderBottom: '1px solid #eee',
+                                color: '#2196F3',
+                                fontWeight: 'bold',
+                              }}
+                            >
+                              Add New Location
                             </li>
                           </ul>
                         )}
@@ -1049,91 +1196,71 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   ))}
                 </tbody>
               </table>
-              <div style={{ marginBottom: '20px' }}>
-                <h3 style={{ color: '#555', marginBottom: '10px' }}>Other Charges (e.g., Freight, Milling)</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
-                      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
-                      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {otherCharges.map((charge, index) => (
-                      <tr key={index}>
-                        <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                          <input
-                            type="text"
-                            value={charge.description}
-                            onChange={(e) => {
-                              const updatedCharges = [...otherCharges];
-                              updatedCharges[index].description = e.target.value;
-                              setOtherCharges(updatedCharges);
-                            }}
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                          />
-                        </td>
-                        <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                          <input
-                            type="number"
-                            value={charge.cost}
-                            onChange={(e) => {
-                              const updatedCharges = [...otherCharges];
-                              updatedCharges[index].cost = e.target.value;
-                              setOtherCharges(updatedCharges);
-                            }}
-                            step="0.01"
-                            min="0"
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                          />
-                        </td>
-                        <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
-                            style={{
-                              backgroundColor: '#F86752',
-                              color: '#fff',
-                              padding: '8px 16px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              transition: 'background-color 0.3s',
-                            }}
-                            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button
-                  onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    marginTop: '10px',
-                    transition: 'background-color 0.3s',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-                >
-                  Add Charge
-                </button>
-              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ color: '#555', marginBottom: '10px' }}>Other Charges (e.g., Freight, Milling)</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                <thead>
+                  <tr>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otherCharges.map((charge, index) => (
+                    <tr key={index}>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="text"
+                          value={charge.description}
+                          onChange={(e) => {
+                            const updatedCharges = [...otherCharges];
+                            updatedCharges[index].description = e.target.value;
+                            setOtherCharges(updatedCharges);
+                          }}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="number"
+                          value={charge.cost}
+                          onChange={(e) => {
+                            const updatedCharges = [...otherCharges];
+                            updatedCharges[index].cost = e.target.value;
+                            setOtherCharges(updatedCharges);
+                          }}
+                          step="0.01"
+                          min="0"
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
+                          style={{
+                            backgroundColor: '#F86752',
+                            color: '#fff',
+                            padding: '8px 16px',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            transition: 'background-color 0.3s',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               <button
-                onClick={addItemRow}
+                onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
                 style={{
                   backgroundColor: '#2196F3',
                   color: '#fff',
@@ -1142,44 +1269,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   borderRadius: '4px',
                   cursor: 'pointer',
                   fontSize: '16px',
+                  marginTop: '10px',
                   transition: 'background-color 0.3s',
                 }}
                 onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
                 onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
               >
-                Add Item
+                Add Charge
               </button>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
-                <input
-                  type="text"
-                  value={singleForm.source}
-                  onChange={handleVendorInputChange}
-                  placeholder="Type to search vendors"
-                  onFocus={() => setShowVendorSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
-                  style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                />
-                {showVendorSuggestions && (
-                  <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                    {filteredVendors.map((vendor) => (
-                      <li
-                        key={vendor.name}
-                        onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
-                        style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.source === vendor.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                      >
-                        {vendor.name}
-                      </li>
-                    ))}
-                    <li
-                      onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
-                      style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
-                    >
-                      Add New Vendor
-                    </li>
-                  </ul>
-                )}
-              </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
               <div>
@@ -1351,7 +1448,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   materialType: MaterialType.Spirits,
                   unit: Unit.Gallons,
                   siteId: selectedSite,
-                  locationId: singleForm.locationId || '',
+                  locationId: '',
                 }])}
                 style={{
                   backgroundColor: '#2196F3',
