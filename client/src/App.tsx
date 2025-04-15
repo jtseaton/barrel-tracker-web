@@ -241,6 +241,8 @@ const AppContent: React.FC = () => {
                   <Inventory
                     vendors={vendors}
                     refreshVendors={refreshVendors}
+                    inventory={inventory}
+                    refreshInventory={refreshInventory}
                   />
                 )}
                 {activeSection === 'Production' && location.pathname === '/production' && <Production />}
@@ -267,6 +269,8 @@ const AppContent: React.FC = () => {
               <Inventory
                 vendors={vendors}
                 refreshVendors={refreshVendors}
+                inventory={inventory}
+                refreshInventory={refreshInventory}
               />
             }
           />
