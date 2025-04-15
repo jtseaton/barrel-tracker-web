@@ -97,11 +97,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchLocations = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}&account=${encodeURIComponent(singleForm.account)}`);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(selectedSite)}`;
+        console.log('Fetching locations from:', url);
+        const res = await fetch(url);
+        if (!res.ok) {
+          const errorData = await res.json();
+          console.error('Fetch locations error response:', errorData);
+          throw new Error(`HTTP error! status: ${res.status}, message: ${errorData.error}`);
+        }
         const data = await res.json();
+        console.log('Fetched locations:', data);
         setLocations(data);
       } catch (err: any) {
+        console.error('Fetch locations error:', err);
         setProductionError('Failed to fetch locations: ' + err.message);
       }
     };
@@ -111,7 +119,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     if (singleForm.source) fetchPOs();
     fetchLocations();
     setFilteredVendors(vendors);
-  }, [API_BASE_URL, singleForm.source, singleForm.account, selectedSite, vendors]);
+  }, [API_BASE_URL, singleForm.source, selectedSite, vendors]);
 
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
