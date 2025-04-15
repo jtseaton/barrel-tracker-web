@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryItem, Vendor, Site } from '../types/interfaces';
-import './Inventory.css';
 
 interface InventoryProps {
   inventory: InventoryItem[];

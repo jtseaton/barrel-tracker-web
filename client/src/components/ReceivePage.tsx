@@ -456,74 +456,69 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             </div>
 
             {/* Physical Location Selector */}
-            <div style={{ position: 'relative' }}>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
-              <select
-                value={singleForm.locationId}
-                onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
-                onFocus={() => setShowLocationSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 100)}
-                required
-                style={{ width: '100%', padding: '10px', border: '2px solid #2196F3', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px', backgroundColor: '#f9f9f9' }}
-              >
-                <option value="">Select a location</option>
-                {locations.map(loc => (
-                  <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-                ))}
-              </select>
-              {showLocationSuggestions && (
-                <ul style={{ 
-                  border: '1px solid #ddd', 
-                  maxHeight: '150px', 
-                  overflowY: 'auto', 
-                  position: 'absolute', 
-                  backgroundColor: '#fff', 
-                  width: '100%', 
-                  listStyle: 'none', 
-                  padding: '5px 0', 
-                  margin: '5px 0 0 0', 
-                  zIndex: 1000, 
-                  borderRadius: '4px', 
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                  fontSize: '14px'
-                }}>
-                  {locations.map((loc) => {
-                    const [isHovered, setIsHovered] = React.useState(false);
-                    return (
-                      <li
-                        key={loc.locationId}
-                        onMouseDown={() => handleLocationSelect(loc)}
-                        onMouseEnter={() => setIsHovered(true)}
-                        onMouseLeave={() => setIsHovered(false)}
-                        style={{ 
-                          padding: '8px 12px', 
-                          cursor: 'pointer', 
-                          backgroundColor: isHovered ? '#f0f0f0' : singleForm.locationId === loc.locationId.toString() ? '#e8f0fe' : '#fff', 
-                          borderBottom: '1px solid #eee'
-                        }}
-                      >
-                        {loc.name}
-                      </li>
-                    );
-                  })}
-                  <li
-                    onMouseDown={() => handleAddNewLocation()}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                    style={{ 
-                      padding: '8px 12px', 
-                      cursor: 'pointer', 
-                      backgroundColor: '#fff', 
-                      borderBottom: '1px solid #eee', 
-                      color: '#2196F3', 
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    Add New Location
-                  </li>
-                </ul>
-              )}
-            </div>
+<div style={{ position: 'relative' }}>
+  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
+  <select
+    value={singleForm.locationId}
+    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
+    onFocus={() => setShowLocationSuggestions(true)}
+    onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 100)}
+    required
+    style={{ width: '100%', padding: '10px', border: '2px solid #2196F3', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px', backgroundColor: '#f9f9f9' }}
+  >
+    <option value="">Select a location</option>
+    {locations.map(loc => (
+      <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+    ))}
+  </select>
+  {showLocationSuggestions && (
+    <ul style={{ 
+      border: '1px solid #ddd', 
+      maxHeight: '150px', 
+      overflowY: 'auto', 
+      position: 'absolute', 
+      backgroundColor: '#fff', 
+      width: '100%', 
+      listStyle: 'none', 
+      padding: '5px 0', 
+      margin: '5px 0 0 0', 
+      zIndex: 1000, 
+      borderRadius: '4px', 
+      boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+      fontSize: '14px'
+    }}>
+      {locations.map((loc) => (
+        <li
+          key={loc.locationId}
+          className="location-suggestion-item"
+          onMouseDown={() => handleLocationSelect(loc)}
+          style={{ 
+            padding: '8px 12px', 
+            cursor: 'pointer', 
+            backgroundColor: singleForm.locationId === loc.locationId.toString() ? '#e8f0fe' : '#fff', 
+            borderBottom: '1px solid #eee'
+          }}
+        >
+          {loc.name}
+        </li>
+      ))}
+      <li
+        className="location-suggestion-item"
+        onMouseDown={() => handleAddNewLocation()}
+        style={{ 
+          padding: '8px 12px', 
+          cursor: 'pointer', 
+          backgroundColor: '#fff', 
+          borderBottom: '1px solid #eee', 
+          color: '#2196F3', 
+          fontWeight: 'bold'
+        }}
+      >
+        Add New Location
+      </li>
+    </ul>
+  )}
+</div>
 
             {/* Vendor Selector */}
             <div style={{ position: 'relative' }}>
