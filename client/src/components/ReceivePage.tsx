@@ -37,7 +37,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     cost: '',
     poNumber: '',
     siteId: 'DSP-AL-20010',
-    locationId: '', // Will be set by useEffect
+    locationId: '',
   });
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [useSingleItem, setUseSingleItem] = useState(true);
@@ -302,7 +302,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
-    // Strengthen validation to catch empty or undefined locationId
     if (
       !itemsToReceive.length ||
       itemsToReceive.some(
@@ -312,7 +311,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           !item.quantity ||
           !item.unit ||
           !item.siteId ||
-          !item.locationId || // Ensure locationId is defined and non-empty
+          !item.locationId ||
           item.locationId.trim() === ''
       )
     ) {
@@ -346,7 +345,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
       const identifier =
         item.materialType === MaterialType.Spirits ? item.lotNumber || 'UNKNOWN_LOT' : item.item || 'UNKNOWN_ITEM';
-      // Use a fallback locationId if item.locationId is undefined or empty
       const locationId = item.locationId && item.locationId.trim() !== '' ? parseInt(item.locationId, 10) : 1;
       return {
         identifier,
@@ -361,7 +359,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         receivedDate: singleForm.receivedDate,
         source: singleForm.source || 'Unknown',
         siteId: singleForm.siteId,
-        locationId, // Now guaranteed to be a number
+        locationId,
         status: Status.Received,
         description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
         cost: finalUnitCost,
@@ -464,9 +462,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 value={singleForm.locationId}
                 onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
                 onFocus={() => setShowLocationSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 300)}
+                onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 100)}
                 required
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                style={{ width: '100%', padding: '10px', border: '2px solid #2196F3', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px', backgroundColor: '#f9f9f9' }}
               >
                 <option value="">Select a location</option>
                 {locations.map(loc => (
@@ -474,19 +472,52 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 ))}
               </select>
               {showLocationSuggestions && (
-                <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '100%', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                  {locations.map((loc) => (
-                    <li
-                      key={loc.locationId}
-                      onMouseDown={() => handleLocationSelect(loc)}
-                      style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: singleForm.locationId === loc.locationId.toString() ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                    >
-                      {loc.name}
-                    </li>
-                  ))}
+                <ul style={{ 
+                  border: '1px solid #ddd', 
+                  maxHeight: '150px', 
+                  overflowY: 'auto', 
+                  position: 'absolute', 
+                  backgroundColor: '#fff', 
+                  width: '100%', 
+                  listStyle: 'none', 
+                  padding: '5px 0', 
+                  margin: '5px 0 0 0', 
+                  zIndex: 1000, 
+                  borderRadius: '4px', 
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                  fontSize: '14px'
+                }}>
+                  {locations.map((loc) => {
+                    const [isHovered, setIsHovered] = React.useState(false);
+                    return (
+                      <li
+                        key={loc.locationId}
+                        onMouseDown={() => handleLocationSelect(loc)}
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                        style={{ 
+                          padding: '8px 12px', 
+                          cursor: 'pointer', 
+                          backgroundColor: isHovered ? '#f0f0f0' : singleForm.locationId === loc.locationId.toString() ? '#e8f0fe' : '#fff', 
+                          borderBottom: '1px solid #eee'
+                        }}
+                      >
+                        {loc.name}
+                      </li>
+                    );
+                  })}
                   <li
                     onMouseDown={() => handleAddNewLocation()}
-                    style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                    style={{ 
+                      padding: '8px 12px', 
+                      cursor: 'pointer', 
+                      backgroundColor: '#fff', 
+                      borderBottom: '1px solid #eee', 
+                      color: '#2196F3', 
+                      fontWeight: 'bold'
+                    }}
                   >
                     Add New Location
                   </li>
@@ -726,206 +757,144 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </div>
         ) : (
           <div>
-          <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <thead>
-                <tr>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receiveItems.map((item, index) => (
-                  <tr key={index}>
-                    <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
-                      <input
-                        type="text"
-                        value={item.item}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].item = e.target.value;
-                          setReceiveItems(updatedItems);
-                          setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                          setShowItemSuggestions(true);
-                        }}
-                        onFocus={() => setShowItemSuggestions(true)}
-                        onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                      {showItemSuggestions && (
-                        <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                          {filteredItems.map(i => (
-                            <li
-                              key={i.name}
-                              onMouseDown={() => handleItemSelect(i, index)}
-                              style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
-                            >
-                              {i.name}
-                            </li>
-                          ))}
-                          <li
-                            onMouseDown={() => setShowNewItemModal(true)}
-                            style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
-                          >
-                            Add New Item
-                          </li>
-                        </ul>
-                      )}
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <input
-                        type="text"
-                        value={item.lotNumber}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].lotNumber = e.target.value;
-                          setReceiveItems(updatedItems);
-                        }}
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <select
-                        value={item.materialType}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].materialType = e.target.value as MaterialType;
-                          setReceiveItems(updatedItems);
-                        }}
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      >
-                        {Object.values(MaterialType).map(type => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].quantity = e.target.value;
-                          setReceiveItems(updatedItems);
-                        }}
-                        step="0.01"
-                        min="0"
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <select
-                        value={item.unit}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].unit = e.target.value as Unit;
-                          setReceiveItems(updatedItems);
-                        }}
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      >
-                        {Object.values(Unit).map(unit => (
-                          <option key={unit} value={unit}>{unit}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <input
-                        type="number"
-                        value={item.cost || ''}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].cost = e.target.value;
-                          setReceiveItems(updatedItems);
-                        }}
-                        step="0.01"
-                        min="0"
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <input
-                        type="text"
-                        value={item.description || ''}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].description = e.target.value;
-                          setReceiveItems(updatedItems);
-                        }}
-                        placeholder={item.materialType === MaterialType.Other ? 'Required for Other' : 'Optional'}
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
-                        style={{
-                          backgroundColor: '#F86752',
-                          color: '#fff',
-                          padding: '8px 16px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          transition: 'background-color 0.3s',
-                        }}
-                        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ color: '#555', marginBottom: '10px' }}>Other Charges (e.g., Freight, Milling)</h3>
+            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <thead>
                   <tr>
-                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
                     <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
+                    <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
                     <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {otherCharges.map((charge, index) => (
+                  {receiveItems.map((item, index) => (
                     <tr key={index}>
+                      <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
+                        <input
+                          type="text"
+                          value={item.item}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].item = e.target.value;
+                            setReceiveItems(updatedItems);
+                            setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                            setShowItemSuggestions(true);
+                          }}
+                          onFocus={() => setShowItemSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowItemSuggestions(false), 300)}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                        {showItemSuggestions && (
+                          <ul style={{ border: '1px solid #ddd', maxHeight: '150px', overflowY: 'auto', position: 'absolute', backgroundColor: '#fff', width: '200px', listStyle: 'none', padding: 0, margin: 0, zIndex: 1000, borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                            {filteredItems.map(i => (
+                              <li
+                                key={i.name}
+                                onMouseDown={() => handleItemSelect(i, index)}
+                                style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff', borderBottom: '1px solid #eee' }}
+                              >
+                                {i.name}
+                              </li>
+                            ))}
+                            <li
+                              onMouseDown={() => setShowNewItemModal(true)}
+                              style={{ padding: '8px 10px', cursor: 'pointer', backgroundColor: '#fff', borderBottom: '1px solid #eee', color: '#2196F3', fontWeight: 'bold' }}
+                            >
+                              Add New Item
+                            </li>
+                          </ul>
+                        )}
+                      </td>
                       <td style={{ border: '1px solid #ddd', padding: '8px' }}>
                         <input
                           type="text"
-                          value={charge.description}
+                          value={item.lotNumber}
                           onChange={(e) => {
-                            const updatedCharges = [...otherCharges];
-                            updatedCharges[index].description = e.target.value;
-                            setOtherCharges(updatedCharges);
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].lotNumber = e.target.value;
+                            setReceiveItems(updatedItems);
                           }}
                           style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                         />
                       </td>
                       <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <select
+                          value={item.materialType}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].materialType = e.target.value as MaterialType;
+                            setReceiveItems(updatedItems);
+                          }}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        >
+                          {Object.values(MaterialType).map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
                         <input
                           type="number"
-                          value={charge.cost}
+                          value={item.quantity}
                           onChange={(e) => {
-                            const updatedCharges = [...otherCharges];
-                            updatedCharges[index].cost = e.target.value;
-                            setOtherCharges(updatedCharges);
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].quantity = e.target.value;
+                            setReceiveItems(updatedItems);
                           }}
                           step="0.01"
                           min="0"
                           style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                         />
                       </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <select
+                          value={item.unit}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].unit = e.target.value as Unit;
+                            setReceiveItems(updatedItems);
+                          }}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        >
+                          {Object.values(Unit).map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="number"
+                          value={item.cost || ''}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].cost = e.target.value;
+                            setReceiveItems(updatedItems);
+                          }}
+                          step="0.01"
+                          min="0"
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="text"
+                          value={item.description || ''}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].description = e.target.value;
+                            setReceiveItems(updatedItems);
+                          }}
+                          placeholder={item.materialType === MaterialType.Other ? 'Required for Other' : 'Optional'}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                      </td>
                       <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
                         <button
-                          onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
+                          onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
                           style={{
                             backgroundColor: '#F86752',
                             color: '#fff',
@@ -946,26 +915,88 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   ))}
                 </tbody>
               </table>
-              <button
-                onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  marginTop: '10px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-              >
-                Add Charge
-              </button>
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ color: '#555', marginBottom: '10px' }}>Other Charges (e.g., Freight, Milling)</h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
+                      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
+                      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {otherCharges.map((charge, index) => (
+                      <tr key={index}>
+                        <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                          <input
+                            type="text"
+                            value={charge.description}
+                            onChange={(e) => {
+                              const updatedCharges = [...otherCharges];
+                              updatedCharges[index].description = e.target.value;
+                              setOtherCharges(updatedCharges);
+                            }}
+                            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                          />
+                        </td>
+                        <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                          <input
+                            type="number"
+                            value={charge.cost}
+                            onChange={(e) => {
+                              const updatedCharges = [...otherCharges];
+                              updatedCharges[index].cost = e.target.value;
+                              setOtherCharges(updatedCharges);
+                            }}
+                            step="0.01"
+                            min="0"
+                            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                          />
+                        </td>
+                        <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
+                            style={{
+                              backgroundColor: '#F86752',
+                              color: '#fff',
+                              padding: '8px 16px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              transition: 'background-color 0.3s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <button
+                  onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    marginTop: '10px',
+                    transition: 'background-color 0.3s',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                >
+                  Add Charge
+                </button>
+              </div>
             </div>
-          </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
               <button
                 onClick={addItemRow}

@@ -17,13 +17,13 @@ import PurchaseOrderList from './components/PurchaseOrderList';
 import Products from './components/Products';
 import ProductDetails from './components/ProductDetails';
 import InventoryItemDetails from './components/InventoryItemDetails';
-import Locations from './components/Locations'; // Ensure the correct Locations component is imported
+import Locations from './components/Locations';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import { InventoryItem, Vendor } from './types/interfaces';
 import './App.css';
 
-// Stub components (removed Locations stub, kept others)
+// Stub components
 const Facility: React.FC = () => <div><h2>Facility</h2><p>Facility page coming soon</p></div>;
 const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
 const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
@@ -237,7 +237,14 @@ const AppContent: React.FC = () => {
             element={
               <>
                 {activeSection === 'Home' && <Home />}
-                {activeSection === 'Inventory' && <Inventory inventory={inventory} refreshInventory={refreshInventory} />}
+                {activeSection === 'Inventory' && (
+                  <Inventory
+                    inventory={inventory}
+                    refreshInventory={refreshInventory}
+                    vendors={vendors}
+                    refreshVendors={refreshVendors}
+                  />
+                )}
                 {activeSection === 'Production' && location.pathname === '/production' && <Production />}
                 {activeSection === 'Products' && <Products />}
                 {activeSection === 'Facility' && <Facility />}
@@ -256,7 +263,17 @@ const AppContent: React.FC = () => {
               </>
             }
           />
-          <Route path="/inventory" element={<Inventory inventory={inventory} refreshInventory={refreshInventory} />} />
+          <Route
+            path="/inventory"
+            element={
+              <Inventory
+                inventory={inventory}
+                refreshInventory={refreshInventory}
+                vendors={vendors}
+                refreshVendors={refreshVendors}
+              />
+            }
+          />
           <Route path="/inventory/:identifier" element={<InventoryItemDetails inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
