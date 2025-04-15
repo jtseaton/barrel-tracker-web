@@ -131,10 +131,6 @@ a:hover {
   color: #F86752;
 }
 
-.location-suggestion-item:hover {
-  background-color: #f0f0f0;
-}
-
 .inventory-container {
   padding: 20px;
   max-width: 1400px;
@@ -223,9 +219,4 @@ a:hover {
 
 .inventory-table tbody tr:hover {
   background-color: #f5f5f5;
-}
-
-.location-suggestion-item.add-new {
-  color: #2196F3;
-  font-weight: bold;
 }
