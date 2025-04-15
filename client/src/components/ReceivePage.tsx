@@ -439,58 +439,37 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         {useSingleItem ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             {/* Site Selector */}
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Site:</label>
-              <select
-                value={selectedSite}
-                onChange={(e) => {
-                  setSelectedSite(e.target.value);
-                  setSingleForm((prev: ReceiveForm) => ({ ...prev, siteId: e.target.value, locationId: '' }));
-                }}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-              >
-                {sites.map(site => (
-                  <option key={site.siteId} value={site.siteId}>{site.name}</option>
-                ))}
-              </select>
-            </div>
+              <div className="form-field">
+                <label className="form-label">Site (required):</label>
+                <select
+                  value={selectedSite}
+                  onChange={(e) => setSelectedSite(e.target.value)}
+                  required
+                  className="form-select"
+                >
+                  <option value="">Select a site</option>
+                  {sites.map(site => (
+                    <option key={site.siteId} value={site.siteId}>{site.name}</option>
+                  ))}
+                  <option value="add-new">Add New Site</option>
+                </select>
+              </div>
 
-{/* Physical Location Selector */}
-<div className="selector-container">
-  <label className="selector-label">Physical Location (required):</label>
-  <select
-    value={singleForm.locationId}
-    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
-    onFocus={() => setShowLocationSuggestions(true)}
-    onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 50)}
-    required
-    className="location-select"
-  >
-    <option value="">Select a location</option>
-    {locations.map(loc => (
-      <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-    ))}
-  </select>
-  {showLocationSuggestions && (
-    <ul className="suggestion-list">
-      {locations.map((loc) => (
-        <li
-          key={loc.locationId}
-          className="location-suggestion-item"
-          onMouseDown={() => handleLocationSelect(loc)}
-        >
-          {loc.name}
-        </li>
-      ))}
-      <li
-        className="location-suggestion-item add-new"
-        onMouseDown={() => handleAddNewLocation()}
-      >
-        Add New Location
-      </li>
-    </ul>
-  )}
-</div>
+            {/* Physical Location Selector */}
+              <div className="form-field">
+                <label className="form-label">Physical Location (required):</label>
+                <select
+                  value={singleForm.locationId}
+                  onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
+                  required
+                  className="form-select"
+                >
+                  <option value="">Select a location</option>
+                  {locations.map(loc => (
+                    <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+                  ))}
+                </select>
+              </div>
 
             {/* Vendor Selector */}
             <div style={{ position: 'relative' }}>
