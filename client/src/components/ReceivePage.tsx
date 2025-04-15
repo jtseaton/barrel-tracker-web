@@ -439,13 +439,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         {useSingleItem ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             {/* Site Selector */}
-              <div className="form-field">
-                <label className="form-label">Site (required):</label>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Site (required):</label>
                 <select
                   value={selectedSite}
                   onChange={(e) => setSelectedSite(e.target.value)}
                   required
-                  className="form-select"
+                  style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                 >
                   <option value="">Select a site</option>
                   {sites.map(site => (
@@ -454,15 +454,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   <option value="add-new">Add New Site</option>
                 </select>
               </div>
-
             {/* Physical Location Selector */}
-              <div className="form-field">
-                <label className="form-label">Physical Location (required):</label>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Physical Location (required):</label>
                 <select
                   value={singleForm.locationId}
                   onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: e.target.value }))}
                   required
-                  className="form-select"
+                  style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                 >
                   <option value="">Select a location</option>
                   {locations.map(loc => (
@@ -470,7 +469,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   ))}
                 </select>
               </div>
-
             {/* Vendor Selector */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
