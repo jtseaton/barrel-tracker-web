@@ -136,3 +136,7 @@ a {
 a:hover {
   color: #F86752; /* Red-orange on hover, matches your theme */
 }
+
+.location-suggestion-item:hover {
+  background-color: #f0f0f0;
+}
