@@ -119,14 +119,18 @@ db.serialize(() => {
     )
   `);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-  ['DSP-AL-20010', 'Athens AL DSP', 'DSP', '123 Distillery Rd, Athens, AL']);
+  ['DSP-AL-20010', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['BREW-BHM-001', 'Birmingham Brewery', 'Brewery', '456 Brew St, Birmingham, AL']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?, ?)`, 
+    ['BREW-BHM-001', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
+  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
+    ['BREW-BHM-001', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
+  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
+    ['BREW-BHM-001', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
     ['DSP-AL-20010', 'Spirits Storage']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?, ?)`, 
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
     ['DSP-AL-20010', 'Grain Storage']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?, ?)`, 
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
     ['DSP-AL-20010', 'Fermentation Tanks']);
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
