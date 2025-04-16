@@ -180,14 +180,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Type</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Proof Gallons</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Received Date</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Location</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Site</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Source</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Status</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Description</th>
               <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit Cost</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Total Cost</th>
             </tr>
           </thead>
           <tbody>
@@ -197,14 +195,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
                 <td style={{ padding: '10px' }}>{item.type}</td>
                 <td style={{ padding: '10px' }}>{item.quantity}</td>
                 <td style={{ padding: '10px' }}>{item.unit}</td>
-                <td style={{ padding: '10px' }}>{item.proofGallons || 'N/A'}</td>
                 <td style={{ padding: '10px' }}>{item.receivedDate}</td>
                 <td style={{ padding: '10px' }}>{getLocationName(item.locationId)}</td>
+                <td style={{ padding: '10px' }}>{item.siteId || 'Unknown'}</td>
                 <td style={{ padding: '10px' }}>{item.source || 'Unknown'}</td>
-                <td style={{ padding: '10px' }}>{item.status}</td>
                 <td style={{ padding: '10px' }}>{item.description || 'N/A'}</td>
                 <td style={{ padding: '10px' }}>{item.cost || 'N/A'}</td>
-                <td style={{ padding: '10px' }}>{item.totalCost || 'N/A'}</td>
               </tr>
             ))}
           </tbody>
