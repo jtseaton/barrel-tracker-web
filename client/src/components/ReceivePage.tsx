@@ -510,7 +510,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
         receivedDate: singleForm.receivedDate,
         source: singleForm.source || 'Unknown',
-        siteId: singleForm.siteId,
+        siteId: item.siteId || singleForm.siteId,
         locationId,
         status: Status.Received,
         description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
