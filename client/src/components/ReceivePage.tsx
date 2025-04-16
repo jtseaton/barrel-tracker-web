@@ -52,6 +52,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [activeItemDropdownIndex, setActiveItemDropdownIndex] = useState<number | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [itemDropdownPosition, setItemDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const [selectedSite, setSelectedSite] = useState<string>(locationState?.newSiteId || ''); // Initialize with newSiteId
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
@@ -259,12 +260,12 @@ useEffect(() => {
     if (activeItemDropdownIndex !== null && inputRefs.current[activeItemDropdownIndex]) {
       const input = inputRefs.current[activeItemDropdownIndex];
       const rect = input!.getBoundingClientRect();
-      setDropdownPosition({
+      setItemDropdownPosition({
         top: rect.bottom + window.scrollY,
         left: rect.left + window.scrollX,
       });
     } else {
-      setDropdownPosition(null);
+      setItemDropdownPosition(null);
     }
   }, [activeItemDropdownIndex]);
 
@@ -536,13 +537,13 @@ useEffect(() => {
   };
 
   const renderItemDropdown = (index: number, item: ReceiveItem) => {
-    if (activeItemDropdownIndex !== index || !dropdownPosition) return null;
+    if (activeItemDropdownIndex !== index || !itemDropdownPosition) return null;
     return createPortal(
       <ul
         style={{
           position: 'fixed',
-          top: `${dropdownPosition.top}px`,
-          left: `${dropdownPosition.left}px`,
+          top: `${itemDropdownPosition.top}px`,
+          left: `${itemDropdownPosition.left}px`,
           border: '1px solid #ddd',
           maxHeight: '150px',
           overflowY: 'auto',
@@ -551,27 +552,44 @@ useEffect(() => {
           listStyle: 'none',
           padding: 0,
           margin: 0,
-          zIndex: 20000,
+          zIndex: 30000,
           borderRadius: '4px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
         }}
       >
-        {filteredItems.map((i) => (
+        {filteredItems.length > 0 ? (
+          filteredItems.map((i) => (
+            <li
+              key={i.name}
+              onMouseDown={() => handleItemSelect(i, index)}
+              style={{
+                padding: '8px 10px',
+                cursor: 'pointer',
+                backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
+                borderBottom: '1px solid #eee',
+              }}
+            >
+              {i.name}
+            </li>
+          ))
+        ) : (
           <li
-            key={i.name}
-            onMouseDown={() => handleItemSelect(i, index)}
             style={{
               padding: '8px 10px',
-              cursor: 'pointer',
-              backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
+              color: '#888',
               borderBottom: '1px solid #eee',
             }}
           >
-            {i.name}
+            No items found
           </li>
-        ))}
+        )}
         <li
-          onMouseDown={() => setShowNewItemModal(true)}
+          onMouseDown={() => {
+            setNewItem(item.item);
+            setNewItemType(item.materialType);
+            setShowNewItemModal(true);
+            setActiveItemDropdownIndex(null);
+          }}
           style={{
             padding: '8px 10px',
             cursor: 'pointer',
@@ -1111,79 +1129,98 @@ useEffect(() => {
       {receiveItems.map((item, index) => (
         <tr key={index}>
           <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-            <input
-              type="text"
-              value={item.item}
-              ref={(el) => { inputRefs.current[index] = el; }}
-              onChange={(e) => {
-                const updatedItems = [...receiveItems];
-                updatedItems[index].item = e.target.value;
-                setReceiveItems(updatedItems);
-                setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-              }}
-              onFocus={() => setActiveItemDropdownIndex(index)}
-              onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-            />
-            {activeItemDropdownIndex === index && dropdownPosition && (
-              <ul
-                style={{
-                  position: 'absolute',
-                  top: dropdownPosition.top + 'px',
-                  left: dropdownPosition.left + 'px',
-                  border: '1px solid #ddd',
-                  maxHeight: '150px',
-                  overflowY: 'auto',
-                  backgroundColor: '#fff',
-                  width: '200px',
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  zIndex: 1000,
-                  borderRadius: '4px',
-                }}
-              >
-                {filteredItems.map((filteredItem) => (
-                  <li
-                    key={filteredItem.name}
-                    onMouseDown={() => {
-                      const updatedItems = [...receiveItems];
-                      updatedItems[index].item = filteredItem.name;
-                      updatedItems[index].materialType = filteredItem.type as MaterialType;
-                      setReceiveItems(updatedItems);
-                      setActiveItemDropdownIndex(null);
-                    }}
-                    style={{
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      backgroundColor: item.item === filteredItem.name ? '#e0e0e0' : '#fff',
-                      borderBottom: '1px solid #eee',
-                    }}
-                  >
-                    {filteredItem.name}
-                  </li>
-                ))}
-                <li
-                  onMouseDown={() => {
-                    setNewItem(item.item);
-                    setNewItemType(item.materialType);
-                    setShowNewItemModal(true);
-                    setActiveItemDropdownIndex(null);
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    cursor: 'pointer',
-                    backgroundColor: '#fff',
-                    borderBottom: '1px solid #eee',
-                    color: '#2196F3',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Add New Item
-                </li>
-              </ul>
-            )}
-          </td>
+  <input
+    type="text"
+    value={item.item}
+    ref={(el) => { inputRefs.current[index] = el; }}
+    onChange={(e) => {
+      const updatedItems = [...receiveItems];
+      updatedItems[index].item = e.target.value;
+      setReceiveItems(updatedItems);
+      setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+      setActiveItemDropdownIndex(index);
+    }}
+    onFocus={() => {
+      setActiveItemDropdownIndex(index);
+      setFilteredItems(items);
+    }}
+    onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+    placeholder="Select item"
+    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+  />
+  {activeItemDropdownIndex === index && itemDropdownPosition && createPortal(
+    <ul
+      style={{
+        position: 'fixed',
+        top: `${itemDropdownPosition.top}px`,
+        left: `${itemDropdownPosition.left}px`,
+        border: '1px solid #ddd',
+        maxHeight: '150px',
+        overflowY: 'auto',
+        backgroundColor: '#fff',
+        width: '200px',
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        zIndex: 30000,
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      }}
+    >
+      {filteredItems.length > 0 ? (
+        filteredItems.map((filteredItem) => (
+          <li
+            key={filteredItem.name}
+            onMouseDown={() => {
+              const updatedItems = [...receiveItems];
+              updatedItems[index].item = filteredItem.name;
+              updatedItems[index].materialType = filteredItem.type as MaterialType;
+              setReceiveItems(updatedItems);
+              setActiveItemDropdownIndex(null);
+            }}
+            style={{
+              padding: '8px 10px',
+              cursor: 'pointer',
+              backgroundColor: item.item === filteredItem.name ? '#e0e0e0' : '#fff',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            {filteredItem.name}
+          </li>
+        ))
+      ) : (
+        <li
+          style={{
+            padding: '8px 10px',
+            color: '#888',
+            borderBottom: '1px solid #eee',
+          }}
+        >
+          No items found
+        </li>
+      )}
+      <li
+        onMouseDown={() => {
+          setNewItem(item.item);
+          setNewItemType(item.materialType);
+          setShowNewItemModal(true);
+          setActiveItemDropdownIndex(null);
+        }}
+        style={{
+          padding: '8px 10px',
+          cursor: 'pointer',
+          backgroundColor: '#fff',
+          borderBottom: '1px solid #eee',
+          color: '#2196F3',
+          fontWeight: 'bold',
+        }}
+      >
+        Add New Item
+      </li>
+    </ul>,
+    document.getElementById('dropdown-portal') || document.body
+  )}
+</td>
           <td style={{ border: '1px solid #ddd', padding: '8px' }}>
   <input
     type="text"
@@ -1278,122 +1315,99 @@ useEffect(() => {
     document.getElementById('dropdown-portal') || document.body
   )}
 </td>
-          <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-            <input
-              type="text"
-              value={
-                item.locationId && rowLocations[index]
-                  ? rowLocations[index].find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
-                  : ''
-              }
-              ref={(el) => { locationInputRefs.current[index] = el; }}
-              onChange={(e) => {
-                const value = e.target.value;
-                const updatedItems = [...receiveItems];
-                updatedItems[index].locationId = '';
-                setReceiveItems(updatedItems);
-                setRowFilteredLocations((prev) => {
-                  const newFiltered = [...prev];
-                  newFiltered[index] = rowLocations[index]?.filter((loc) =>
-                    loc.name.toLowerCase().includes(value.toLowerCase())
-                  ) || [];
-                  return newFiltered;
-                });
-                setActiveLocationDropdownIndex(index);
-              }}
-              onFocus={() => {
-                if (!rowFetchingLocations[index] && rowLocations[index]?.length > 0) {
-                  setActiveLocationDropdownIndex(index);
-                  setRowFilteredLocations((prev) => {
-                    const newFiltered = [...prev];
-                    newFiltered[index] = rowLocations[index] || [];
-                    return newFiltered;
-                  });
-                }
-              }}
-              onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 300)}
-              placeholder={rowFetchingLocations[index] ? 'Loading locations...' : 'Select location'}
-              disabled={!item.siteId || rowFetchingLocations[index]}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                boxSizing: 'border-box',
-                fontSize: '16px',
-                backgroundColor: !item.siteId || rowFetchingLocations[index] ? '#f5f5f5' : '#fff',
-              }}
-            />
-            {activeLocationDropdownIndex === index && !rowFetchingLocations[index] && dropdownPosition && createPortal(
-              <ul
-                style={{
-                  position: 'fixed',
-                  top: `${dropdownPosition.top}px`,
-                  left: `${dropdownPosition.left}px`,
-                  border: '1px solid #ddd',
-                  maxHeight: '150px',
-                  overflowY: 'auto',
-                  backgroundColor: '#fff',
-                  width: '200px',
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  zIndex: 30000,
-                  borderRadius: '4px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                }}
-              >
-                {rowFilteredLocations[index]?.length > 0 ? (
-                  rowFilteredLocations[index].map((location) => (
-                    <li
-                      key={location.locationId}
-                      onMouseDown={() => {
-                        const updatedItems = [...receiveItems];
-                        updatedItems[index].locationId = location.locationId.toString();
-                        setReceiveItems(updatedItems);
-                        setActiveLocationDropdownIndex(null);
-                      }}
-                      style={{
-                        padding: '8px 10px',
-                        cursor: 'pointer',
-                        backgroundColor: item.locationId === location.locationId.toString() ? '#e0e0e0' : '#fff',
-                        borderBottom: '1px solid #eee',
-                      }}
-                    >
-                      {location.name}
-                    </li>
-                  ))
-                ) : (
-                  <li
-                    style={{
-                      padding: '8px 10px',
-                      color: '#888',
-                      borderBottom: '1px solid #eee',
-                    }}
-                  >
-                    No locations found
-                  </li>
-                )}
-                <li
-                  onMouseDown={() => {
-                    navigate('/locations', { state: { fromReceive: true, siteId: item.siteId } });
-                    setActiveLocationDropdownIndex(null);
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    cursor: 'pointer',
-                    backgroundColor: '#fff',
-                    borderBottom: '1px solid #eee',
-                    color: '#2196F3',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Add New Location
-                </li>
-              </ul>,
-              document.getElementById('dropdown-portal') || document.body
-            )}
-          </td>
+<td style={{ border: '1px solid #ddd', padding: '8px' }}>
+  <input
+    type="text"
+    value={item.item}
+    ref={(el) => { inputRefs.current[index] = el; }}
+    onChange={(e) => {
+      const updatedItems = [...receiveItems];
+      updatedItems[index].item = e.target.value;
+      setReceiveItems(updatedItems);
+      setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+      setActiveItemDropdownIndex(index);
+    }}
+    onFocus={() => {
+      setActiveItemDropdownIndex(index);
+      setFilteredItems(items);
+    }}
+    onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+    placeholder="Select item"
+    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+  />
+  {activeItemDropdownIndex === index && itemDropdownPosition && createPortal(
+    <ul
+      style={{
+        position: 'fixed',
+        top: `${itemDropdownPosition.top}px`,
+        left: `${itemDropdownPosition.left}px`,
+        border: '1px solid #ddd',
+        maxHeight: '150px',
+        overflowY: 'auto',
+        backgroundColor: '#fff',
+        width: '200px',
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        zIndex: 30000,
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      }}
+    >
+      {filteredItems.length > 0 ? (
+        filteredItems.map((filteredItem) => (
+          <li
+            key={filteredItem.name}
+            onMouseDown={() => {
+              const updatedItems = [...receiveItems];
+              updatedItems[index].item = filteredItem.name;
+              updatedItems[index].materialType = filteredItem.type as MaterialType;
+              setReceiveItems(updatedItems);
+              setActiveItemDropdownIndex(null);
+            }}
+            style={{
+              padding: '8px 10px',
+              cursor: 'pointer',
+              backgroundColor: item.item === filteredItem.name ? '#e0e0e0' : '#fff',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            {filteredItem.name}
+          </li>
+        ))
+      ) : (
+        <li
+          style={{
+            padding: '8px 10px',
+            color: '#888',
+            borderBottom: '1px solid #eee',
+          }}
+        >
+          No items found
+        </li>
+      )}
+      <li
+        onMouseDown={() => {
+          setNewItem(item.item);
+          setNewItemType(item.materialType);
+          setShowNewItemModal(true);
+          setActiveItemDropdownIndex(null);
+        }}
+        style={{
+          padding: '8px 10px',
+          cursor: 'pointer',
+          backgroundColor: '#fff',
+          borderBottom: '1px solid #eee',
+          color: '#2196F3',
+          fontWeight: 'bold',
+        }}
+      >
+        Add New Item
+      </li>
+    </ul>,
+    document.getElementById('dropdown-portal') || document.body
+  )}
+</td>
           <td style={{ border: '1px solid #ddd', padding: '8px' }}>
             <input
               type="text"
