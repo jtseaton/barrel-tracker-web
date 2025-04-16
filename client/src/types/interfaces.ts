@@ -111,17 +111,18 @@ export interface ReceiveForm {
 
 export interface ReceiveItem {
   identifier: string;
-  item: string; // Replaces identifier
-  lotNumber: string; // New field
+  item: string;
+  lotNumber: string;
   materialType: MaterialType;
   quantity: string;
   unit: Unit;
-  proof?: string;
-  description?: string;
-  cost?: string;
-  poNumber?: string;
+  cost: string;
+  description: string;
   siteId: string;
-  locationId?: string; // Optional
+  locationId: string;
+  poNumber?: string;
+  account?: Account; // Add optional account
+  proof?: string; // Add optional proof
 }
 
 export interface ReceivableItem {

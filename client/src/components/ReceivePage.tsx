@@ -407,15 +407,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       if (useSingleItem) {
         setSingleForm((prev: ReceiveForm) => ({ ...prev, item: newItem, materialType: newItemType }));
       } else {
-        setReceiveItems([...receiveItems, { 
+        setReceiveItems([...receiveItems, {
           identifier: 'Unknown',
           item: newItem,
           lotNumber: '',
           materialType: newItemType,
           quantity: '',
           unit: Unit.Pounds,
+          cost: '',
+          description: '',
           siteId: selectedSite,
           locationId: '',
+          account: newItemType === MaterialType.Spirits ? Account.Storage : undefined,
+          proof: newItemType === MaterialType.Spirits ? '' : undefined,
         }]);
       }
       setNewItem('');
@@ -1120,18 +1124,20 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             <div style={{ overflowX: 'auto', marginBottom: '20px', position: 'relative', zIndex: 1000 }}>
   <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
     <thead>
-      <tr>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Site</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Location</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
-        <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
-      </tr>
+    <tr>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Site</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Location</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Account</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Proof</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
+      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
+    </tr>
     </thead>
     <tbody>
   {receiveItems.map((item, index) => (
@@ -1457,6 +1463,8 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
           onChange={(e) => {
             const updatedItems = [...receiveItems];
             updatedItems[index].materialType = e.target.value as MaterialType;
+            updatedItems[index].proof = ''; // Reset proof when material type changes
+            updatedItems[index].account = Account.Storage; // Default account for spirits
             setReceiveItems(updatedItems);
           }}
           style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
@@ -1494,6 +1502,44 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             <option key={unit} value={unit}>{unit}</option>
           ))}
         </select>
+      </td>
+      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+        {item.materialType === MaterialType.Spirits ? (
+          <select
+            value={item.account || Account.Storage}
+            onChange={(e) => {
+              const updatedItems = [...receiveItems];
+              updatedItems[index].account = e.target.value as Account;
+              setReceiveItems(updatedItems);
+            }}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+          >
+            <option value={Account.Storage}>Storage</option>
+            <option value={Account.Processing}>Processing</option>
+            <option value={Account.Production}>Production</option>
+          </select>
+        ) : (
+          <span style={{ color: '#888' }}>-</span>
+        )}
+      </td>
+      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+        {item.materialType === MaterialType.Spirits ? (
+          <input
+            type="number"
+            value={item.proof || ''}
+            onChange={(e) => {
+              const updatedItems = [...receiveItems];
+              updatedItems[index].proof = e.target.value;
+              setReceiveItems(updatedItems);
+            }}
+            step="0.01"
+            min="0"
+            max="200"
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+          />
+        ) : (
+          <span style={{ color: '#888' }}>-</span>
+        )}
       </td>
       <td style={{ border: '1px solid #ddd', padding: '8px' }}>
         <input
@@ -1786,15 +1832,19 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               ))}
               <button
                 type="button"
-                onClick={() => setLotItems([...lotItems, { 
+                onClick={() => setLotItems([...lotItems, {
                   identifier: '',
                   item: poItemToSplit.name,
                   lotNumber: '',
                   quantity: '',
                   materialType: MaterialType.Spirits,
                   unit: Unit.Gallons,
+                  cost: '',
+                  description: '',
                   siteId: selectedSite,
                   locationId: '',
+                  account: Account.Storage,
+                  proof: '',
                 }])}
                 style={{
                   backgroundColor: '#2196F3',
