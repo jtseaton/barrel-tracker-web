@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem } from '../types/interfaces';
+import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem, Site } from '../types/interfaces';
 import { fetchDailySummary } from '../utils/fetchUtils';
 
 const OUR_DSP = 'DSP-AL-20010';
@@ -8,13 +8,14 @@ const OUR_DSP = 'DSP-AL-20010';
 interface InventoryProps {
   vendors: Vendor[];
   refreshVendors: () => Promise<void>;
-  inventory: InventoryItem[]; // Added to match usage
-  refreshInventory: () => Promise<void>; // Added to match usage
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
 }
 
 const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) => {
   const [dailySummary, setDailySummary] = useState<DailySummaryItem[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]); // State for locations
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [sites, setSites] = useState<Site[]>([]); // New state for sites
   const [moveForm, setMoveForm] = useState<MoveForm>({ identifier: '', toAccount: 'Storage', proofGallons: '' });
   const [lossForm, setLossForm] = useState<LossForm>({
     identifier: '',
@@ -67,11 +68,35 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     fetchLocations();
   }, [API_BASE_URL]);
 
+  // Fetch sites
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sites`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data: Site[] = await res.json();
+        console.log('Fetched sites:', data);
+        setSites(data);
+      } catch (err: any) {
+        console.error('Failed to fetch sites:', err);
+        setProductionError('Failed to fetch sites: ' + err.message);
+      }
+    };
+    fetchSites();
+  }, [API_BASE_URL]);
+
   // Helper function to map locationId to location name
   const getLocationName = (locationId: number | undefined) => {
     if (!locationId) return 'Unknown Location';
     const location = locations.find(loc => loc.locationId === locationId);
     return location ? location.name : 'Unknown Location';
+  };
+
+  // Helper function to map siteId to site name
+  const getSiteName = (siteId: string | undefined) => {
+    if (!siteId) return 'Unknown Site';
+    const site = sites.find(site => site.siteId === siteId);
+    return site ? site.name : 'Unknown Site';
   };
 
   const handleMove = async () => {
@@ -197,7 +222,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
                 <td style={{ padding: '10px' }}>{item.unit}</td>
                 <td style={{ padding: '10px' }}>{item.receivedDate}</td>
                 <td style={{ padding: '10px' }}>{getLocationName(item.locationId)}</td>
-                <td style={{ padding: '10px' }}>{item.siteId || 'Unknown'}</td>
+                <td style={{ padding: '10px' }}>{getSiteName(item.siteId)}</td>
                 <td style={{ padding: '10px' }}>{item.source || 'Unknown'}</td>
                 <td style={{ padding: '10px' }}>{item.description || 'N/A'}</td>
                 <td style={{ padding: '10px' }}>{item.cost || 'N/A'}</td>

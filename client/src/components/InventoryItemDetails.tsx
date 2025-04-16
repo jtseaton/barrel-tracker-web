@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { InventoryItem } from '../types/interfaces';
+import { InventoryItem, Site } from '../types/interfaces'; // Added Site import
 
 interface InventoryProps {
   inventory: InventoryItem[];
@@ -8,9 +8,10 @@ interface InventoryProps {
 }
 
 const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) => {
-  const { identifier } = useParams<{ identifier: string }>(); // Still using identifier from URL for now
+  const { identifier } = useParams<{ identifier: string }>();
   const navigate = useNavigate();
   const [item, setItem] = useState<InventoryItem | null>(null);
+  const [sites, setSites] = useState<Site[]>([]); // New state for sites
   const [adjustForm, setAdjustForm] = useState<{ newQuantity: string; reason: string; date: string }>({
     newQuantity: '',
     reason: '',
@@ -22,7 +23,14 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
-  
+
+  // Helper function to get site name
+  const getSiteName = (siteId: string | undefined) => {
+    if (!siteId) return 'N/A';
+    const site = sites.find((s) => s.siteId === siteId);
+    return site ? site.name : 'N/A';
+  };
+
   useEffect(() => {
     const fetchItem = async () => {
       try {
@@ -32,7 +40,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
         const foundItem = data.find((i: InventoryItem) => getIdentifier(i) === identifier);
         if (foundItem) {
           setItem(foundItem);
-          setAdjustForm(prev => ({ ...prev, newQuantity: foundItem.quantity || '' }));
+          setAdjustForm((prev) => ({ ...prev, newQuantity: foundItem.quantity || '' }));
         } else {
           setProductionError('Item not found');
         }
@@ -44,8 +52,24 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
     fetchItem();
   }, [identifier]);
 
+  // Fetch sites
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sites`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data: Site[] = await res.json();
+        setSites(data);
+      } catch (err: any) {
+        console.error('Fetch sites error:', err);
+        setProductionError('Failed to fetch sites: ' + err.message);
+      }
+    };
+    fetchSites();
+  }, [API_BASE_URL]);
+
   const handleAdjustChange = (field: keyof typeof adjustForm, value: string) => {
-    setAdjustForm(prev => ({ ...prev, [field]: value }));
+    setAdjustForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleAdjustSubmit = async () => {
@@ -58,7 +82,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          identifier: getIdentifier(item), // Use combined item-lotNumber
+          identifier: getIdentifier(item),
           newQuantity: adjustForm.newQuantity,
           reason: adjustForm.reason,
           date: adjustForm.date,
@@ -66,10 +90,10 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const updatedItem = await res.json();
-      setItem(prev => prev ? { ...prev, quantity: updatedItem.newQuantity, totalCost: updatedItem.newTotalCost } : null);
+      setItem((prev) => (prev ? { ...prev, quantity: updatedItem.newQuantity, totalCost: updatedItem.newTotalCost } : null));
       setShowAdjustForm(false);
       setProductionError(null);
-      await refreshInventory(); // Refresh inventory after adjustment
+      await refreshInventory();
     } catch (err: any) {
       console.error('Adjust inventory error:', err);
       setProductionError('Failed to adjust item: ' + err.message);
@@ -111,6 +135,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
           <div><strong>Date Received:</strong> {item?.receivedDate || 'N/A'}</div>
           <div><strong>Source:</strong> {item?.source || 'N/A'}</div>
           <div><strong>Location:</strong> {item?.account || 'Storage'}</div>
+          <div><strong>Site:</strong> {item ? getSiteName(item.siteId) : 'N/A'}</div> {/* New field */}
           <div><strong>Status:</strong> {item?.status || 'Stored'}</div>
           <div><strong>DSP Number:</strong> {item?.dspNumber || 'N/A'}</div>
         </div>
