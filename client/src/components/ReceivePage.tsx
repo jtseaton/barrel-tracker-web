@@ -24,6 +24,21 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const locationState = location.state as { newSiteId?: string; newLocationId?: string };
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const siteInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [newReceiveItem, setNewReceiveItem] = useState<ReceiveItem>({
+    identifier: '',
+    item: '',
+    lotNumber: '',
+    materialType: MaterialType.Grain,
+    quantity: '',
+    unit: Unit.Pounds,
+    cost: '',
+    description: '',
+    siteId: 'DSP-AL-20010', // Default site, adjust or remove as needed
+    locationId: '',
+    account: Account.Storage,
+    proof: '',
+  });
   const [rowLocations, setRowLocations] = useState<Location[][]>([]);
   const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>([]);
   const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
@@ -432,28 +447,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   const addItemRow = () => {
-    const defaultSiteId = 'DSP-AL-20010'; // Madison Distillery, remove if no default desired
-    setReceiveItems([
-      ...receiveItems,
-      {
-        identifier: '',
-        item: '',
-        lotNumber: '',
-        materialType: MaterialType.Grain,
-        quantity: '',
-        unit: Unit.Pounds,
-        cost: '',
-        description: '',
-        siteId: defaultSiteId,
-        locationId: '',
-      },
-    ]);
-    setRowLocations((prev) => [...prev, []]);
-    setRowFilteredLocations((prev) => [...prev, []]);
-    setRowFetchingLocations((prev) => [...prev, false]);
-    if (defaultSiteId) {
-      fetchLocations(defaultSiteId, receiveItems.length);
-    }
+    setShowAddItemModal(true);
   };
 
   const handleReceive = async () => {
@@ -1722,6 +1716,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             </div>
           </div>
         )}
+
         {showNewItemModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
@@ -1781,6 +1776,719 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             </div>
           </div>
         )}
+        {showAddItemModal && (
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 10000,
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: '#fff',
+        padding: '20px',
+        borderRadius: '8px',
+        width: '600px',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+        maxHeight: '80vh',
+        overflowY: 'auto',
+      }}
+    >
+      <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
+        Add New Item
+      </h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+        {/* Item */}
+        <div style={{ position: 'relative' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Item:
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.item}
+            onChange={(e) => {
+              setNewReceiveItem({ ...newReceiveItem, item: e.target.value });
+              setFilteredItems(
+                items.filter((i) =>
+                  i.name.toLowerCase().includes(e.target.value.toLowerCase())
+                )
+              );
+              setActiveItemDropdownIndex(9999); // Unique index for modal
+            }}
+            onFocus={() => {
+              setActiveItemDropdownIndex(9999);
+              setFilteredItems(items);
+            }}
+            onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+            placeholder="Select item"
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+          {activeItemDropdownIndex === 9999 && itemDropdownPosition && createPortal(
+            <ul
+              style={{
+                position: 'fixed',
+                top: `${itemDropdownPosition.top}px`,
+                left: `${itemDropdownPosition.left}px`,
+                border: '1px solid #ddd',
+                maxHeight: '150px',
+                overflowY: 'auto',
+                backgroundColor: '#fff',
+                width: '200px',
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                zIndex: 30000,
+                borderRadius: '4px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              }}
+            >
+              {filteredItems.length > 0 ? (
+                filteredItems.map((filteredItem) => (
+                  <li
+                    key={filteredItem.name}
+                    onMouseDown={() => {
+                      setNewReceiveItem({
+                        ...newReceiveItem,
+                        item: filteredItem.name,
+                        materialType: filteredItem.type as MaterialType,
+                      });
+                      setActiveItemDropdownIndex(null);
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      backgroundColor:
+                        newReceiveItem.item === filteredItem.name
+                          ? '#e0e0e0'
+                          : '#fff',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {filteredItem.name}
+                  </li>
+                ))
+              ) : (
+                <li
+                  style={{
+                    padding: '8px 10px',
+                    color: '#888',
+                    borderBottom: '1px solid #eee',
+                  }}
+                >
+                  No items found
+                </li>
+              )}
+              <li
+                onMouseDown={() => {
+                  setNewItem(newReceiveItem.item);
+                  setNewItemType(newReceiveItem.materialType);
+                  setShowNewItemModal(true);
+                  setActiveItemDropdownIndex(null);
+                }}
+                style={{
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  backgroundColor: '#fff',
+                  borderBottom: '1px solid #eee',
+                  color: '#2196F3',
+                  fontWeight: 'bold',
+                }}
+              >
+                Add New Item
+              </li>
+            </ul>,
+            document.getElementById('dropdown-portal') || document.body
+          )}
+        </div>
+        {/* Site */}
+        <div style={{ position: 'relative' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Site:
+          </label>
+          <input
+            type="text"
+            value={
+              sites.find((s) => s.siteId === newReceiveItem.siteId)?.name || ''
+            }
+            onChange={(e) => {
+              const value = e.target.value;
+              setNewReceiveItem({ ...newReceiveItem, siteId: '', locationId: '' });
+              setFilteredSites(
+                sites.filter((s) =>
+                  s.name.toLowerCase().includes(value.toLowerCase())
+                )
+              );
+              setActiveSiteDropdownIndex(9999);
+            }}
+            onFocus={() => {
+              setActiveSiteDropdownIndex(9999);
+              setFilteredSites(sites);
+            }}
+            onBlur={() => setTimeout(() => setActiveSiteDropdownIndex(null), 300)}
+            placeholder="Select site"
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+          {activeSiteDropdownIndex === 9999 && siteDropdownPosition && createPortal(
+            <ul
+              style={{
+                position: 'fixed',
+                top: `${siteDropdownPosition.top}px`,
+                left: `${siteDropdownPosition.left}px`,
+                border: '1px solid #ddd',
+                maxHeight: '150px',
+                overflowY: 'auto',
+                backgroundColor: '#fff',
+                width: '200px',
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                zIndex: 30000,
+                borderRadius: '4px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              }}
+            >
+              {filteredSites.length > 0 ? (
+                filteredSites.map((site) => (
+                  <li
+                    key={site.siteId}
+                    onMouseDown={() => {
+                      setNewReceiveItem({
+                        ...newReceiveItem,
+                        siteId: site.siteId,
+                        locationId: '',
+                      });
+                      fetchLocations(site.siteId, receiveItems.length);
+                      setActiveSiteDropdownIndex(null);
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      backgroundColor:
+                        newReceiveItem.siteId === site.siteId
+                          ? '#e0e0e0'
+                          : '#fff',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {site.name}
+                  </li>
+                ))
+              ) : (
+                <li
+                  style={{
+                    padding: '8px 10px',
+                    color: '#888',
+                    borderBottom: '1px solid #eee',
+                  }}
+                >
+                  No sites found
+                </li>
+              )}
+              <li
+                onMouseDown={() => {
+                  navigate('/sites', { state: { fromReceive: true } });
+                  setActiveSiteDropdownIndex(null);
+                }}
+                style={{
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  backgroundColor: '#fff',
+                  borderBottom: '1px solid #eee',
+                  color: '#2196F3',
+                  fontWeight: 'bold',
+                }}
+              >
+                Add New Site
+              </li>
+            </ul>,
+            document.getElementById('dropdown-portal') || document.body
+          )}
+        </div>
+        {/* Location */}
+        <div style={{ position: 'relative' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Location:
+          </label>
+          <input
+            type="text"
+            value={
+              newReceiveItem.locationId && rowLocations[receiveItems.length]
+                ? rowLocations[receiveItems.length]?.find(
+                    (loc) => loc.locationId.toString() === newReceiveItem.locationId
+                  )?.name || ''
+                : ''
+            }
+            onChange={(e) => {
+              const value = e.target.value;
+              setNewReceiveItem({ ...newReceiveItem, locationId: '' });
+              setRowFilteredLocations((prev) => {
+                const newFiltered = [...prev];
+                newFiltered[receiveItems.length] =
+                  rowLocations[receiveItems.length]?.filter((loc) =>
+                    loc.name.toLowerCase().includes(value.toLowerCase())
+                  ) || [];
+                return newFiltered;
+              });
+              setActiveLocationDropdownIndex(9999);
+            }}
+            onFocus={() => {
+              if (
+                !rowFetchingLocations[receiveItems.length] &&
+                rowLocations[receiveItems.length]?.length > 0
+              ) {
+                setActiveLocationDropdownIndex(9999);
+                setRowFilteredLocations((prev) => {
+                  const newFiltered = [...prev];
+                  newFiltered[receiveItems.length] =
+                    rowLocations[receiveItems.length] || [];
+                  return newFiltered;
+                });
+              }
+            }}
+            onBlur={() =>
+              setTimeout(() => setActiveLocationDropdownIndex(null), 300)
+            }
+            placeholder={
+              rowFetchingLocations[receiveItems.length]
+                ? 'Loading locations...'
+                : 'Select location'
+            }
+            disabled={
+              !newReceiveItem.siteId || rowFetchingLocations[receiveItems.length]
+            }
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+              backgroundColor:
+                !newReceiveItem.siteId || rowFetchingLocations[receiveItems.length]
+                  ? '#f5f5f5'
+                  : '#fff',
+            }}
+          />
+          {activeLocationDropdownIndex === 9999 &&
+            !rowFetchingLocations[receiveItems.length] &&
+            dropdownPosition &&
+            createPortal(
+              <ul
+                style={{
+                  position: 'fixed',
+                  top: `${dropdownPosition.top}px`,
+                  left: `${dropdownPosition.left}px`,
+                  border: '1px solid #ddd',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  backgroundColor: '#fff',
+                  width: '200px',
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  zIndex: 30000,
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+                {rowFilteredLocations[receiveItems.length]?.length > 0 ? (
+                  rowFilteredLocations[receiveItems.length].map((location) => (
+                    <li
+                      key={location.locationId}
+                      onMouseDown={() => {
+                        setNewReceiveItem({
+                          ...newReceiveItem,
+                          locationId: location.locationId.toString(),
+                        });
+                        setActiveLocationDropdownIndex(null);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor:
+                          newReceiveItem.locationId ===
+                          location.locationId.toString()
+                            ? '#e0e0e0'
+                            : '#fff',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      {location.name}
+                    </li>
+                  ))
+                ) : (
+                  <li
+                    style={{
+                      padding: '8px 10px',
+                      color: '#888',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    No locations found
+                  </li>
+                )}
+                <li
+                  onMouseDown={() => {
+                    navigate('/locations', {
+                      state: { fromReceive: true, siteId: newReceiveItem.siteId },
+                    });
+                    setActiveLocationDropdownIndex(null);
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    backgroundColor: '#fff',
+                    borderBottom: '1px solid #eee',
+                    color: '#2196F3',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Add New Location
+                </li>
+              </ul>,
+              document.getElementById('dropdown-portal') || document.body
+            )}
+        </div>
+        {/* Lot Number */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Lot Number:
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.lotNumber}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, lotNumber: e.target.value })
+            }
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+        {/* Material Type */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Material Type:
+          </label>
+          <select
+            value={newReceiveItem.materialType}
+            onChange={(e) =>
+              setNewReceiveItem({
+                ...newReceiveItem,
+                materialType: e.target.value as MaterialType,
+                proof: '',
+                account: Account.Storage,
+              })
+            }
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          >
+            {Object.values(MaterialType).map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* Quantity */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Quantity:
+          </label>
+          <input
+            type="number"
+            value={newReceiveItem.quantity}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, quantity: e.target.value })
+            }
+            step="0.01"
+            min="0"
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+        {/* Unit */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Unit:
+          </label>
+          <select
+            value={newReceiveItem.unit}
+            onChange={(e) =>
+              setNewReceiveItem({
+                ...newReceiveItem,
+                unit: e.target.value as Unit,
+              })
+            }
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          >
+            {Object.values(Unit).map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* Account (for Spirits) */}
+        {newReceiveItem.materialType === MaterialType.Spirits && (
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Account:
+            </label>
+            <select
+              value={newReceiveItem.account || Account.Storage}
+              onChange={(e) =>
+                setNewReceiveItem({
+                  ...newReceiveItem,
+                  account: e.target.value as Account,
+                })
+              }
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '16px',
+              }}
+            >
+              <option value={Account.Storage}>Storage</option>
+              <option value={Account.Processing}>Processing</option>
+              <option value={Account.Production}>Production</option>
+            </select>
+          </div>
+        )}
+        {/* Proof (for Spirits) */}
+        {newReceiveItem.materialType === MaterialType.Spirits && (
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Proof:
+            </label>
+            <input
+              type="number"
+              value={newReceiveItem.proof || ''}
+              onChange={(e) =>
+                setNewReceiveItem({ ...newReceiveItem, proof: e.target.value })
+              }
+              step="0.01"
+              min="0"
+              max="200"
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '16px',
+              }}
+            />
+          </div>
+        )}
+        {/* Cost */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Cost:
+          </label>
+          <input
+            type="number"
+            value={newReceiveItem.cost || ''}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, cost: e.target.value })
+            }
+            step="0.01"
+            min="0"
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+        {/* Description */}
+        <div style={{ gridColumn: 'span 2' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Description:
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.description || ''}
+            onChange={(e) =>
+              setNewReceiveItem({
+                ...newReceiveItem,
+                description: e.target.value,
+              })
+            }
+            placeholder={
+              newReceiveItem.materialType === MaterialType.Other
+                ? 'Required for Other'
+                : 'Optional'
+            }
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+        <button
+          onClick={() => {
+            // Basic validation
+            if (!newReceiveItem.item) {
+              setProductionError('Item is required');
+              return;
+            }
+            if (!newReceiveItem.siteId) {
+              setProductionError('Site is required');
+              return;
+            }
+            if (!newReceiveItem.locationId) {
+              setProductionError('Location is required');
+              return;
+            }
+            if (
+              newReceiveItem.materialType === MaterialType.Spirits &&
+              (!newReceiveItem.lotNumber || !newReceiveItem.proof)
+            ) {
+              setProductionError('Spirits require Lot Number and Proof');
+              return;
+            }
+            if (
+              newReceiveItem.materialType === MaterialType.Other &&
+              !newReceiveItem.description
+            ) {
+              setProductionError('Other items require a Description');
+              return;
+            }
+            if (
+              !newReceiveItem.quantity ||
+              isNaN(parseFloat(newReceiveItem.quantity)) ||
+              parseFloat(newReceiveItem.quantity) <= 0
+            ) {
+              setProductionError('Valid Quantity is required');
+              return;
+            }
+            // Add to receiveItems
+            setReceiveItems([...receiveItems, newReceiveItem]);
+            // Update rowLocations and rowFilteredLocations
+            setRowLocations((prev) => [...prev, rowLocations[receiveItems.length] || []]);
+            setRowFilteredLocations((prev) => [
+              ...prev,
+              rowFilteredLocations[receiveItems.length] || [],
+            ]);
+            setRowFetchingLocations((prev) => [...prev, false]);
+            // Reset modal state
+            setNewReceiveItem({
+              identifier: '',
+              item: '',
+              lotNumber: '',
+              materialType: MaterialType.Grain,
+              quantity: '',
+              unit: Unit.Pounds,
+              cost: '',
+              description: '',
+              siteId: 'DSP-AL-20010',
+              locationId: '',
+              account: Account.Storage,
+              proof: '',
+            });
+            setShowAddItemModal(false);
+            setProductionError(null);
+          }}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+        >
+          Add
+        </button>
+        <button
+          onClick={() => {
+            setShowAddItemModal(false);
+            setNewReceiveItem({
+              identifier: '',
+              item: '',
+              lotNumber: '',
+              materialType: MaterialType.Grain,
+              quantity: '',
+              unit: Unit.Pounds,
+              cost: '',
+              description: '',
+              siteId: 'DSP-AL-20010',
+              locationId: '',
+              account: Account.Storage,
+              proof: '',
+            });
+          }}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         {poItemToSplit && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
