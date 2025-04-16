@@ -41,6 +41,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     siteId: 'DSP-AL-20010',
     locationId: '',
   });
+  
+  const locationInputRefs = useRef<(HTMLInputElement | null)[]>([]); // NEW: Ref for Location inputs
+  const [locationDropdownPosition, setLocationDropdownPosition] = useState<{ top: number; left: number } | null>(null); // NEW: Position for Location dropdown
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [useSingleItem, setUseSingleItem] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
@@ -168,6 +171,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     if (singleForm.source) fetchPOs();
     setFilteredVendors(vendors);
   }, [locationState, singleForm.source, vendors]);
+
+  useEffect(() => {
+    if (activeLocationDropdownIndex !== null && locationInputRefs.current[activeLocationDropdownIndex]) {
+      const input = locationInputRefs.current[activeLocationDropdownIndex];
+      const rect = input!.getBoundingClientRect();
+      setLocationDropdownPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+      });
+    } else {
+      setLocationDropdownPosition(null);
+    }
+  }, [activeLocationDropdownIndex]);
 
   useEffect(() => {
     fetchLocations(selectedSite);
@@ -1039,112 +1055,117 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                         />
                         {renderItemDropdown(index, item)}
                       </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
-                        <input
-                          type="text"
-                          value={
-                            item.locationId
-                              ? locations.find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
-                              : ''
-                          }
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].locationId = '';
-                            setReceiveItems(updatedItems);
-                            setFilteredLocations(
-                              locations.filter((loc) =>
-                                loc.name.toLowerCase().includes(value.toLowerCase())
-                              )
-                            );
-                          }}
-                          onFocus={() => {
-                            if (!isFetchingLocations && locations.length > 0) {
-                              setActiveLocationDropdownIndex(index);
-                              setFilteredLocations(locations);
-                            }
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setActiveLocationDropdownIndex(null);
-                            }, 300);
-                          }}
-                          placeholder={isFetchingLocations ? 'Loading locations...' : 'Select location'}
-                          disabled={isFetchingLocations || !selectedSite}
-                          style={{
-                            width: '100%',
-                            padding: '10px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            boxSizing: 'border-box',
-                            fontSize: '16px',
-                            backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
-                          }}
-                        />
-                        {activeLocationDropdownIndex === index && !isFetchingLocations && (
-                          <ul
-                            style={{
-                              border: '1px solid #ddd',
-                              maxHeight: '150px',
-                              overflowY: 'auto',
-                              position: 'absolute',
-                              top: '100%',
-                              left: 0,
-                              backgroundColor: '#fff',
-                              width: '200px',
-                              listStyle: 'none',
-                              padding: 0,
-                              margin: 0,
-                              zIndex: 10000,
-                              borderRadius: '4px',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                            }}
-                          >
-                            {filteredLocations.length > 0 ? (
-                              filteredLocations.map((location) => (
-                                <li
-                                  key={location.locationId}
-                                  onMouseDown={() => handleLocationSelect(location, index)}
-                                  style={{
-                                    padding: '8px 10px',
-                                    cursor: 'pointer',
-                                    backgroundColor:
-                                      item.locationId === location.locationId.toString()
-                                        ? '#e0e0e0'
-                                        : '#fff',
-                                    borderBottom: '1px solid #eee',
-                                  }}
-                                >
-                                  {location.name}
-                                </li>
-                              ))
-                            ) : (
-                              <li
-                                style={{
-                                  padding: '8px 10px',
-                                  color: '#888',
-                                  borderBottom: '1px solid #eee',
-                                }}
-                              >
-                                No locations found
-                              </li>
-                            )}
-                            <li
-                              onMouseDown={() => handleAddNewLocation()}
-                              style={{
-                                padding: '8px 10px',
-                                cursor: 'pointer',
-                                backgroundColor: '#fff',
-                                borderBottom: '1px solid #eee',
-                                color: '#2196F3',
-                                fontWeight: 'bold',
-                              }}
-                            >
-                              Add New Location
-                            </li>
-                          </ul>
-                        )}
-                      </td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+  <input
+    type="text"
+    value={
+      item.locationId
+        ? locations.find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
+        : ''
+    }
+    ref={(el) => {
+      locationInputRefs.current[index] = el; // Correct ref assignment
+    }}
+    onChange={(e) => {
+      const value = e.target.value;
+      const updatedItems = [...receiveItems];
+      updatedItems[index].locationId = '';
+      setReceiveItems(updatedItems);
+      setFilteredLocations(
+        locations.filter((loc) =>
+          loc.name.toLowerCase().includes(value.toLowerCase())
+        )
+      );
+      setActiveLocationDropdownIndex(index); // Show dropdown on change
+    }}
+    onFocus={() => {
+      if (!isFetchingLocations && locations.length > 0) {
+        setActiveLocationDropdownIndex(index);
+        setFilteredLocations(locations);
+      }
+    }}
+    onBlur={() => {
+      setTimeout(() => {
+        setActiveLocationDropdownIndex(null);
+      }, 300);
+    }}
+    placeholder={isFetchingLocations ? 'Loading locations...' : 'Select location'}
+    disabled={isFetchingLocations || !selectedSite}
+    style={{
+      width: '100%',
+      padding: '10px',
+      border: '1px solid #ddd',
+      borderRadius: '4px',
+      boxSizing: 'border-box',
+      fontSize: '16px',
+      backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
+    }}
+  />
+  {activeLocationDropdownIndex === index && !isFetchingLocations && locationDropdownPosition && createPortal(
+    <ul
+      style={{
+        position: 'fixed',
+        top: `${locationDropdownPosition.top}px`,
+        left: `${locationDropdownPosition.left}px`,
+        border: '1px solid #ddd',
+        maxHeight: '150px',
+        overflowY: 'auto',
+        backgroundColor: '#fff',
+        width: '200px',
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        zIndex: 30000, // Increased zIndex to ensure it appears above Other Charges
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      }}
+    >
+      {filteredLocations.length > 0 ? (
+        filteredLocations.map((location) => (
+          <li
+            key={location.locationId}
+            onMouseDown={() => handleLocationSelect(location, index)}
+            style={{
+              padding: '8px 10px',
+              cursor: 'pointer',
+              backgroundColor:
+                item.locationId === location.locationId.toString()
+                  ? '#e0e0e0'
+                  : '#fff',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            {location.name}
+          </li>
+        ))
+      ) : (
+        <li
+          style={{
+            padding: '8px 10px',
+            color: '#888',
+            borderBottom: '1px solid #eee',
+          }}
+        >
+          No locations found
+        </li>
+      )}
+      <li
+        onMouseDown={() => handleAddNewLocation()}
+        style={{
+          padding: '8px 10px',
+          cursor: 'pointer',
+          backgroundColor: '#fff',
+          borderBottom: '1px solid #eee',
+          color: '#2196F3',
+          fontWeight: 'bold',
+        }}
+      >
+        Add New Location
+      </li>
+    </ul>,
+    document.getElementById('dropdown-portal') || document.body
+  )}
+</td>
                       <td style={{ border: '1px solid #ddd', padding: '8px' }}>
                         <input
                           type="text"
