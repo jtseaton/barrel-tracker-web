@@ -1122,471 +1122,472 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               </div>
             </div>
             <div style={{ overflowX: 'auto', marginBottom: '20px', position: 'relative', zIndex: 1000 }}>
-  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1400px' }}>
     <thead>
-    <tr>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Item</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Site</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Location</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Lot Number</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Material Type</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Quantity</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Unit</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Account</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Proof</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
-      <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
-    </tr>
+      <tr>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '200px' }}>Item</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '180px' }}>Site</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '180px' }}>Location</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '120px' }}>Lot Number</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '140px' }}>Material Type</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Quantity</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Unit</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '120px' }}>Account</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Proof</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Cost</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '150px' }}>Description</th>
+        <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px', position: 'sticky', right: 0, zIndex: 1 }}>Action</th>
+      </tr>
     </thead>
     <tbody>
-  {receiveItems.map((item, index) => (
-    <tr key={index}>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="text"
-          value={item.item}
-          ref={(el) => { inputRefs.current[index] = el; }}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].item = e.target.value;
-            setReceiveItems(updatedItems);
-            setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-            setActiveItemDropdownIndex(index);
-          }}
-          onFocus={() => {
-            setActiveItemDropdownIndex(index);
-            setFilteredItems(items);
-          }}
-          onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-          placeholder="Select item"
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        />
-        {activeItemDropdownIndex === index && itemDropdownPosition && createPortal(
-          <ul
-            style={{
-              position: 'fixed',
-              top: `${itemDropdownPosition.top}px`,
-              left: `${itemDropdownPosition.left}px`,
-              border: '1px solid #ddd',
-              maxHeight: '150px',
-              overflowY: 'auto',
-              backgroundColor: '#fff',
-              width: '200px',
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              zIndex: 30000,
-              borderRadius: '4px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            }}
-          >
-            {filteredItems.length > 0 ? (
-              filteredItems.map((filteredItem) => (
+      {receiveItems.map((item, index) => (
+        <tr key={index}>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '200px' }}>
+            <input
+              type="text"
+              value={item.item}
+              ref={(el) => { inputRefs.current[index] = el; }}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].item = e.target.value;
+                setReceiveItems(updatedItems);
+                setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                setActiveItemDropdownIndex(index);
+              }}
+              onFocus={() => {
+                setActiveItemDropdownIndex(index);
+                setFilteredItems(items);
+              }}
+              onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+              placeholder="Select item"
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            />
+            {activeItemDropdownIndex === index && itemDropdownPosition && createPortal(
+              <ul
+                style={{
+                  position: 'fixed',
+                  top: `${itemDropdownPosition.top}px`,
+                  left: `${itemDropdownPosition.left}px`,
+                  border: '1px solid #ddd',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  backgroundColor: '#fff',
+                  width: '200px',
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  zIndex: 30000,
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                }}
+              >
+                {filteredItems.length > 0 ? (
+                  filteredItems.map((filteredItem) => (
+                    <li
+                      key={filteredItem.name}
+                      onMouseDown={() => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].item = filteredItem.name;
+                        updatedItems[index].materialType = filteredItem.type as MaterialType;
+                        setReceiveItems(updatedItems);
+                        setActiveItemDropdownIndex(null);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: item.item === filteredItem.name ? '#e0e0e0' : '#fff',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      {filteredItem.name}
+                    </li>
+                  ))
+                ) : (
+                  <li
+                    style={{
+                      padding: '8px 10px',
+                      color: '#888',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    No items found
+                  </li>
+                )}
                 <li
-                  key={filteredItem.name}
                   onMouseDown={() => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].item = filteredItem.name;
-                    updatedItems[index].materialType = filteredItem.type as MaterialType;
-                    setReceiveItems(updatedItems);
+                    setNewItem(item.item);
+                    setNewItemType(item.materialType);
+                    setShowNewItemModal(true);
                     setActiveItemDropdownIndex(null);
                   }}
                   style={{
                     padding: '8px 10px',
                     cursor: 'pointer',
-                    backgroundColor: item.item === filteredItem.name ? '#e0e0e0' : '#fff',
+                    backgroundColor: '#fff',
                     borderBottom: '1px solid #eee',
+                    color: '#2196F3',
+                    fontWeight: 'bold',
                   }}
                 >
-                  {filteredItem.name}
+                  Add New Item
                 </li>
-              ))
-            ) : (
-              <li
+              </ul>,
+              document.getElementById('dropdown-portal') || document.body
+            )}
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '180px' }}>
+            <input
+              type="text"
+              value={sites.find((s) => s.siteId === item.siteId)?.name || ''}
+              ref={(el) => { siteInputRefs.current[index] = el; }}
+              onChange={(e) => {
+                const value = e.target.value;
+                const updatedItems = [...receiveItems];
+                updatedItems[index].siteId = '';
+                updatedItems[index].locationId = '';
+                setReceiveItems(updatedItems);
+                setFilteredSites(sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase())));
+                setActiveSiteDropdownIndex(index);
+              }}
+              onFocus={() => {
+                setActiveSiteDropdownIndex(index);
+                setFilteredSites(sites);
+              }}
+              onBlur={() => setTimeout(() => setActiveSiteDropdownIndex(null), 300)}
+              placeholder="Select site"
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            />
+            {activeSiteDropdownIndex === index && siteDropdownPosition && createPortal(
+              <ul
                 style={{
-                  padding: '8px 10px',
-                  color: '#888',
-                  borderBottom: '1px solid #eee',
+                  position: 'fixed',
+                  top: `${siteDropdownPosition.top}px`,
+                  left: `${siteDropdownPosition.left}px`,
+                  border: '1px solid #ddd',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  backgroundColor: '#fff',
+                  width: '200px',
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  zIndex: 30000,
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                 }}
               >
-                No items found
-              </li>
-            )}
-            <li
-              onMouseDown={() => {
-                setNewItem(item.item);
-                setNewItemType(item.materialType);
-                setShowNewItemModal(true);
-                setActiveItemDropdownIndex(null);
-              }}
-              style={{
-                padding: '8px 10px',
-                cursor: 'pointer',
-                backgroundColor: '#fff',
-                borderBottom: '1px solid #eee',
-                color: '#2196F3',
-                fontWeight: 'bold',
-              }}
-            >
-              Add New Item
-            </li>
-          </ul>,
-          document.getElementById('dropdown-portal') || document.body
-        )}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="text"
-          value={sites.find((s) => s.siteId === item.siteId)?.name || ''}
-          ref={(el) => { siteInputRefs.current[index] = el; }}
-          onChange={(e) => {
-            const value = e.target.value;
-            const updatedItems = [...receiveItems];
-            updatedItems[index].siteId = '';
-            updatedItems[index].locationId = '';
-            setReceiveItems(updatedItems);
-            setFilteredSites(sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase())));
-            setActiveSiteDropdownIndex(index);
-          }}
-          onFocus={() => {
-            setActiveSiteDropdownIndex(index);
-            setFilteredSites(sites);
-          }}
-          onBlur={() => setTimeout(() => setActiveSiteDropdownIndex(null), 300)}
-          placeholder="Select site"
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        />
-        {activeSiteDropdownIndex === index && siteDropdownPosition && createPortal(
-          <ul
-            style={{
-              position: 'fixed',
-              top: `${siteDropdownPosition.top}px`,
-              left: `${siteDropdownPosition.left}px`,
-              border: '1px solid #ddd',
-              maxHeight: '150px',
-              overflowY: 'auto',
-              backgroundColor: '#fff',
-              width: '200px',
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              zIndex: 30000,
-              borderRadius: '4px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            }}
-          >
-            {filteredSites.length > 0 ? (
-              filteredSites.map((site) => (
+                {filteredSites.length > 0 ? (
+                  filteredSites.map((site) => (
+                    <li
+                      key={site.siteId}
+                      onMouseDown={() => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].siteId = site.siteId;
+                        updatedItems[index].locationId = '';
+                        setReceiveItems(updatedItems);
+                        fetchLocations(site.siteId, index);
+                        setActiveSiteDropdownIndex(null);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: item.siteId === site.siteId ? '#e0e0e0' : '#fff',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      {site.name}
+                    </li>
+                  ))
+                ) : (
+                  <li
+                    style={{
+                      padding: '8px 10px',
+                      color: '#888',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    No sites found
+                  </li>
+                )}
                 <li
-                  key={site.siteId}
                   onMouseDown={() => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].siteId = site.siteId;
-                    updatedItems[index].locationId = '';
-                    setReceiveItems(updatedItems);
-                    fetchLocations(site.siteId, index);
+                    navigate('/sites', { state: { fromReceive: true } });
                     setActiveSiteDropdownIndex(null);
                   }}
                   style={{
                     padding: '8px 10px',
                     cursor: 'pointer',
-                    backgroundColor: item.siteId === site.siteId ? '#e0e0e0' : '#fff',
+                    backgroundColor: '#fff',
                     borderBottom: '1px solid #eee',
+                    color: '#2196F3',
+                    fontWeight: 'bold',
                   }}
                 >
-                  {site.name}
+                  Add New Site
                 </li>
-              ))
-            ) : (
-              <li
+              </ul>,
+              document.getElementById('dropdown-portal') || document.body
+            )}
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '180px' }}>
+            <input
+              type="text"
+              value={
+                item.locationId && rowLocations[index]
+                  ? rowLocations[index].find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
+                  : ''
+              }
+              ref={(el) => { locationInputRefs.current[index] = el; }}
+              onChange={(e) => {
+                const value = e.target.value;
+                const updatedItems = [...receiveItems];
+                updatedItems[index].locationId = '';
+                setReceiveItems(updatedItems);
+                setRowFilteredLocations((prev) => {
+                  const newFiltered = [...prev];
+                  newFiltered[index] = rowLocations[index]?.filter((loc) =>
+                    loc.name.toLowerCase().includes(value.toLowerCase())
+                  ) || [];
+                  return newFiltered;
+                });
+                setActiveLocationDropdownIndex(index);
+              }}
+              onFocus={() => {
+                if (!rowFetchingLocations[index] && rowLocations[index]?.length > 0) {
+                  setActiveLocationDropdownIndex(index);
+                  setRowFilteredLocations((prev) => {
+                    const newFiltered = [...prev];
+                    newFiltered[index] = rowLocations[index] || [];
+                    return newFiltered;
+                  });
+                }
+              }}
+              onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 300)}
+              placeholder={rowFetchingLocations[index] ? 'Loading locations...' : 'Select location'}
+              disabled={!item.siteId || rowFetchingLocations[index]}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                boxSizing: 'border-box',
+                fontSize: '16px',
+                backgroundColor: !item.siteId || rowFetchingLocations[index] ? '#f5f5f5' : '#fff',
+              }}
+            />
+            {activeLocationDropdownIndex === index && !rowFetchingLocations[index] && dropdownPosition && createPortal(
+              <ul
                 style={{
-                  padding: '8px 10px',
-                  color: '#888',
-                  borderBottom: '1px solid #eee',
+                  position: 'fixed',
+                  top: `${dropdownPosition.top}px`,
+                  left: `${dropdownPosition.left}px`,
+                  border: '1px solid #ddd',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  backgroundColor: '#fff',
+                  width: '200px',
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  zIndex: 30000,
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                 }}
               >
-                No sites found
-              </li>
-            )}
-            <li
-              onMouseDown={() => {
-                navigate('/sites', { state: { fromReceive: true } });
-                setActiveSiteDropdownIndex(null);
-              }}
-              style={{
-                padding: '8px 10px',
-                cursor: 'pointer',
-                backgroundColor: '#fff',
-                borderBottom: '1px solid #eee',
-                color: '#2196F3',
-                fontWeight: 'bold',
-              }}
-            >
-              Add New Site
-            </li>
-          </ul>,
-          document.getElementById('dropdown-portal') || document.body
-        )}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="text"
-          value={
-            item.locationId && rowLocations[index]
-              ? rowLocations[index].find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
-              : ''
-          }
-          ref={(el) => { locationInputRefs.current[index] = el; }}
-          onChange={(e) => {
-            const value = e.target.value;
-            const updatedItems = [...receiveItems];
-            updatedItems[index].locationId = '';
-            setReceiveItems(updatedItems);
-            setRowFilteredLocations((prev) => {
-              const newFiltered = [...prev];
-              newFiltered[index] = rowLocations[index]?.filter((loc) =>
-                loc.name.toLowerCase().includes(value.toLowerCase())
-              ) || [];
-              return newFiltered;
-            });
-            setActiveLocationDropdownIndex(index);
-          }}
-          onFocus={() => {
-            if (!rowFetchingLocations[index] && rowLocations[index]?.length > 0) {
-              setActiveLocationDropdownIndex(index);
-              setRowFilteredLocations((prev) => {
-                const newFiltered = [...prev];
-                newFiltered[index] = rowLocations[index] || [];
-                return newFiltered;
-              });
-            }
-          }}
-          onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 300)}
-          placeholder={rowFetchingLocations[index] ? 'Loading locations...' : 'Select location'}
-          disabled={!item.siteId || rowFetchingLocations[index]}
-          style={{
-            width: '100%',
-            padding: '10px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            boxSizing: 'border-box',
-            fontSize: '16px',
-            backgroundColor: !item.siteId || rowFetchingLocations[index] ? '#f5f5f5' : '#fff',
-          }}
-        />
-        {activeLocationDropdownIndex === index && !rowFetchingLocations[index] && dropdownPosition && createPortal(
-          <ul
-            style={{
-              position: 'fixed',
-              top: `${dropdownPosition.top}px`,
-              left: `${dropdownPosition.left}px`,
-              border: '1px solid #ddd',
-              maxHeight: '150px',
-              overflowY: 'auto',
-              backgroundColor: '#fff',
-              width: '200px',
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              zIndex: 30000,
-              borderRadius: '4px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            }}
-          >
-            {rowFilteredLocations[index]?.length > 0 ? (
-              rowFilteredLocations[index].map((location) => (
+                {rowFilteredLocations[index]?.length > 0 ? (
+                  rowFilteredLocations[index].map((location) => (
+                    <li
+                      key={location.locationId}
+                      onMouseDown={() => {
+                        const updatedItems = [...receiveItems];
+                        updatedItems[index].locationId = location.locationId.toString();
+                        setReceiveItems(updatedItems);
+                        setActiveLocationDropdownIndex(null);
+                      }}
+                      style={{
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        backgroundColor: item.locationId === location.locationId.toString() ? '#e0e0e0' : '#fff',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      {location.name}
+                    </li>
+                  ))
+                ) : (
+                  <li
+                    style={{
+                      padding: '8px 10px',
+                      color: '#888',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    No locations found
+                  </li>
+                )}
                 <li
-                  key={location.locationId}
                   onMouseDown={() => {
-                    const updatedItems = [...receiveItems];
-                    updatedItems[index].locationId = location.locationId.toString();
-                    setReceiveItems(updatedItems);
+                    navigate('/locations', { state: { fromReceive: true, siteId: item.siteId } });
                     setActiveLocationDropdownIndex(null);
                   }}
                   style={{
                     padding: '8px 10px',
                     cursor: 'pointer',
-                    backgroundColor: item.locationId === location.locationId.toString() ? '#e0e0e0' : '#fff',
+                    backgroundColor: '#fff',
                     borderBottom: '1px solid #eee',
+                    color: '#2196F3',
+                    fontWeight: 'bold',
                   }}
                 >
-                  {location.name}
+                  Add New Location
                 </li>
-              ))
-            ) : (
-              <li
-                style={{
-                  padding: '8px 10px',
-                  color: '#888',
-                  borderBottom: '1px solid #eee',
-                }}
-              >
-                No locations found
-              </li>
+              </ul>,
+              document.getElementById('dropdown-portal') || document.body
             )}
-            <li
-              onMouseDown={() => {
-                navigate('/locations', { state: { fromReceive: true, siteId: item.siteId } });
-                setActiveLocationDropdownIndex(null);
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '120px' }}>
+            <input
+              type="text"
+              value={item.lotNumber}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].lotNumber = e.target.value;
+                setReceiveItems(updatedItems);
               }}
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            />
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '140px' }}>
+            <select
+              value={item.materialType}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].materialType = e.target.value as MaterialType;
+                updatedItems[index].proof = '';
+                updatedItems[index].account = Account.Storage;
+                setReceiveItems(updatedItems);
+              }}
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            >
+              {Object.values(MaterialType).map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
+            <input
+              type="number"
+              value={item.quantity}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].quantity = e.target.value;
+                setReceiveItems(updatedItems);
+              }}
+              step="0.01"
+              min="0"
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            />
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
+            <select
+              value={item.unit}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].unit = e.target.value as Unit;
+                setReceiveItems(updatedItems);
+              }}
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            >
+              {Object.values(Unit).map((unit) => (
+                <option key={unit} value={unit}>{unit}</option>
+              ))}
+            </select>
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '120px' }}>
+            {item.materialType === MaterialType.Spirits ? (
+              <select
+                value={item.account || Account.Storage}
+                onChange={(e) => {
+                  const updatedItems = [...receiveItems];
+                  updatedItems[index].account = e.target.value as Account;
+                  setReceiveItems(updatedItems);
+                }}
+                style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+              >
+                <option value={Account.Storage}>Storage</option>
+                <option value={Account.Processing}>Processing</option>
+                <option value={Account.Production}>Production</option>
+              </select>
+            ) : (
+              <span style={{ color: '#888', display: 'block', textAlign: 'center', padding: '12px' }}>-</span>
+            )}
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
+            {item.materialType === MaterialType.Spirits ? (
+              <input
+                type="number"
+                value={item.proof || ''}
+                onChange={(e) => {
+                  const updatedItems = [...receiveItems];
+                  updatedItems[index].proof = e.target.value;
+                  setReceiveItems(updatedItems);
+                }}
+                step="0.01"
+                min="0"
+                max="200"
+                style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+              />
+            ) : (
+              <span style={{ color: '#888', display: 'block', textAlign: 'center', padding: '12px' }}>-</span>
+            )}
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
+            <input
+              type="number"
+              value={item.cost || ''}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].cost = e.target.value;
+                setReceiveItems(updatedItems);
+              }}
+              step="0.01"
+              min="0"
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            />
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '150px' }}>
+            <input
+              type="text"
+              value={item.description || ''}
+              onChange={(e) => {
+                const updatedItems = [...receiveItems];
+                updatedItems[index].description = e.target.value;
+                setReceiveItems(updatedItems);
+              }}
+              placeholder={item.materialType === MaterialType.Other ? 'Required for Other' : 'Optional'}
+              style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+            />
+          </td>
+          <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px', position: 'sticky', right: 0, backgroundColor: '#fff', zIndex: 1 }}>
+            <button
+              onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
               style={{
-                padding: '8px 10px',
+                backgroundColor: '#F86752',
+                color: '#fff',
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: '4px',
                 cursor: 'pointer',
-                backgroundColor: '#fff',
-                borderBottom: '1px solid #eee',
-                color: '#2196F3',
-                fontWeight: 'bold',
+                fontSize: '14px',
+                width: '100%',
               }}
             >
-              Add New Location
-            </li>
-          </ul>,
-          document.getElementById('dropdown-portal') || document.body
-        )}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="text"
-          value={item.lotNumber}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].lotNumber = e.target.value;
-            setReceiveItems(updatedItems);
-          }}
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        />
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <select
-          value={item.materialType}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].materialType = e.target.value as MaterialType;
-            updatedItems[index].proof = ''; // Reset proof when material type changes
-            updatedItems[index].account = Account.Storage; // Default account for spirits
-            setReceiveItems(updatedItems);
-          }}
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        >
-          {Object.values(MaterialType).map((type) => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="number"
-          value={item.quantity}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].quantity = e.target.value;
-            setReceiveItems(updatedItems);
-          }}
-          step="0.01"
-          min="0"
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        />
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <select
-          value={item.unit}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].unit = e.target.value as Unit;
-            setReceiveItems(updatedItems);
-          }}
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        >
-          {Object.values(Unit).map((unit) => (
-            <option key={unit} value={unit}>{unit}</option>
-          ))}
-        </select>
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        {item.materialType === MaterialType.Spirits ? (
-          <select
-            value={item.account || Account.Storage}
-            onChange={(e) => {
-              const updatedItems = [...receiveItems];
-              updatedItems[index].account = e.target.value as Account;
-              setReceiveItems(updatedItems);
-            }}
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-          >
-            <option value={Account.Storage}>Storage</option>
-            <option value={Account.Processing}>Processing</option>
-            <option value={Account.Production}>Production</option>
-          </select>
-        ) : (
-          <span style={{ color: '#888' }}>-</span>
-        )}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        {item.materialType === MaterialType.Spirits ? (
-          <input
-            type="number"
-            value={item.proof || ''}
-            onChange={(e) => {
-              const updatedItems = [...receiveItems];
-              updatedItems[index].proof = e.target.value;
-              setReceiveItems(updatedItems);
-            }}
-            step="0.01"
-            min="0"
-            max="200"
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-          />
-        ) : (
-          <span style={{ color: '#888' }}>-</span>
-        )}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="number"
-          value={item.cost || ''}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].cost = e.target.value;
-            setReceiveItems(updatedItems);
-          }}
-          step="0.01"
-          min="0"
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        />
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-        <input
-          type="text"
-          value={item.description || ''}
-          onChange={(e) => {
-            const updatedItems = [...receiveItems];
-            updatedItems[index].description = e.target.value;
-            setReceiveItems(updatedItems);
-          }}
-          placeholder={item.materialType === MaterialType.Other ? 'Required for Other' : 'Optional'}
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-        />
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-        <button
-          onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
-          style={{
-            backgroundColor: '#F86752',
-            color: '#fff',
-            padding: '8px 16px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >
-          Remove
-        </button>
-      </td>
-    </tr>
-  ))}
-</tbody>
+              Remove
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
   </table>
 </div>
             <div style={{ marginBottom: '20px', position: 'relative', zIndex: 500 }}>
