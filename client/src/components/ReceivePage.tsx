@@ -23,6 +23,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const location = useLocation();
   const locationState = location.state as { newSiteId?: string; newLocationId?: string };
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const siteInputRef = useRef<HTMLInputElement | null>(null); // New ref for Site input
+  const locationInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
     item: '',
@@ -38,22 +40,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     description: '',
     cost: '',
     poNumber: '',
-    siteId: 'DSP-AL-20010',
+    siteId: locationState?.newSiteId || '', // Initialize with newSiteId or empty
     locationId: '',
   });
-  
-  const locationInputRefs = useRef<(HTMLInputElement | null)[]>([]); // NEW: Ref for Location inputs
-  const [locationDropdownPosition, setLocationDropdownPosition] = useState<{ top: number; left: number } | null>(null); // NEW: Position for Location dropdown
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [useSingleItem, setUseSingleItem] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [activeItemDropdownIndex, setActiveItemDropdownIndex] = useState<number | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010');
+  const [selectedSite, setSelectedSite] = useState<string>(locationState?.newSiteId || ''); // Initialize with newSiteId
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
   const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
+  const [siteDropdownPosition, setSiteDropdownPosition] = useState<{ top: number; left: number } | null>(null); // New state for Site dropdown position
   const [locations, setLocations] = useState<Location[]>([]);
   const [filteredLocations, setFilteredLocations] = useState<Location[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>(vendors);
@@ -73,117 +73,130 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
 
   const fetchLocations = useCallback(async (siteId: string, retryCount = 3, delay = 1000): Promise<void> => {
-    if (!siteId) {
-      setLocations([]);
-      setFilteredLocations([]);
-      setIsFetchingLocations(false);
-      return;
+  if (!siteId) {
+    setLocations([]);
+    setFilteredLocations([]);
+    setIsFetchingLocations(false);
+    return;
+  }
+  setIsFetchingLocations(true);
+  try {
+    const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
+    console.log('Fetching locations from:', url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(`HTTP error! status: ${res.status}, message: ${errorData.error || 'Unknown error'}`);
     }
-    setIsFetchingLocations(true);
+    const data: Location[] = await res.json();
+    console.log('Fetched locations:', data);
+    setLocations(data);
+    setFilteredLocations(data);
+    setProductionError(null);
+  } catch (err: any) {
+    console.error('Fetch locations error:', err);
+    if (retryCount > 0 && err.name !== 'AbortError') {
+      console.log(`Retrying fetchLocations, attempts left: ${retryCount}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchLocations(siteId, retryCount - 1, delay * 2);
+    }
+    setProductionError(`Failed to fetch locations: ${err.message}`);
+    setLocations([]);
+    setFilteredLocations([]);
+  } finally {
+    setIsFetchingLocations(false);
+  }
+}, []);
+
+useEffect(() => {
+  if (locationState?.newSiteId) {
+    setSelectedSite(locationState.newSiteId);
+    setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
+  }
+  if (locationState?.newLocationId) {
+    setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId }));
+  }
+
+  const fetchItems = async () => {
     try {
-      const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
-      console.log('Fetching locations from:', url);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(`${API_BASE_URL}/api/items`, { signal: controller.signal });
       clearTimeout(timeoutId);
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(`HTTP error! status: ${res.status}, message: ${errorData.error || 'Unknown error'}`);
-      }
-      const data: Location[] = await res.json();
-      console.log('Fetched locations:', data);
-      setLocations(data);
-      setFilteredLocations(data);
-      setProductionError(null);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setItems(data);
+      setFilteredItems(data);
     } catch (err: any) {
-      console.error('Fetch locations error:', err);
-      if (retryCount > 0 && err.name !== 'AbortError') {
-        console.log(`Retrying fetchLocations, attempts left: ${retryCount}`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchLocations(siteId, retryCount - 1, delay * 2);
-      }
-      setProductionError(`Failed to fetch locations: ${err.message}`);
-      setLocations([]);
-      setFilteredLocations([]);
-    } finally {
-      setIsFetchingLocations(false);
+      setProductionError('Failed to fetch items: ' + err.message);
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    if (locationState?.newSiteId) {
-      setSelectedSite(locationState.newSiteId);
+  const fetchPOs = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(
+        `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setPurchaseOrders(data);
+    } catch (err: any) {
+      setProductionError('Failed to fetch POs: ' + err.message);
     }
-    if (locationState?.newLocationId) {
-      setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId }));
+  };
+
+  const fetchSites = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${API_BASE_URL}/api/sites`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setSites(data);
+      setFilteredSites(data);
+    } catch (err: any) {
+      setProductionError('Failed to fetch sites: ' + err.message);
     }
+  };
 
-    const fetchItems = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/items`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setItems(data);
-        setFilteredItems(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch items: ' + err.message);
-      }
-    };
+  fetchSites();
+  fetchItems();
+  if (singleForm.source) fetchPOs();
+  setFilteredVendors(vendors);
+}, [locationState, singleForm.source, vendors]);
 
-    const fetchPOs = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(
-          `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
-          { signal: controller.signal }
-        );
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setPurchaseOrders(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch POs: ' + err.message);
-      }
-    };
+useEffect(() => {
+  if (showSiteSuggestions && siteInputRef.current) {
+    const rect = siteInputRef.current.getBoundingClientRect();
+    setSiteDropdownPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+    });
+  } else {
+    setSiteDropdownPosition(null);
+  }
+}, [showSiteSuggestions]);
 
-    const fetchSites = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/sites`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setSites(data);
-        setFilteredSites(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch sites: ' + err.message);
-      }
-    };
-
-    fetchSites();
-    fetchItems();
-    if (singleForm.source) fetchPOs();
-    setFilteredVendors(vendors);
-  }, [locationState, singleForm.source, vendors]);
-
-  useEffect(() => {
-    if (activeLocationDropdownIndex !== null && locationInputRefs.current[activeLocationDropdownIndex]) {
-      const input = locationInputRefs.current[activeLocationDropdownIndex];
-      const rect = input!.getBoundingClientRect();
-      setLocationDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
-    } else {
-      setLocationDropdownPosition(null);
-    }
-  }, [activeLocationDropdownIndex]);
+useEffect(() => {
+  if (activeLocationDropdownIndex !== null && locationInputRefs.current[activeLocationDropdownIndex]) {
+    const input = locationInputRefs.current[activeLocationDropdownIndex];
+    const rect = input!.getBoundingClientRect();
+    setDropdownPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+    });
+  } else {
+    setDropdownPosition(null);
+  }
+}, [activeLocationDropdownIndex]);
 
   useEffect(() => {
     fetchLocations(selectedSite);
@@ -1064,7 +1077,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         : ''
     }
     ref={(el) => {
-      locationInputRefs.current[index] = el; // Correct ref assignment
+      locationInputRefs.current[index] = el;
     }}
     onChange={(e) => {
       const value = e.target.value;
@@ -1076,7 +1089,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           loc.name.toLowerCase().includes(value.toLowerCase())
         )
       );
-      setActiveLocationDropdownIndex(index); // Show dropdown on change
+      setActiveLocationDropdownIndex(index);
     }}
     onFocus={() => {
       if (!isFetchingLocations && locations.length > 0) {
@@ -1090,7 +1103,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       }, 300);
     }}
     placeholder={isFetchingLocations ? 'Loading locations...' : 'Select location'}
-    disabled={isFetchingLocations || !selectedSite}
+    disabled={isFetchingLocations || !item.siteId}
     style={{
       width: '100%',
       padding: '10px',
@@ -1098,15 +1111,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       borderRadius: '4px',
       boxSizing: 'border-box',
       fontSize: '16px',
-      backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
+      backgroundColor: isFetchingLocations || !item.siteId ? '#f5f5f5' : '#fff',
     }}
   />
-  {activeLocationDropdownIndex === index && !isFetchingLocations && locationDropdownPosition && createPortal(
+  {activeLocationDropdownIndex === index && !isFetchingLocations && dropdownPosition && createPortal(
     <ul
       style={{
         position: 'fixed',
-        top: `${locationDropdownPosition.top}px`,
-        left: `${locationDropdownPosition.left}px`,
+        top: `${dropdownPosition.top}px`,
+        left: `${dropdownPosition.left}px`,
         border: '1px solid #ddd',
         maxHeight: '150px',
         overflowY: 'auto',
@@ -1115,7 +1128,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         listStyle: 'none',
         padding: 0,
         margin: 0,
-        zIndex: 30000, // Increased zIndex to ensure it appears above Other Charges
+        zIndex: 30000,
         borderRadius: '4px',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
       }}
