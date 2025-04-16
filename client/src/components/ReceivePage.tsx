@@ -39,9 +39,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     account: Account.Storage,
     proof: '',
   });
-  const [rowLocations, setRowLocations] = useState<Location[][]>([]);
-  const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>([]);
-  const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
+  const [rowLocations, setRowLocations] = useState<Location[][]>(Array(10000).fill([]));
+  const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>(Array(10000).fill([]));
+  const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>(Array(10000).fill(false));
   const locationInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
@@ -92,9 +92,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
 
-  const fetchLocations = useCallback(async (siteId: string, rowIndex?: number): Promise<void> => {
+  const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
     if (!siteId) {
-      if (rowIndex !== undefined) {
+      if (rowIndex !== 9999) {
         setRowLocations((prev) => {
           const newLocations = [...prev];
           newLocations[rowIndex] = [];
@@ -117,7 +117,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       }
       return;
     }
-    if (rowIndex !== undefined) {
+    if (rowIndex !== 9999) {
       setRowFetchingLocations((prev: boolean[]) => {
         const newFetching = [...prev];
         newFetching[rowIndex] = true;
@@ -131,7 +131,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data: Location[] = await res.json();
-      if (rowIndex !== undefined) {
+      if (rowIndex !== 9999) {
         setRowLocations((prev) => {
           const newLocations = [...prev];
           newLocations[rowIndex] = data;
@@ -148,6 +148,21 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           return newFetching;
         });
       } else {
+        setRowLocations((prev) => {
+          const newLocations = [...prev];
+          newLocations[9999] = data;
+          return newLocations;
+        });
+        setRowFilteredLocations((prev) => {
+          const newFiltered = [...prev];
+          newFiltered[9999] = data;
+          return newFiltered;
+        });
+        setRowFetchingLocations((prev) => {
+          const newFetching = [...prev];
+          newFetching[9999] = false;
+          return newFetching;
+        });
         setLocations(data);
         setFilteredLocations(data);
         setIsFetchingLocations(false);
@@ -155,7 +170,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     } catch (err: any) {
       console.error('Fetch locations error:', err);
       setProductionError(`Failed to fetch locations: ${err.message}`);
-      if (rowIndex !== undefined) {
+      if (rowIndex !== 9999) {
         setRowLocations((prev) => {
           const newLocations = [...prev];
           newLocations[rowIndex] = [];
@@ -172,6 +187,21 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           return newFetching;
         });
       } else {
+        setRowLocations((prev) => {
+          const newLocations = [...prev];
+          newLocations[9999] = [];
+          return newLocations;
+        });
+        setRowFilteredLocations((prev) => {
+          const newFiltered = [...prev];
+          newFiltered[9999] = [];
+          return newFiltered;
+        });
+        setRowFetchingLocations((prev) => {
+          const newFetching = [...prev];
+          newFetching[9999] = false;
+          return newFetching;
+        });
         setLocations([]);
         setFilteredLocations([]);
         setIsFetchingLocations(false);
@@ -1545,7 +1575,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
         backgroundColor: '#fff',
         padding: '20px',
         borderRadius: '8px',
-        width: '600px',
+        width: '400px',
         boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
         maxHeight: '80vh',
         overflowY: 'auto',
@@ -1554,7 +1584,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
       <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
         Add New Item
       </h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
         {/* Item */}
         <div style={{ position: 'relative' }}>
           <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
@@ -1581,6 +1611,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             placeholder="Type to search items"
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -1694,6 +1725,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             placeholder="Type to search sites"
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -1729,7 +1761,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
                         siteId: site.siteId,
                         locationId: '',
                       });
-                      fetchLocations(site.siteId, receiveItems.length);
+                      fetchLocations(site.siteId, 9999);
                       setActiveSiteDropdownIndex(null);
                     }}
                     style={{
@@ -1784,8 +1816,8 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
           <input
             type="text"
             value={
-              newReceiveItem.locationId && rowLocations[receiveItems.length]
-                ? rowLocations[receiveItems.length].find(
+              newReceiveItem.locationId && rowLocations[9999]
+                ? rowLocations[9999].find(
                     (loc) => loc.locationId.toString() === newReceiveItem.locationId
                   )?.name || ''
                 : ''
@@ -1796,8 +1828,8 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               setNewReceiveItem({ ...newReceiveItem, locationId: '' });
               setRowFilteredLocations((prev) => {
                 const newFiltered = [...prev];
-                newFiltered[receiveItems.length] =
-                  rowLocations[receiveItems.length]?.filter((loc) =>
+                newFiltered[9999] =
+                  rowLocations[9999]?.filter((loc) =>
                     loc.name.toLowerCase().includes(value.toLowerCase())
                   ) || [];
                 return newFiltered;
@@ -1806,41 +1838,39 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             }}
             onFocus={() => {
               if (
-                !rowFetchingLocations[receiveItems.length] &&
-                rowLocations[receiveItems.length]?.length > 0
+                !rowFetchingLocations[9999] &&
+                rowLocations[9999]?.length > 0
               ) {
                 setActiveLocationDropdownIndex(9999);
                 setRowFilteredLocations((prev) => {
                   const newFiltered = [...prev];
-                  newFiltered[receiveItems.length] =
-                    rowLocations[receiveItems.length] || [];
+                  newFiltered[9999] = rowLocations[9999] || [];
                   return newFiltered;
                 });
               }
             }}
             onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 200)}
             placeholder={
-              rowFetchingLocations[receiveItems.length]
+              rowFetchingLocations[9999]
                 ? 'Loading locations...'
                 : 'Type to search locations'
             }
-            disabled={
-              !newReceiveItem.siteId || rowFetchingLocations[receiveItems.length]
-            }
+            disabled={!newReceiveItem.siteId || rowFetchingLocations[9999]}
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
               fontSize: '16px',
               backgroundColor:
-                !newReceiveItem.siteId || rowFetchingLocations[receiveItems.length]
+                !newReceiveItem.siteId || rowFetchingLocations[9999]
                   ? '#f5f5f5'
                   : '#fff',
             }}
           />
           {activeLocationDropdownIndex === 9999 &&
-            !rowFetchingLocations[receiveItems.length] &&
+            !rowFetchingLocations[9999] &&
             dropdownPosition &&
             createPortal(
               <ul
@@ -1861,8 +1891,8 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                 }}
               >
-                {rowFilteredLocations[receiveItems.length]?.length > 0 ? (
-                  rowFilteredLocations[receiveItems.length].map((location) => (
+                {rowFilteredLocations[9999]?.length > 0 ? (
+                  rowFilteredLocations[9999].map((location) => (
                     <li
                       key={location.locationId}
                       onMouseDown={() => {
@@ -1919,26 +1949,6 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               document.getElementById('dropdown-portal') || document.body
             )}
         </div>
-        {/* Lot Number */}
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-            Lot Number:
-          </label>
-          <input
-            type="text"
-            value={newReceiveItem.lotNumber}
-            onChange={(e) =>
-              setNewReceiveItem({ ...newReceiveItem, lotNumber: e.target.value })
-            }
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '16px',
-            }}
-          />
-        </div>
         {/* Material Type */}
         <div>
           <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
@@ -1956,6 +1966,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             }
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -1984,6 +1995,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             min="0"
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -2006,6 +2018,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             }
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -2018,6 +2031,27 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               </option>
             ))}
           </select>
+        </div>
+        {/* Lot Number */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Lot Number:
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.lotNumber}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, lotNumber: e.target.value })
+            }
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
         </div>
         {/* Account (for Spirits) */}
         {newReceiveItem.materialType === MaterialType.Spirits && (
@@ -2035,6 +2069,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               }
               style={{
                 width: '100%',
+                maxWidth: '300px',
                 padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
@@ -2064,6 +2099,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               max="200"
               style={{
                 width: '100%',
+                maxWidth: '300px',
                 padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
@@ -2087,6 +2123,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             min="0"
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -2095,7 +2132,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
           />
         </div>
         {/* Description */}
-        <div style={{ gridColumn: 'span 2' }}>
+        <div>
           <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
             Description:
           </label>
@@ -2115,6 +2152,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             }
             style={{
               width: '100%',
+              maxWidth: '300px',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -2183,11 +2221,11 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               ...newReceiveItem,
               identifier: newReceiveItem.item || 'UNKNOWN_ITEM',
             }]);
-            // Update rowLocations and rowFilteredLocations
-            setRowLocations((prev) => [...prev, rowLocations[receiveItems.length] || []]);
+            // Update rowLocations and rowFilteredLocations for table
+            setRowLocations((prev) => [...prev, rowLocations[9999] || []]);
             setRowFilteredLocations((prev) => [
               ...prev,
-              rowFilteredLocations[receiveItems.length] || [],
+              rowFilteredLocations[9999] || [],
             ]);
             setRowFetchingLocations((prev) => [...prev, false]);
             // Reset modal state
@@ -2200,10 +2238,26 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               unit: Unit.Pounds,
               cost: '',
               description: '',
-              siteId: '', // Removed default to avoid assumption
+              siteId: '',
               locationId: '',
               account: Account.Storage,
               proof: '',
+            });
+            // Clear modal location data
+            setRowLocations((prev) => {
+              const newLocations = [...prev];
+              newLocations[9999] = [];
+              return newLocations;
+            });
+            setRowFilteredLocations((prev) => {
+              const newFiltered = [...prev];
+              newFiltered[9999] = [];
+              return newFiltered;
+            });
+            setRowFetchingLocations((prev) => {
+              const newFetching = [...prev];
+              newFetching[9999] = false;
+              return newFetching;
             });
             setShowAddItemModal(false);
             setProductionError(null);
@@ -2243,6 +2297,22 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             setActiveItemDropdownIndex(null);
             setActiveSiteDropdownIndex(null);
             setActiveLocationDropdownIndex(null);
+            // Clear modal location data
+            setRowLocations((prev) => {
+              const newLocations = [...prev];
+              newLocations[9999] = [];
+              return newLocations;
+            });
+            setRowFilteredLocations((prev) => {
+              const newFiltered = [...prev];
+              newFiltered[9999] = [];
+              return newFiltered;
+            });
+            setRowFetchingLocations((prev) => {
+              const newFetching = [...prev];
+              newFetching[9999] = false;
+              return newFetching;
+            });
           }}
           style={{
             backgroundColor: '#F86752',
