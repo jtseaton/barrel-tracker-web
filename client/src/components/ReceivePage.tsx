@@ -39,9 +39,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     account: Account.Storage,
     proof: '',
   });
-  const [rowLocations, setRowLocations] = useState<Location[][]>(Array(10000).fill([]));
-  const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>(Array(10000).fill([]));
-  const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>(Array(10000).fill(false));
+  const [rowLocations, setRowLocations] = useState<Location[][]>([]);
+const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>([]);
+const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
   const locationInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
@@ -94,118 +94,67 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
     if (!siteId) {
-      if (rowIndex !== 9999) {
-        setRowLocations((prev) => {
-          const newLocations = [...prev];
-          newLocations[rowIndex] = [];
-          return newLocations;
-        });
-        setRowFilteredLocations((prev) => {
-          const newFiltered = [...prev];
-          newFiltered[rowIndex] = [];
-          return newFiltered;
-        });
-        setRowFetchingLocations((prev) => {
-          const newFetching = [...prev];
-          newFetching[rowIndex] = false;
-          return newFetching;
-        });
-      } else {
-        setLocations([]);
-        setFilteredLocations([]);
-        setIsFetchingLocations(false);
-      }
-      return;
-    }
-    if (rowIndex !== 9999) {
-      setRowFetchingLocations((prev: boolean[]) => {
+      setRowLocations((prev) => {
+        const newLocations = [...prev];
+        newLocations[rowIndex] = [];
+        return newLocations;
+      });
+      setRowFilteredLocations((prev) => {
+        const newFiltered = [...prev];
+        newFiltered[rowIndex] = [];
+        return newFiltered;
+      });
+      setRowFetchingLocations((prev) => {
         const newFetching = [...prev];
-        newFetching[rowIndex] = true;
+        newFetching[rowIndex] = false;
         return newFetching;
       });
-    } else {
-      setIsFetchingLocations(true);
+      return;
     }
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      newFetching[rowIndex] = true;
+      return newFetching;
+    });
     try {
       const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data: Location[] = await res.json();
-      if (rowIndex !== 9999) {
-        setRowLocations((prev) => {
-          const newLocations = [...prev];
-          newLocations[rowIndex] = data;
-          return newLocations;
-        });
-        setRowFilteredLocations((prev) => {
-          const newFiltered = [...prev];
-          newFiltered[rowIndex] = data;
-          return newFiltered;
-        });
-        setRowFetchingLocations((prev) => {
-          const newFetching = [...prev];
-          newFetching[rowIndex] = false;
-          return newFetching;
-        });
-      } else {
-        setRowLocations((prev) => {
-          const newLocations = [...prev];
-          newLocations[9999] = data;
-          return newLocations;
-        });
-        setRowFilteredLocations((prev) => {
-          const newFiltered = [...prev];
-          newFiltered[9999] = data;
-          return newFiltered;
-        });
-        setRowFetchingLocations((prev) => {
-          const newFetching = [...prev];
-          newFetching[9999] = false;
-          return newFetching;
-        });
-        setLocations(data);
-        setFilteredLocations(data);
-        setIsFetchingLocations(false);
-      }
+      console.log(`Fetched locations for site ${siteId} at index ${rowIndex}:`, data); // Debug log
+      setRowLocations((prev) => {
+        const newLocations = [...prev];
+        newLocations[rowIndex] = data;
+        return newLocations;
+      });
+      setRowFilteredLocations((prev) => {
+        const newFiltered = [...prev];
+        newFiltered[rowIndex] = data;
+        return newFiltered;
+      });
+      setRowFetchingLocations((prev) => {
+        const newFetching = [...prev];
+        newFetching[rowIndex] = false;
+        return newFetching;
+      });
     } catch (err: any) {
       console.error('Fetch locations error:', err);
       setProductionError(`Failed to fetch locations: ${err.message}`);
-      if (rowIndex !== 9999) {
-        setRowLocations((prev) => {
-          const newLocations = [...prev];
-          newLocations[rowIndex] = [];
-          return newLocations;
-        });
-        setRowFilteredLocations((prev) => {
-          const newFiltered = [...prev];
-          newFiltered[rowIndex] = [];
-          return newFiltered;
-        });
-        setRowFetchingLocations((prev) => {
-          const newFetching = [...prev];
-          newFetching[rowIndex] = false;
-          return newFetching;
-        });
-      } else {
-        setRowLocations((prev) => {
-          const newLocations = [...prev];
-          newLocations[9999] = [];
-          return newLocations;
-        });
-        setRowFilteredLocations((prev) => {
-          const newFiltered = [...prev];
-          newFiltered[9999] = [];
-          return newFiltered;
-        });
-        setRowFetchingLocations((prev) => {
-          const newFetching = [...prev];
-          newFetching[9999] = false;
-          return newFetching;
-        });
-        setLocations([]);
-        setFilteredLocations([]);
-        setIsFetchingLocations(false);
-      }
+      setRowLocations((prev) => {
+        const newLocations = [...prev];
+        newLocations[rowIndex] = [];
+        return newLocations;
+      });
+      setRowFilteredLocations((prev) => {
+        const newFiltered = [...prev];
+        newFiltered[rowIndex] = [];
+        return newFiltered;
+      });
+      setRowFetchingLocations((prev) => {
+        const newFetching = [...prev];
+        newFetching[rowIndex] = false;
+        return newFetching;
+      });
     }
   }, [API_BASE_URL]);
 
@@ -478,6 +427,22 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   const addItemRow = () => {
     setShowAddItemModal(true);
+    // Initialize modal location data
+    setRowLocations((prev) => {
+      const newLocations = [...prev];
+      newLocations[9999] = [];
+      return newLocations;
+    });
+    setRowFilteredLocations((prev) => {
+      const newFiltered = [...prev];
+      newFiltered[9999] = [];
+      return newFiltered;
+    });
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      newFetching[9999] = false;
+      return newFetching;
+    });
   };
 
   const handleReceive = async () => {
@@ -1825,7 +1790,6 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             ref={(el) => { locationInputRefs.current[9999] = el; }}
             onChange={(e) => {
               const value = e.target.value;
-              setNewReceiveItem({ ...newReceiveItem, locationId: '' });
               setRowFilteredLocations((prev) => {
                 const newFiltered = [...prev];
                 newFiltered[9999] =
@@ -1837,10 +1801,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               setActiveLocationDropdownIndex(9999);
             }}
             onFocus={() => {
-              if (
-                !rowFetchingLocations[9999] &&
-                rowLocations[9999]?.length > 0
-              ) {
+              if (!rowFetchingLocations[9999] && rowLocations[9999]?.length > 0) {
                 setActiveLocationDropdownIndex(9999);
                 setRowFilteredLocations((prev) => {
                   const newFiltered = [...prev];
@@ -1853,7 +1814,9 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             placeholder={
               rowFetchingLocations[9999]
                 ? 'Loading locations...'
-                : 'Type to search locations'
+                : newReceiveItem.siteId
+                ? 'Type to search locations'
+                : 'Select a site first'
             }
             disabled={!newReceiveItem.siteId || rowFetchingLocations[9999]}
             style={{
@@ -1871,82 +1834,89 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
           />
           {activeLocationDropdownIndex === 9999 &&
             !rowFetchingLocations[9999] &&
-            dropdownPosition &&
-            createPortal(
-              <ul
-                style={{
-                  position: 'fixed',
-                  top: `${dropdownPosition.top}px`,
-                  left: `${dropdownPosition.left}px`,
-                  border: '1px solid #ddd',
-                  maxHeight: '150px',
-                  overflowY: 'auto',
-                  backgroundColor: '#fff',
-                  width: '200px',
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  zIndex: 30000,
-                  borderRadius: '4px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                }}
-              >
-                {rowFilteredLocations[9999]?.length > 0 ? (
-                  rowFilteredLocations[9999].map((location) => (
+            dropdownPosition && (
+              <>
+                {console.log('Location dropdown rendering:', {
+                  locations: rowLocations[9999],
+                  filtered: rowFilteredLocations[9999],
+                })}
+                {createPortal(
+                  <ul
+                    style={{
+                      position: 'fixed',
+                      top: `${dropdownPosition.top}px`,
+                      left: `${dropdownPosition.left}px`,
+                      border: '1px solid #ddd',
+                      maxHeight: '150px',
+                      overflowY: 'auto',
+                      backgroundColor: '#fff',
+                      width: '200px',
+                      listStyle: 'none',
+                      padding: 0,
+                      margin: 0,
+                      zIndex: 30000,
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    {rowFilteredLocations[9999]?.length > 0 ? (
+                      rowFilteredLocations[9999].map((location) => (
+                        <li
+                          key={location.locationId}
+                          onMouseDown={() => {
+                            setNewReceiveItem({
+                              ...newReceiveItem,
+                              locationId: location.locationId.toString(),
+                            });
+                            setActiveLocationDropdownIndex(null);
+                          }}
+                          style={{
+                            padding: '8px 10px',
+                            cursor: 'pointer',
+                            backgroundColor:
+                              newReceiveItem.locationId ===
+                              location.locationId.toString()
+                                ? '#e0e0e0'
+                                : '#fff',
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          {location.name}
+                        </li>
+                      ))
+                    ) : (
+                      <li
+                        style={{
+                          padding: '8px 10px',
+                          color: '#888',
+                          borderBottom: '1px solid #eee',
+                        }}
+                      >
+                        No locations found
+                      </li>
+                    )}
                     <li
-                      key={location.locationId}
                       onMouseDown={() => {
-                        setNewReceiveItem({
-                          ...newReceiveItem,
-                          locationId: location.locationId.toString(),
+                        navigate('/locations', {
+                          state: { fromReceive: true, siteId: newReceiveItem.siteId },
                         });
                         setActiveLocationDropdownIndex(null);
                       }}
                       style={{
                         padding: '8px 10px',
                         cursor: 'pointer',
-                        backgroundColor:
-                          newReceiveItem.locationId ===
-                          location.locationId.toString()
-                            ? '#e0e0e0'
-                            : '#fff',
+                        backgroundColor: '#fff',
                         borderBottom: '1px solid #eee',
+                        color: '#2196F3',
+                        fontWeight: 'bold',
                       }}
                     >
-                      {location.name}
+                      Add New Location
                     </li>
-                  ))
-                ) : (
-                  <li
-                    style={{
-                      padding: '8px 10px',
-                      color: '#888',
-                      borderBottom: '1px solid #eee',
-                    }}
-                  >
-                    No locations found
-                  </li>
+                  </ul>,
+                  document.getElementById('dropdown-portal') || document.body
                 )}
-                <li
-                  onMouseDown={() => {
-                    navigate('/locations', {
-                      state: { fromReceive: true, siteId: newReceiveItem.siteId },
-                    });
-                    setActiveLocationDropdownIndex(null);
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    cursor: 'pointer',
-                    backgroundColor: '#fff',
-                    borderBottom: '1px solid #eee',
-                    color: '#2196F3',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Add New Location
-                </li>
-              </ul>,
-              document.getElementById('dropdown-portal') || document.body
+              </>
             )}
         </div>
         {/* Material Type */}
@@ -2261,6 +2231,9 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             });
             setShowAddItemModal(false);
             setProductionError(null);
+            setActiveItemDropdownIndex(null);
+            setActiveSiteDropdownIndex(null);
+            setActiveLocationDropdownIndex(null);
           }}
           style={{
             backgroundColor: '#2196F3',
