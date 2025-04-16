@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor, ReceiveForm, PurchaseOrderItem, Site, Location } from '../types/interfaces';
 import { MaterialType, Unit, Account } from '../types/enums';
 
@@ -21,7 +22,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as { newSiteId?: string; newLocationId?: string };
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
     item: '',
@@ -45,6 +46,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [activeItemDropdownIndex, setActiveItemDropdownIndex] = useState<number | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const [selectedSite, setSelectedSite] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
@@ -170,6 +172,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   useEffect(() => {
     fetchLocations(selectedSite);
   }, [selectedSite, fetchLocations]);
+
+  useEffect(() => {
+    if (activeItemDropdownIndex !== null && inputRefs.current[activeItemDropdownIndex]) {
+      const input = inputRefs.current[activeItemDropdownIndex];
+      const rect = input!.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+      });
+    } else {
+      setDropdownPosition(null);
+    }
+  }, [activeItemDropdownIndex]);
 
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -429,6 +444,59 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setProductionError('Failed to receive items: ' + err.message);
       console.error('Receive error:', err);
     }
+  };
+
+  const renderItemDropdown = (index: number, item: ReceiveItem) => {
+    if (activeItemDropdownIndex !== index || !dropdownPosition) return null;
+    return createPortal(
+      <ul
+        style={{
+          position: 'fixed',
+          top: `${dropdownPosition.top}px`,
+          left: `${dropdownPosition.left}px`,
+          border: '1px solid #ddd',
+          maxHeight: '150px',
+          overflowY: 'auto',
+          backgroundColor: '#fff',
+          width: '200px',
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          zIndex: 20000,
+          borderRadius: '4px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}
+      >
+        {filteredItems.map((i) => (
+          <li
+            key={i.name}
+            onMouseDown={() => handleItemSelect(i, index)}
+            style={{
+              padding: '8px 10px',
+              cursor: 'pointer',
+              backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            {i.name}
+          </li>
+        ))}
+        <li
+          onMouseDown={() => setShowNewItemModal(true)}
+          style={{
+            padding: '8px 10px',
+            cursor: 'pointer',
+            backgroundColor: '#fff',
+            borderBottom: '1px solid #eee',
+            color: '#2196F3',
+            fontWeight: 'bold',
+          }}
+        >
+          Add New Item
+        </li>
+      </ul>,
+      document.getElementById('dropdown-portal') || document.body
+    );
   };
 
   return (
@@ -952,71 +1020,24 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 <tbody>
                   {receiveItems.map((item, index) => (
                     <tr key={index}>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
-                        <div ref={activeItemDropdownIndex === index ? dropdownRef : null}>
-                          <input
-                            type="text"
-                            value={item.item}
-                            onChange={(e) => {
-                              const updatedItems = [...receiveItems];
-                              updatedItems[index].item = e.target.value;
-                              setReceiveItems(updatedItems);
-                              setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                            }}
-                            onFocus={() => setActiveItemDropdownIndex(index)}
-                            onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                          />
-                        </div>
-                        {activeItemDropdownIndex === index && (
-                          <ul
-                            style={{
-                              position: 'absolute',
-                              top: '100%',
-                              left: 0,
-                              border: '1px solid #ddd',
-                              maxHeight: '150px',
-                              overflowY: 'auto',
-                              backgroundColor: '#fff',
-                              width: '200px',
-                              listStyle: 'none',
-                              padding: 0,
-                              margin: 0,
-                              zIndex: 10000,
-                              borderRadius: '4px',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                              transform: 'translate(0, 0)', // Force stacking context
-                            }}
-                          >
-                            {filteredItems.map((i) => (
-                              <li
-                                key={i.name}
-                                onMouseDown={() => handleItemSelect(i, index)}
-                                style={{
-                                  padding: '8px 10px',
-                                  cursor: 'pointer',
-                                  backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
-                                  borderBottom: '1px solid #eee',
-                                }}
-                              >
-                                {i.name}
-                              </li>
-                            ))}
-                            <li
-                              onMouseDown={() => setShowNewItemModal(true)}
-                              style={{
-                                padding: '8px 10px',
-                                cursor: 'pointer',
-                                backgroundColor: '#fff',
-                                borderBottom: '1px solid #eee',
-                                color: '#2196F3',
-                                fontWeight: 'bold',
-                              }}
-                            >
-                              Add New Item
-                            </li>
-                          </ul>
-                        )}
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        <input
+                          type="text"
+                          value={item.item}
+                          ref={(el) => {
+                            inputRefs.current[index] = el;
+                          }}
+                          onChange={(e) => {
+                            const updatedItems = [...receiveItems];
+                            updatedItems[index].item = e.target.value;
+                            setReceiveItems(updatedItems);
+                            setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                          }}
+                          onFocus={() => setActiveItemDropdownIndex(index)}
+                          onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+                          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                        />
+                        {renderItemDropdown(index, item)}
                       </td>
                       <td style={{ border: '1px solid #ddd', padding: '8px', position: 'relative' }}>
                         <input
@@ -1458,7 +1479,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                     style={{
                       backgroundColor: '#F86752',
                       color: '#fff',
-                      padding: '8px 16px',
+                      padding: '8px 16 Historicpx',
                       border: 'none',
                       borderRadius: '4px',
                       cursor: 'pointer',
