@@ -443,8 +443,13 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
       newFetching[9999] = false;
       return newFetching;
     });
+    // Fetch locations for the default site if set
+    if (newReceiveItem.siteId) {
+      console.log(`Fetching locations for default siteId: ${newReceiveItem.siteId}`);
+      fetchLocations(newReceiveItem.siteId, 9999);
+    }
   };
-
+  
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
     if (
