@@ -364,7 +364,14 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
 
   const handleLocationSelect = (location: Location, index?: number) => {
     if (useSingleItem) {
-      setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: location.locationId.toString() }));
+      console.log('Selected location for Single Item:', {
+        locationId: location.locationId,
+        locationName: location.name,
+      });
+      setSingleForm((prev: ReceiveForm) => ({
+        ...prev,
+        locationId: location.locationId.toString(),
+      }));
       setShowLocationSuggestions(false);
     } else if (index !== undefined) {
       const updatedItems = [...receiveItems];
@@ -512,6 +519,20 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
 
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
+    // Debug singleForm in Single Item mode
+    if (useSingleItem) {
+      console.log('singleForm on Receive:', {
+        item: singleForm.item,
+        materialType: singleForm.materialType,
+        quantity: singleForm.quantity,
+        unit: singleForm.unit,
+        siteId: singleForm.siteId,
+        locationId: singleForm.locationId,
+        locationIdType: typeof singleForm.locationId,
+        locationIdLength: singleForm.locationId?.length,
+      });
+    }
+    
     if (
       !itemsToReceive.length ||
       itemsToReceive.some(
@@ -810,118 +831,120 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               )}
             </div>
             <div style={{ position: 'relative' }}>
-              <label
-                style={{
-                  fontWeight: 'bold',
-                  color: '#555',
-                  display: 'block',
-                  marginBottom: '5px',
-                }}
-              >
-                Physical Location (required):
-              </label>
-              <input
-                type="text"
-                value={
-                  singleForm.locationId
-                    ? locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
-                    : ''
-                }
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
-                  setFilteredLocations(
-                    locations.filter((loc) =>
-                      loc.name.toLowerCase().includes(value.toLowerCase())
-                    )
-                  );
-                  setShowLocationSuggestions(true);
-                }}
-                onFocus={() => {
-                  if (!isFetchingLocations && locations.length > 0) {
-                    setShowLocationSuggestions(true);
-                    setFilteredLocations(locations);
-                  }
-                }}
-                onBlur={() => {
-                  setTimeout(() => {
-                    setShowLocationSuggestions(false);
-                  }, 300);
-                }}
-                placeholder={isFetchingLocations ? 'Loading locations...' : 'Type to search locations'}
-                disabled={isFetchingLocations || !selectedSite}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  boxSizing: 'border-box',
-                  fontSize: '16px',
-                  backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
-                }}
-              />
-              {showLocationSuggestions && !isFetchingLocations && (
-                <ul
-                  style={{
-                    border: '1px solid #ddd',
-                    maxHeight: '150px',
-                    overflowY: 'auto',
-                    position: 'absolute',
-                    backgroundColor: '#fff',
-                    width: '100%',
-                    listStyle: 'none',
-                    padding: 0,
-                    margin: 0,
-                    zIndex: 10000,
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  }}
-                >
-                  {filteredLocations.length > 0 ? (
-                    filteredLocations.map((location) => (
-                      <li
-                        key={location.locationId}
-                        onMouseDown={() => handleLocationSelect(location)}
-                        style={{
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          backgroundColor:
-                            singleForm.locationId === location.locationId.toString()
-                              ? '#e0e0e0'
-                              : '#fff',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        {location.name}
-                      </li>
-                    ))
-                  ) : (
-                    <li
-                      style={{
-                        padding: '8px 10px',
-                        color: '#888',
-                        borderBottom: '1px solid #eee',
-                      }}
-                    >
-                      No locations found
-                    </li>
-                  )}
-                  <li
-                    onMouseDown={() => handleAddNewLocation()}
-                    style={{
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      backgroundColor: '#fff',
-                      borderBottom: '1px solid #eee',
-                      color: '#2196F3',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Add New Location
-                  </li>
-                </ul>
-              )}
-            </div>
+  <label
+    style={{
+      fontWeight: 'bold',
+      color: '#555',
+      display: 'block',
+      marginBottom: '5px',
+    }}
+  >
+    Physical Location (required):
+  </label>
+  <input
+    type="text"
+    value={
+      singleForm.locationId
+        ? locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
+        : ''
+    }
+    onChange={(e) => {
+      const value = e.target.value;
+      console.log('Location input change:', { value, locations, singleFormLocationId: singleForm.locationId });
+      setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
+      setFilteredLocations(
+        locations.filter((loc) =>
+          loc.name.toLowerCase().includes(value.toLowerCase())
+        )
+      );
+      setShowLocationSuggestions(true);
+    }}
+    onFocus={() => {
+      console.log('Location input focus:', { isFetchingLocations, locations, selectedSite, singleForm });
+      if (!isFetchingLocations && locations.length > 0) {
+        setShowLocationSuggestions(true);
+        setFilteredLocations(locations);
+      }
+    }}
+    onBlur={() => {
+      setTimeout(() => {
+        setShowLocationSuggestions(false);
+      }, 300);
+    }}
+    placeholder={isFetchingLocations ? 'Loading locations...' : 'Type to search locations'}
+    disabled={isFetchingLocations || !selectedSite}
+    style={{
+      width: '100%',
+      padding: '10px',
+      border: '1px solid #ddd',
+      borderRadius: '4px',
+      boxSizing: 'border-box',
+      fontSize: '16px',
+      backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
+    }}
+  />
+  {showLocationSuggestions && !isFetchingLocations && (
+    <ul
+      style={{
+        border: '1px solid #ddd',
+        maxHeight: '150px',
+        overflowY: 'auto',
+        position: 'absolute',
+        backgroundColor: '#fff',
+        width: '100%',
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        zIndex: 10000,
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      }}
+    >
+      {filteredLocations.length > 0 ? (
+        filteredLocations.map((location) => (
+          <li
+            key={location.locationId}
+            onMouseDown={() => handleLocationSelect(location)}
+            style={{
+              padding: '8px 10px',
+              cursor: 'pointer',
+              backgroundColor:
+                singleForm.locationId === location.locationId.toString()
+                  ? '#e0e0e0'
+                  : '#fff',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            {location.name}
+          </li>
+        ))
+      ) : (
+        <li
+          style={{
+            padding: '8px 10px',
+            color: '#888',
+            borderBottom: '1px solid #eee',
+          }}
+        >
+          No locations found
+        </li>
+      )}
+      <li
+        onMouseDown={() => handleAddNewLocation()}
+        style={{
+          padding: '8px 10px',
+          cursor: 'pointer',
+          backgroundColor: '#fff',
+          borderBottom: '1px solid #eee',
+          color: '#2196F3',
+          fontWeight: 'bold',
+        }}
+      >
+        Add New Location
+      </li>
+    </ul>
+  )}
+</div>
             <div style={{ position: 'relative' }}>
               <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
               <input
