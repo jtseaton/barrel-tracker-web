@@ -94,6 +94,12 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
 
   const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
     if (!siteId) {
+      // Clear locations for both Single and Multiple Items mode
+      if (rowIndex === 9999) {
+        setLocations([]);
+        setFilteredLocations([]);
+        setIsFetchingLocations(false);
+      }
       setRowLocations((prev) => {
         const newLocations = [...prev];
         newLocations[rowIndex] = [];
@@ -111,17 +117,32 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
       });
       return;
     }
+  
+    // Set fetching state
+    if (rowIndex === 9999) {
+      setIsFetchingLocations(true);
+    }
     setRowFetchingLocations((prev) => {
       const newFetching = [...prev];
       newFetching[rowIndex] = true;
       return newFetching;
     });
+  
     try {
       const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data: Location[] = await res.json();
       console.log(`Fetched locations for site ${siteId} at index ${rowIndex}:`, data); // Debug log
+  
+      // Update locations for Single Item mode if rowIndex is 9999
+      if (rowIndex === 9999) {
+        setLocations(data);
+        setFilteredLocations(data);
+        setIsFetchingLocations(false);
+      }
+  
+      // Update rowLocations for Multiple Items mode
       setRowLocations((prev) => {
         const newLocations = [...prev];
         newLocations[rowIndex] = data;
@@ -140,6 +161,13 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
     } catch (err: any) {
       console.error('Fetch locations error:', err);
       setProductionError(`Failed to fetch locations: ${err.message}`);
+  
+      // Clear locations on error
+      if (rowIndex === 9999) {
+        setLocations([]);
+        setFilteredLocations([]);
+        setIsFetchingLocations(false);
+      }
       setRowLocations((prev) => {
         const newLocations = [...prev];
         newLocations[rowIndex] = [];
@@ -251,7 +279,14 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
   }, [activeLocationDropdownIndex, activeItemDropdownIndex]);
 
   useEffect(() => {
-    fetchLocations(selectedSite);
+    console.log('selectedSite changed:', selectedSite);
+    if (selectedSite) {
+      fetchLocations(selectedSite);
+    } else {
+      setLocations([]);
+      setFilteredLocations([]);
+      setIsFetchingLocations(false);
+    }
   }, [selectedSite, fetchLocations]);
 
   useEffect(() => {
