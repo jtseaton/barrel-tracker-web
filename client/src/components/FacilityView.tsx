@@ -36,20 +36,22 @@ const FacilityView: React.FC = () => {
     fetchData();
   }, [siteId]);
 
-  // Fetch inventory for selected location
   useEffect(() => {
-    if (selectedLocationId) {
-      fetch(`${API_BASE_URL}/api/inventory?locationId=${selectedLocationId}`)
-        .then((res) => res.json())
+    if (selectedLocationId && siteId) {
+      fetch(`${API_BASE_URL}/api/inventory?locationId=${selectedLocationId}&siteId=${encodeURIComponent(siteId)}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          return res.json();
+        })
         .then((data: InventoryItem[]) => {
-          console.log('Inventory data:', data); // Debug inventory
+          console.log('Inventory data for locationId:', selectedLocationId, 'siteId:', siteId, data);
           setInventory(data);
         })
         .catch((err) => setError('Failed to load inventory: ' + (err instanceof Error ? err.message : 'Unknown error')));
     } else {
       setInventory([]);
     }
-  }, [selectedLocationId]);
+  }, [selectedLocationId, siteId]);
 
   // Handle shape click
   const handleShapeClick = (obj: DesignObject) => {
