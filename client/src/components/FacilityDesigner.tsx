@@ -78,9 +78,6 @@ const FacilityDesigner: React.FC = () => {
       setError('Please select a site first');
       return;
     }
-    const name = window.prompt(`Enter name for ${type} (e.g., Madison Fermenter 1):`) || `${type} ${Date.now()}`;
-    const abbreviation = window.prompt(`Enter abbreviation for ${type} (e.g., FV1):`) || name.slice(0, 3).toUpperCase();
-    
     const newObject: DesignObject = {
       id: Date.now().toString(),
       type,
@@ -90,15 +87,14 @@ const FacilityDesigner: React.FC = () => {
       width: type === 'Storage' ? 100 : undefined,
       height: type === 'Storage' ? 60 : undefined,
       radius: type === 'Tank' ? 30 : undefined,
-      name,
-      abbreviation,
+      name: '', // Placeholder, will be set on assignment
+      abbreviation: '', // Placeholder, will be set on assignment
     };
     setObjects([...objects, newObject]);
     setSelectedObjectId(newObject.id);
     setTool(null);
   };
 
-  // Save design
   const saveDesign = () => {
     if (!siteId) {
       setError('Please select a site to save the design');
@@ -106,6 +102,10 @@ const FacilityDesigner: React.FC = () => {
     }
     if (objects.some((obj) => !obj.locationId && !obj.equipmentId)) {
       setError('All objects must have an assigned Location or Equipment');
+      return;
+    }
+    if (objects.some((obj) => !obj.name || !obj.abbreviation)) {
+      setError('All objects must have a name and abbreviation');
       return;
     }
     fetch(`${API_BASE_URL}/api/facility-design`, {
@@ -133,23 +133,47 @@ const FacilityDesigner: React.FC = () => {
     );
   };
 
-  // Assign location
   const assignLocation = (locationId: number) => {
     if (selectedObjectId) {
+      const selectedLocation = locations.find((loc) => loc.locationId === locationId);
+      if (!selectedLocation) {
+        setError('Selected location not found');
+        return;
+      }
       setObjects(
         objects.map((obj) =>
-          obj.id === selectedObjectId ? { ...obj, locationId, equipmentId: undefined } : obj
+          obj.id === selectedObjectId
+            ? {
+                ...obj,
+                locationId,
+                equipmentId: undefined,
+                name: selectedLocation.name,
+                abbreviation: selectedLocation.name.slice(0, 3).toUpperCase(), // Derive abbreviation if not stored
+              }
+            : obj
         )
       );
     }
   };
-
-  // Assign equipment
+  
   const assignEquipment = (equipmentId: number) => {
     if (selectedObjectId) {
+      const selectedEquipment = equipment.find((eq) => eq.equipmentId === equipmentId);
+      if (!selectedEquipment) {
+        setError('Selected equipment not found');
+        return;
+      }
       setObjects(
         objects.map((obj) =>
-          obj.id === selectedObjectId ? { ...obj, equipmentId, locationId: undefined } : obj
+          obj.id === selectedObjectId
+            ? {
+                ...obj,
+                equipmentId,
+                locationId: undefined,
+                name: selectedEquipment.name,
+                abbreviation: selectedEquipment.abbreviation || selectedEquipment.name.slice(0, 3).toUpperCase(),
+              }
+            : obj
         )
       );
     }
