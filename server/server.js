@@ -431,30 +431,35 @@ app.post('/api/purchase-orders/email', (req, res) => {
 });
 
 app.get('/api/inventory', (req, res) => {
-  const { source, identifier } = req.query;
-  let query = `
-    SELECT i.*, l.name AS locationName
-    FROM inventory i
-    LEFT JOIN locations l ON i.locationId = l.locationId
-  `;
+  const { source, identifier, locationId, siteId } = req.query;
+  let query = 'SELECT * FROM inventory';
   let params = [];
-  if (source || identifier) {
-    query += ' WHERE';
-    if (source) {
-      query += ' i.source = ?';
-      params.push(source);
-    }
-    if (identifier) {
-      query += (source ? ' AND' : '') + ' i.identifier = ?';
-      params.push(identifier);
-    }
+  let conditions = [];
+  if (source) {
+    conditions.push('source = ?');
+    params.push(source);
+  }
+  if (identifier) {
+    conditions.push('identifier = ?');
+    params.push(identifier);
+  }
+  if (locationId) {
+    conditions.push('locationId = ?');
+    params.push(parseInt(locationId));
+  }
+  if (siteId) {
+    conditions.push('siteId = ?');
+    params.push(siteId);
+  }
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
   db.all(query, params, (err, rows) => {
     if (err) {
       console.error('Fetch inventory error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('Inventory data:', rows); // Debug
+    console.log('Inventory data:', rows);
     res.json(rows);
   });
 });
