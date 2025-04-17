@@ -142,6 +142,20 @@ db.serialize(() => {
   ['DSP-AL-20010', 'Grain Storage']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
   ['DSP-AL-20010', 'Fermentation Tanks']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Fermenter 1']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Fermenter 2']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Fermenter 3']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Fermenter 4']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Cold Storage']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Mash Tun']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
+  ['BR-AL-20019', 'Madison Boil Kettle']);  
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
   });
