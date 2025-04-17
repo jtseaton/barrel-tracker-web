@@ -3,7 +3,7 @@ import { Stage, Layer, Rect, Circle, Transformer, Text } from 'react-konva';
 import Konva from 'konva';
 import { useNavigate } from 'react-router-dom';
 import { Site, Location, Equipment, DesignObject } from '../types/interfaces';
-import '../App.css'; // Ensure App.css is imported
+import '../App.css';
 
 interface BoundingBox {
   x: number;
@@ -90,6 +90,17 @@ const FacilityDesigner: React.FC = () => {
     setTool(null);
   };
 
+  const deleteObject = () => {
+    if (selectedObjectId) {
+      setObjects(objects.filter((obj) => obj.id !== selectedObjectId));
+      setSelectedObjectId(null);
+      if (transformerRef.current) {
+        transformerRef.current.nodes([]);
+        transformerRef.current.getLayer()?.batchDraw();
+      }
+    }
+  };
+
   const saveDesign = () => {
     if (!siteId) {
       setError('Please select a site to save the design');
@@ -104,11 +115,14 @@ const FacilityDesigner: React.FC = () => {
       return;
     }
     fetch(`${API_BASE_URL}/api/facility-design`, {
-      method: 'POST',
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ siteId, objects }),
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
         setSuccessMessage(data.message);
         setTimeout(() => setSuccessMessage(null), 2000);
@@ -258,6 +272,29 @@ const FacilityDesigner: React.FC = () => {
                 onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
               >
                 Add Storage
+              </button>
+              <button
+                onClick={deleteObject}
+                disabled={!selectedObjectId}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  marginBottom: '10px',
+                  backgroundColor: selectedObjectId ? '#F86752' : '#ccc',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: selectedObjectId ? 'pointer' : 'not-allowed',
+                  fontSize: '16px',
+                }}
+                onMouseOver={(e) => {
+                  if (selectedObjectId) e.currentTarget.style.backgroundColor = '#D32F2F';
+                }}
+                onMouseOut={(e) => {
+                  if (selectedObjectId) e.currentTarget.style.backgroundColor = '#F86752';
+                }}
+              >
+                Delete Selected
               </button>
             </div>
             {selectedObjectId && (

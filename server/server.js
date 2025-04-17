@@ -1289,6 +1289,25 @@ app.post('/api/facility-design', (req, res) => {
   });
 });
 
+app.put('/api/facility-design', (req, res) => {
+  const { siteId, objects } = req.body;
+  if (!siteId || !objects) {
+    return res.status(400).json({ error: 'siteId and objects are required' });
+  }
+  db.run(
+    `INSERT OR REPLACE INTO facility_designs (siteId, objects) VALUES (?, ?)`,
+    [siteId, JSON.stringify(objects)],
+    (err) => {
+      if (err) {
+        console.error('Update facility design error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      console.log(`Updated facility design for siteId: ${siteId}`);
+      res.json({ message: 'Design updated successfully' });
+    }
+  );
+});
+
 app.get('/api/daily-summary', (req, res) => {
   db.all('SELECT account, SUM(proofGallons) as totalProofGallons FROM inventory GROUP BY account', (err, rows) => {
     if (err) {
