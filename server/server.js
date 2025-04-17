@@ -118,6 +118,16 @@ db.serialize(() => {
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS facility_designs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      siteId TEXT NOT NULL,
+      objects TEXT NOT NULL, -- JSON string of objects
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (siteId) REFERENCES sites(siteId)
+    )
+  `);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
   ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
@@ -1030,6 +1040,59 @@ app.get('/api/locations', (req, res) => {
   db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
+  });
+});
+
+app.get('/api/facility-design', (req, res) => {
+  const { siteId } = req.query;
+  if (!siteId) return res.status(400).json({ error: 'siteId is required' });
+  db.get('SELECT * FROM facility_designs WHERE siteId = ?', [siteId], (err, row) => {
+    if (err) {
+      console.error('Fetch facility design error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(row ? { ...row, objects: JSON.parse(row.objects) } : null);
+  });
+});
+
+app.post('/api/facility-design', (req, res) => {
+  const { siteId, objects } = req.body;
+  if (!siteId || !Array.isArray(objects)) {
+    return res.status(400).json({ error: 'siteId and objects array are required' });
+  }
+  const timestamp = new Date().toISOString();
+  db.get('SELECT id FROM facility_designs WHERE siteId = ?', [siteId], (err, row) => {
+    if (err) {
+      console.error('Check facility design error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (row) {
+      // Update existing design
+      db.run(
+        'UPDATE facility_designs SET objects = ?, updatedAt = ? WHERE siteId = ?',
+        [JSON.stringify(objects), timestamp, siteId],
+        (err) => {
+          if (err) {
+            console.error('Update facility design error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ message: 'Design updated', siteId });
+        }
+      );
+    } else {
+      // Create new design
+      db.run(
+        'INSERT INTO facility_designs (siteId, objects, createdAt, updatedAt) VALUES (?, ?, ?, ?)',
+        [siteId, JSON.stringify(objects), timestamp, timestamp],
+        (err) => {
+          if (err) {
+            console.error('Insert facility design error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ message: 'Design created', siteId });
+        }
+      );
+    }
   });
 });
 
