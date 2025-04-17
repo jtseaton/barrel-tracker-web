@@ -45,7 +45,8 @@ export interface DesignObject {
   width?: number;
   height?: number;
   radius?: number;
-  locationId?: number;
+  locationId?: number; // Optional
+  equipmentId?: number; // New: Optional equipment assignment
   name: string;
   abbreviation: string;
 }
@@ -213,4 +214,11 @@ export interface Location {
   siteId: string;
   name: string;
   enabled: number;
+}
+
+export interface Equipment {
+  equipmentId: number;
+  siteId: string;
+  name: string;
+  enabled: number; // Consistent with Location
 }

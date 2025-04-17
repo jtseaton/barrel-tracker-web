@@ -3,10 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Stage, Layer, Rect, Circle, Transformer, Text } from 'react-konva';
 import Konva from 'konva';
 import { useNavigate } from 'react-router-dom';
-import { Site, Location, DesignObject } from '../types/interfaces';
+import { Site, Location, Equipment, DesignObject } from '../types/interfaces';
 
-
-// Define BoundingBox interface for Transformer boundBoxFunc
 interface BoundingBox {
   x: number;
   y: number;
@@ -22,6 +20,7 @@ const FacilityDesigner: React.FC = () => {
   const [siteId, setSiteId] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [objects, setObjects] = useState<DesignObject[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [tool, setTool] = useState<'Tank' | 'Storage' | null>(null);
@@ -37,7 +36,7 @@ const FacilityDesigner: React.FC = () => {
       .catch((err) => setError('Failed to load sites: ' + err.message));
   }, []);
 
-  // Fetch locations for selected site
+  // Fetch locations
   useEffect(() => {
     if (siteId) {
       fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`)
@@ -46,6 +45,18 @@ const FacilityDesigner: React.FC = () => {
         .catch((err) => setError('Failed to load locations: ' + err.message));
     } else {
       setLocations([]);
+    }
+  }, [siteId]);
+
+  // Fetch equipment
+  useEffect(() => {
+    if (siteId) {
+      fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`)
+        .then((res) => res.json())
+        .then((data) => setEquipment(data))
+        .catch((err) => setError('Failed to load equipment: ' + err.message));
+    } else {
+      setEquipment([]);
     }
   }, [siteId]);
 
@@ -61,13 +72,12 @@ const FacilityDesigner: React.FC = () => {
     }
   }, [siteId]);
 
-  // Add new object with name and abbreviation
+  // Add new object
   const addObject = (type: 'Tank' | 'Storage') => {
     if (!siteId) {
       setError('Please select a site first');
       return;
     }
-    // Prompt for name and abbreviation
     const name = window.prompt(`Enter name for ${type} (e.g., Madison Fermenter 1):`) || `${type} ${Date.now()}`;
     const abbreviation = window.prompt(`Enter abbreviation for ${type} (e.g., FV1):`) || name.slice(0, 3).toUpperCase();
     
@@ -94,8 +104,8 @@ const FacilityDesigner: React.FC = () => {
       setError('Please select a site to save the design');
       return;
     }
-    if (objects.some((obj) => !obj.locationId)) {
-      setError('All objects must have an assigned location');
+    if (objects.some((obj) => !obj.locationId && !obj.equipmentId)) {
+      setError('All objects must have an assigned Location or Equipment');
       return;
     }
     fetch(`${API_BASE_URL}/api/facility-design`, {
@@ -128,7 +138,18 @@ const FacilityDesigner: React.FC = () => {
     if (selectedObjectId) {
       setObjects(
         objects.map((obj) =>
-          obj.id === selectedObjectId ? { ...obj, locationId } : obj
+          obj.id === selectedObjectId ? { ...obj, locationId, equipmentId: undefined } : obj
+        )
+      );
+    }
+  };
+
+  // Assign equipment
+  const assignEquipment = (equipmentId: number) => {
+    if (selectedObjectId) {
+      setObjects(
+        objects.map((obj) =>
+          obj.id === selectedObjectId ? { ...obj, equipmentId, locationId: undefined } : obj
         )
       );
     }
@@ -227,12 +248,25 @@ const FacilityDesigner: React.FC = () => {
               <select
                 value={objects.find((obj) => obj.id === selectedObjectId)?.locationId || ''}
                 onChange={(e) => assignLocation(Number(e.target.value))}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px', marginBottom: '15px' }}
               >
                 <option value="">Select Location</option>
                 {locations.map((loc) => (
                   <option key={loc.locationId} value={loc.locationId}>
                     {loc.name}
+                  </option>
+                ))}
+              </select>
+              <h3 style={{ color: '#555', marginBottom: '10px' }}>Assign Equipment</h3>
+              <select
+                value={objects.find((obj) => obj.id === selectedObjectId)?.equipmentId || ''}
+                onChange={(e) => assignEquipment(Number(e.target.value))}
+                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+              >
+                <option value="">Select Equipment</option>
+                {equipment.map((eq) => (
+                  <option key={eq.equipmentId} value={eq.equipmentId}>
+                    {eq.name}
                   </option>
                 ))}
               </select>
@@ -282,7 +316,6 @@ const FacilityDesigner: React.FC = () => {
                           handleTransform(obj.id, { radius: node.radius() });
                         }}
                       />
-                      {/* Text for abbreviation inside circle */}
                       <Text
                         x={obj.x - (obj.radius || 30) / 2}
                         y={obj.y - (obj.radius || 30) / 2}
@@ -294,7 +327,7 @@ const FacilityDesigner: React.FC = () => {
                         fill="black"
                         align="center"
                         verticalAlign="middle"
-                        listening={false} // Prevents text from capturing click events
+                        listening={false}
                       />
                     </>
                   ) : (
@@ -322,10 +355,9 @@ const FacilityDesigner: React.FC = () => {
                           node.scaleY(1);
                         }}
                       />
-                      {/* Text for abbreviation inside rectangle */}
                       <Text
                         x={obj.x}
-                        y={obj.y + ((obj.height || 60) / 2) - 6} // Center vertically
+                        y={obj.y + ((obj.height || 60) / 2) - 6}
                         width={obj.width || 100}
                         height={12}
                         text={obj.abbreviation}
@@ -344,7 +376,6 @@ const FacilityDesigner: React.FC = () => {
                 ref={transformerRef}
                 enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
                 boundBoxFunc={(oldBox: BoundingBox, newBox: BoundingBox) => {
-                  // Limit minimum size
                   if (newBox.width < 20 || newBox.height < 20) {
                     return oldBox;
                   }

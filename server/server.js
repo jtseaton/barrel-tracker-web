@@ -1,5 +1,6 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const xml2js = require('xml2js');
@@ -8,7 +9,8 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
 
-app.use(express.json({ limit: '10mb' }));
+app.use(cors());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/build')));
 
 const db = new sqlite3.Database(':memory:', (err) => {
@@ -115,6 +117,15 @@ db.serialize(() => {
       siteId TEXT,
       name TEXT NOT NULL,       -- e.g., Spirits Storage, Grain Storage
       enabled INTEGER DEFAULT 1,
+      FOREIGN KEY (siteId) REFERENCES sites(siteId)
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS equipment (
+      equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      siteId TEXT,
+      enabled INTEGER,
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
   `);
@@ -1055,6 +1066,29 @@ app.get('/api/locations', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
+});
+
+// Equipment endpoints
+app.get('/api/equipment', (req, res) => {
+  const { siteId } = req.query;
+  if (!siteId) return res.status(400).json({ error: 'siteId is required' });
+  db.all('SELECT * FROM equipment WHERE siteId = ?', [siteId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/equipment', (req, res) => {
+  const { name, siteId, enabled = 1 } = req.body;
+  if (!name || !siteId) return res.status(400).json({ error: 'name and siteId are required' });
+  db.run(
+    'INSERT INTO equipment (name, siteId, enabled) VALUES (?, ?, ?)',
+    [name, siteId, enabled],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ equipmentId: this.lastID, message: 'Equipment created' });
+    }
+  );
 });
 
 app.get('/api/facility-design', (req, res) => {
