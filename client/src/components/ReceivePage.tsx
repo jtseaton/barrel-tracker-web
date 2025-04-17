@@ -1191,121 +1191,128 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
             />
           </td>
           <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '180px' }}>
-            <input
-              type="text"
-              value={
-                item.locationId && rowLocations[index]
-                  ? rowLocations[index].find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
-                  : ''
-              }
-              ref={(el) => { locationInputRefs.current[index] = el; }}
-              onChange={(e) => {
-                const value = e.target.value;
+  <>
+    {console.log(`Table Location for index ${index}:`, {
+      locationId: item.locationId,
+      locations: rowLocations[index],
+      name: rowLocations[index]?.find((loc) => loc.locationId.toString() === item.locationId)?.name,
+    })}
+    <input
+      type="text"
+      value={
+        item.locationId && rowLocations[index]
+          ? rowLocations[index].find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
+          : ''
+      }
+      ref={(el) => { locationInputRefs.current[index] = el; }}
+      onChange={(e) => {
+        const value = e.target.value;
+        const updatedItems = [...receiveItems];
+        updatedItems[index].locationId = '';
+        setReceiveItems(updatedItems);
+        setRowFilteredLocations((prev) => {
+          const newFiltered = [...prev];
+          newFiltered[index] = rowLocations[index]?.filter((loc) =>
+            loc.name.toLowerCase().includes(value.toLowerCase())
+          ) || [];
+          return newFiltered;
+        });
+        setActiveLocationDropdownIndex(index);
+      }}
+      onFocus={() => {
+        if (!rowFetchingLocations[index] && rowLocations[index]?.length > 0) {
+          setActiveLocationDropdownIndex(index);
+          setRowFilteredLocations((prev) => {
+            const newFiltered = [...prev];
+            newFiltered[index] = rowLocations[index] || [];
+            return newFiltered;
+          });
+        }
+      }}
+      onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 300)}
+      placeholder={rowFetchingLocations[index] ? 'Loading locations...' : 'Select location'}
+      disabled={!item.siteId || rowFetchingLocations[index]}
+      style={{
+        width: '100%',
+        padding: '12px',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        boxSizing: 'border-box',
+        fontSize: '16px',
+        backgroundColor: !item.siteId || rowFetchingLocations[index] ? '#f5f5f5' : '#fff',
+      }}
+    />
+    {activeLocationDropdownIndex === index && !rowFetchingLocations[index] && dropdownPosition && createPortal(
+      <ul
+        style={{
+          position: 'fixed',
+          top: `${dropdownPosition.top}px`,
+          left: `${dropdownPosition.left}px`,
+          border: '1px solid #ddd',
+          maxHeight: '150px',
+          overflowY: 'auto',
+          backgroundColor: '#fff',
+          width: '200px',
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          zIndex: 30000,
+          borderRadius: '4px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}
+      >
+        {rowFilteredLocations[index]?.length > 0 ? (
+          rowFilteredLocations[index].map((location) => (
+            <li
+              key={location.locationId}
+              onMouseDown={() => {
                 const updatedItems = [...receiveItems];
-                updatedItems[index].locationId = '';
+                updatedItems[index].locationId = location.locationId.toString();
                 setReceiveItems(updatedItems);
-                setRowFilteredLocations((prev) => {
-                  const newFiltered = [...prev];
-                  newFiltered[index] = rowLocations[index]?.filter((loc) =>
-                    loc.name.toLowerCase().includes(value.toLowerCase())
-                  ) || [];
-                  return newFiltered;
-                });
-                setActiveLocationDropdownIndex(index);
+                setActiveLocationDropdownIndex(null);
               }}
-              onFocus={() => {
-                if (!rowFetchingLocations[index] && rowLocations[index]?.length > 0) {
-                  setActiveLocationDropdownIndex(index);
-                  setRowFilteredLocations((prev) => {
-                    const newFiltered = [...prev];
-                    newFiltered[index] = rowLocations[index] || [];
-                    return newFiltered;
-                  });
-                }
-              }}
-              onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 300)}
-              placeholder={rowFetchingLocations[index] ? 'Loading locations...' : 'Select location'}
-              disabled={!item.siteId || rowFetchingLocations[index]}
               style={{
-                width: '100%',
-                padding: '12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                boxSizing: 'border-box',
-                fontSize: '16px',
-                backgroundColor: !item.siteId || rowFetchingLocations[index] ? '#f5f5f5' : '#fff',
+                padding: '8px 10px',
+                cursor: 'pointer',
+                backgroundColor: item.locationId === location.locationId.toString() ? '#e0e0e0' : '#fff',
+                borderBottom: '1px solid #eee',
               }}
-            />
-            {activeLocationDropdownIndex === index && !rowFetchingLocations[index] && dropdownPosition && createPortal(
-              <ul
-                style={{
-                  position: 'fixed',
-                  top: `${dropdownPosition.top}px`,
-                  left: `${dropdownPosition.left}px`,
-                  border: '1px solid #ddd',
-                  maxHeight: '150px',
-                  overflowY: 'auto',
-                  backgroundColor: '#fff',
-                  width: '200px',
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  zIndex: 30000,
-                  borderRadius: '4px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                }}
-              >
-                {rowFilteredLocations[index]?.length > 0 ? (
-                  rowFilteredLocations[index].map((location) => (
-                    <li
-                      key={location.locationId}
-                    onMouseDown={() => {
-                      const updatedItems = [...receiveItems];
-                      updatedItems[index].locationId = location.locationId.toString();
-                      setReceiveItems(updatedItems);
-                      setActiveLocationDropdownIndex(null);
-                    }}
-                    style={{
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      backgroundColor: item.locationId === location.locationId.toString() ? '#e0e0e0' : '#fff',
-                      borderBottom: '1px solid #eee',
-                    }}
-                  >
-                    {location.name}
-                  </li>
-                ))
-              ) : (
-                <li
-                  style={{
-                    padding: '8px 10px',
-                    color: '#888',
-                    borderBottom: '1px solid #eee',
-                  }}
-                >
-                  No locations found
-                </li>
-              )}
-              <li
-                onMouseDown={() => {
-                  navigate('/locations', { state: { fromReceive: true, siteId: item.siteId } });
-                  setActiveLocationDropdownIndex(null);
-                }}
-                style={{
-                  padding: '8px 10px',
-                  cursor: 'pointer',
-                  backgroundColor: '#fff',
-                  borderBottom: '1px solid #eee',
-                  color: '#2196F3',
-                  fontWeight: 'bold',
-                }}
-              >
-                Add New Location
-              </li>
-            </ul>,
-            document.getElementById('dropdown-portal') || document.body
-          )}
-        </td>
+            >
+              {location.name}
+            </li>
+          ))
+        ) : (
+          <li
+            style={{
+              padding: '8px 10px',
+              color: '#888',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            No locations found
+          </li>
+        )}
+        <li
+          onMouseDown={() => {
+            navigate('/locations', { state: { fromReceive: true, siteId: item.siteId } });
+            setActiveLocationDropdownIndex(null);
+          }}
+          style={{
+            padding: '8px 10px',
+            cursor: 'pointer',
+            backgroundColor: '#fff',
+            borderBottom: '1px solid #eee',
+            color: '#2196F3',
+            fontWeight: 'bold',
+          }}
+        >
+          Add New Location
+        </li>
+      </ul>,
+      document.getElementById('dropdown-portal') || document.body
+    )}
+  </>
+</td>
         <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px', position: 'sticky', right: 0, backgroundColor: '#fff', zIndex: 1 }}>
           <button
             onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
@@ -1874,8 +1881,7 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
                             padding: '8px 10px',
                             cursor: 'pointer',
                             backgroundColor:
-                              newReceiveItem.locationId ===
-                              location.locationId.toString()
+                              newReceiveItem.locationId === location.locationId.toString()
                                 ? '#e0e0e0'
                                 : '#fff',
                             borderBottom: '1px solid #eee',
@@ -2186,18 +2192,34 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
               setProductionError('Cost must be non-negative');
               return;
             }
+            // Update rowLocations and rowFilteredLocations first
+            const newIndex = receiveItems.length;
+            setRowLocations((prev) => {
+              const newLocations = [...prev];
+              newLocations[newIndex] = rowLocations[9999] || [];
+              console.log(`Setting rowLocations[${newIndex}]:`, newLocations[newIndex]);
+              return newLocations;
+            });
+            setRowFilteredLocations((prev) => {
+              const newFiltered = [...prev];
+              newFiltered[newIndex] = rowFilteredLocations[9999] || [];
+              return newFiltered;
+            });
+            setRowFetchingLocations((prev) => {
+              const newFetching = [...prev];
+              newFetching[newIndex] = false;
+              return newFetching;
+            });
             // Add to receiveItems
-            setReceiveItems([...receiveItems, {
+            const newItem = {
               ...newReceiveItem,
               identifier: newReceiveItem.item || 'UNKNOWN_ITEM',
-            }]);
-            // Update rowLocations and rowFilteredLocations for table
-            setRowLocations((prev) => [...prev, rowLocations[9999] || []]);
-            setRowFilteredLocations((prev) => [
-              ...prev,
-              rowFilteredLocations[9999] || [],
-            ]);
-            setRowFetchingLocations((prev) => [...prev, false]);
+            };
+            setReceiveItems((prev) => {
+              const updatedItems = [...prev, newItem];
+              console.log(`Added item to receiveItems[${newIndex}]:`, newItem);
+              return updatedItems;
+            });
             // Reset modal state
             setNewReceiveItem({
               identifier: '',
