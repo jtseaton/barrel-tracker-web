@@ -1,7 +1,7 @@
 // src/components/FacilityView.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stage, Layer, Rect, Circle, Text } from 'react-konva';
-import { Site, Location, InventoryItem, DesignObject } from '../types/interfaces';
+import { Site, Location, Equipment, InventoryItem, DesignObject } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -9,9 +9,11 @@ const FacilityView: React.FC = () => {
   const [siteId, setSiteId] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [objects, setObjects] = useState<DesignObject[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch sites
@@ -22,7 +24,7 @@ const FacilityView: React.FC = () => {
       .catch((err) => setError('Failed to load sites: ' + err.message));
   }, []);
 
-  // Fetch locations for selected site
+  // Fetch locations
   useEffect(() => {
     if (siteId) {
       fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`)
@@ -34,7 +36,19 @@ const FacilityView: React.FC = () => {
     }
   }, [siteId]);
 
-  // Fetch design
+  // Fetch equipment
+  useEffect(() => {
+    if (siteId) {
+      fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`)
+        .then((res) => res.json())
+        .then((data) => setEquipment(data))
+        .catch((err) => setError('Failed to load equipment: ' + err.message));
+    } else {
+      setEquipment([]);
+    }
+  }, [siteId]);
+
+  // Fetch existing design
   useEffect(() => {
     if (siteId) {
       fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`)
@@ -58,6 +72,12 @@ const FacilityView: React.FC = () => {
     }
   }, [selectedLocationId]);
 
+  // Handle shape click
+  const handleShapeClick = (obj: DesignObject) => {
+    setSelectedLocationId(obj.locationId || null);
+    setSelectedEquipmentId(obj.equipmentId || null);
+  };
+
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
       <h2 style={{ color: '#333', marginBottom: '20px', textAlign: 'center' }}>Facility View</h2>
@@ -75,15 +95,12 @@ const FacilityView: React.FC = () => {
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
         }}>
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '555' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>
               Site:
             </label>
             <select
               value={siteId}
-              onChange={(e) => {
-                setSiteId(e.target.value);
-                setSelectedLocationId(null);
-              }}
+              onChange={(e) => setSiteId(e.target.value)}
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
             >
               <option value="">Select Site</option>
@@ -94,21 +111,34 @@ const FacilityView: React.FC = () => {
               ))}
             </select>
           </div>
-          {selectedLocationId && (
+          {(selectedLocationId || selectedEquipmentId) && (
             <div>
               <h3 style={{ color: '#555', marginBottom: '10px' }}>
-                Inventory at {locations.find((loc) => loc.locationId === selectedLocationId)?.name || 'Location'}
+                {selectedLocationId
+                  ? `Location: ${locations.find((loc) => loc.locationId === selectedLocationId)?.name || 'Unknown'}`
+                  : `Equipment: ${equipment.find((eq) => eq.equipmentId === selectedEquipmentId)?.name || 'Unknown'}`}
               </h3>
-              {inventory.length > 0 ? (
-                <ul style={{ listStyle: 'none', padding: 0 }}>
-                  {inventory.map((item) => (
-                    <li key={item.identifier} style={{ padding: '5px 0', borderBottom: '1px solid #eee' }}>
-                      {item.item}: {item.quantity}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No inventory found</p>
+              {selectedLocationId && (
+                <>
+                  <h4 style={{ color: '#555', marginBottom: '10px' }}>Inventory</h4>
+                  {inventory.length === 0 ? (
+                    <p style={{ color: '#777' }}>No inventory items found</p>
+                  ) : (
+                    <ul style={{ listStyle: 'none', padding: 0 }}>
+                      {inventory.map((item) => (
+                        <li
+                          key={item.identifier} // Fixed: Use identifier instead of itemId
+                          style={{ padding: '10px', borderBottom: '1px solid #eee', color: '#333' }}
+                        >
+                          {item.item}: {item.quantity} {item.unit}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {selectedEquipmentId && (
+                <p style={{ color: '#777' }}>No inventory available for equipment</p>
               )}
             </div>
           )}
@@ -116,20 +146,20 @@ const FacilityView: React.FC = () => {
         {/* Canvas */}
         <div style={{ flex: 1, backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <Stage width={800} height={600}>
-          <Layer>
-            {objects.map((obj) => (
+            <Layer>
+              {objects.map((obj) => (
                 <React.Fragment key={obj.id}>
-                {obj.shape === 'circle' ? (
+                  {obj.shape === 'circle' ? (
                     <>
-                    <Circle
+                      <Circle
                         x={obj.x}
                         y={obj.y}
                         radius={obj.radius}
                         fill="#90CAF9"
                         stroke="black"
-                        onClick={() => setSelectedLocationId(obj.locationId || null)}
-                    />
-                    <Text
+                        onClick={() => handleShapeClick(obj)}
+                      />
+                      <Text
                         x={obj.x - (obj.radius || 30) / 2}
                         y={obj.y - (obj.radius || 30) / 2}
                         width={obj.radius || 30}
@@ -141,20 +171,20 @@ const FacilityView: React.FC = () => {
                         align="center"
                         verticalAlign="middle"
                         listening={false}
-                    />
+                      />
                     </>
-                ) : (
+                  ) : (
                     <>
-                    <Rect
+                      <Rect
                         x={obj.x}
                         y={obj.y}
                         width={obj.width}
                         height={obj.height}
                         fill="#A5D6A7"
                         stroke="black"
-                        onClick={() => setSelectedLocationId(obj.locationId || null)}
-                    />
-                    <Text
+                        onClick={() => handleShapeClick(obj)}
+                      />
+                      <Text
                         x={obj.x}
                         y={obj.y + ((obj.height || 60) / 2) - 6}
                         width={obj.width || 100}
@@ -166,11 +196,11 @@ const FacilityView: React.FC = () => {
                         align="center"
                         verticalAlign="middle"
                         listening={false}
-                    />
+                      />
                     </>
-                )}
+                  )}
                 </React.Fragment>
-            ))}
+              ))}
             </Layer>
           </Stage>
         </div>
