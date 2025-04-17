@@ -36,6 +36,20 @@ export interface TankSummary {
   bottleCount?: number;
 }
 
+export interface DesignObject {
+  id: string;
+  type: 'Tank' | 'Storage';
+  shape: 'circle' | 'rectangle';
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  radius?: number;
+  locationId?: number;
+  name: string;
+  abbreviation: string;
+}
+
 export interface DailySummaryItem {
   date: string; // Add this
   account: string;
