@@ -1,4 +1,3 @@
-// src/components/FacilityDesigner.tsx
 import React, { useState, useEffect } from 'react';
 import { Stage, Layer, Rect, Circle, Transformer, Text } from 'react-konva';
 import Konva from 'konva';
@@ -148,7 +147,7 @@ const FacilityDesigner: React.FC = () => {
                 locationId,
                 equipmentId: undefined,
                 name: selectedLocation.name,
-                abbreviation: selectedLocation.name.slice(0, 3).toUpperCase(), // Derive abbreviation if not stored
+                abbreviation: selectedLocation.abbreviation || selectedLocation.name.slice(0, 3).toUpperCase(),
               }
             : obj
         )
