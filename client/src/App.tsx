@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import Home from './components/Home';
@@ -18,13 +19,15 @@ import Products from './components/Products';
 import ProductDetails from './components/ProductDetails';
 import InventoryItemDetails from './components/InventoryItemDetails';
 import Locations from './components/Locations';
+import Sites from './components/Sites';
+import FacilityDesigner from './components/FacilityDesigner'; // New
+import FacilityView from './components/FacilityView'; // New
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import { InventoryItem, Vendor } from './types/interfaces';
 import './App.css';
 
 // Stub components
-const Facility: React.FC = () => <div><h2>Facility</h2><p>Facility page coming soon</p></div>;
 const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
 const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
 
@@ -163,7 +166,8 @@ const AppContent: React.FC = () => {
               { name: 'Facility', path: '/facility' },
               { name: 'Production', path: '/production-page' },
               { name: 'Equipment', path: '/equipment' },
-              { name: 'Facility Designer', path: '/facility-designer', disabled: true },
+              { name: 'Facility Designer', path: '/facility-designer' }, // Enabled
+              { name: 'Facility View', path: '/facility-view' }, // New
             ].map((item) => (
               <li key={item.name}>
                 {item.disabled ? (
@@ -181,6 +185,7 @@ const AppContent: React.FC = () => {
             [
               { name: 'Back', action: handleBackClick },
               { name: 'Locations', path: '/locations' },
+              { name: 'Sites', path: '/sites' },
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
@@ -247,12 +252,13 @@ const AppContent: React.FC = () => {
                 )}
                 {activeSection === 'Production' && location.pathname === '/production' && <Production />}
                 {activeSection === 'Products' && <Products />}
-                {activeSection === 'Facility' && <Facility />}
+                {activeSection === 'Facility' && <div><h2>Facility</h2><p>Facility page coming soon</p></div>}
                 {activeSection === 'Production' && location.pathname === '/production-page' && <ProductionPage />}
                 {activeSection === 'Locations' && <Locations />}
                 {activeSection === 'Equipment' && <Equipment />}
                 {activeSection === 'Planning' && <div><h2>Planning</h2><p>Coming soon</p></div>}
-                {activeSection === 'Facility Designer' && <div><h2>Facility Designer</h2><p>Coming soon</p></div>}
+                {activeSection === 'Facility Designer' && <FacilityDesigner />}
+                {activeSection === 'Facility View' && <FacilityView />}
                 {activeSection === 'Vendors' && <Vendors vendors={vendors} refreshVendors={refreshVendors} />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing inventory={inventory} refreshInventory={refreshInventory} />}
@@ -278,6 +284,7 @@ const AppContent: React.FC = () => {
           <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
+          <Route path="/sites" element={<Sites />} />
           <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} vendors={vendors} refreshVendors={refreshVendors} />} />
           <Route path="/vendors" element={<Vendors vendors={vendors} refreshVendors={refreshVendors} />} />
           <Route path="/vendors/:name" element={<VendorDetails vendors={vendors} refreshVendors={refreshVendors} refreshInventory={refreshInventory} />} />
@@ -287,12 +294,13 @@ const AppContent: React.FC = () => {
           <Route path="/processing" element={<Processing inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
-          <Route path="/facility" element={<Facility />} />
+          <Route path="/facility" element={<div><h2>Facility</h2><p>Facility page coming soon</p></div>} />
           <Route path="/production-page" element={<ProductionPage />} />
           <Route path="/locations" element={<Locations />} />
           <Route path="/equipment" element={<Equipment />} />
           <Route path="/planning" element={<div><h2>Planning</h2><p>Coming soon</p></div>} />
-          <Route path="/facility-designer" element={<div><h2>Facility Designer</h2><p>Coming soon</p></div>} />
+          <Route path="/facility-designer" element={<FacilityDesigner />} />
+          <Route path="/facility-view" element={<FacilityView />} />
           <Route path="/management" element={<div><h2>Management</h2><p>Select an option from the menu</p></div>} />
         </Routes>
       </div>
