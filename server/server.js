@@ -135,12 +135,17 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS facility_designs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       siteId TEXT NOT NULL,
-      objects TEXT NOT NULL, -- JSON string of objects
+      objects TEXT NOT NULL,
       createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (siteId) REFERENCES sites(siteId)
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (siteId) REFERENCES sites(siteId),
+      UNIQUE(siteId)
     )
   `);
+  // Update existing table to add UNIQUE constraint (run once, then comment out)
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
+    if (err) console.error('Error adding UNIQUE index:', err);
+  });
   db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding abbreviation column:', err);
@@ -1238,13 +1243,64 @@ app.put('/api/equipment/:equipmentId', (req, res) => {
 
 app.get('/api/facility-design', (req, res) => {
   const { siteId } = req.query;
-  if (!siteId) return res.status(400).json({ error: 'siteId is required' });
-  db.get('SELECT * FROM facility_designs WHERE siteId = ?', [siteId], (err, row) => {
+  if (!siteId) {
+    return res.status(400).json({ error: 'siteId is required' });
+  }
+  db.get(
+    `SELECT * FROM facility_designs WHERE siteId = ? ORDER BY updatedAt DESC LIMIT 1`,
+    [siteId],
+    (err, row) => {
+      if (err) {
+        console.error('Get facility design error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (!row) {
+        return res.status(404).json({ error: 'Design not found' });
+      }
+      console.log(`Fetched design for siteId: ${siteId}`, row);
+      res.json({ siteId: row.siteId, objects: JSON.parse(row.objects || '[]') });
+    }
+  );
+});
+
+// PUT /api/facility-design (update or insert design)
+app.put('/api/facility-design', (req, res) => {
+  const { siteId, objects } = req.body;
+  if (!siteId || !objects) {
+    return res.status(400).json({ error: 'siteId and objects are required' });
+  }
+  const objectsJson = JSON.stringify(objects);
+  db.run(
+    `INSERT INTO facility_designs (siteId, objects) VALUES (?, ?)
+     ON CONFLICT(siteId) DO UPDATE SET objects = ?, updatedAt = CURRENT_TIMESTAMP`,
+    [siteId, objectsJson, objectsJson],
+    (err) => {
+      if (err) {
+        console.error('Update facility design error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      console.log(`Updated/Inserted design for siteId: ${siteId}`);
+      res.json({ message: 'Design updated successfully' });
+    }
+  );
+});
+
+// Debug endpoint (optional, for inspecting all designs)
+app.get('/api/debug/facility-design', (req, res) => {
+  const { siteId } = req.query;
+  const query = siteId
+    ? `SELECT * FROM facility_designs WHERE siteId = ? ORDER BY updatedAt DESC`
+    : `SELECT * FROM facility_designs ORDER BY updatedAt DESC`;
+  const params = siteId ? [siteId] : [];
+  db.all(query, params, (err, rows) => {
     if (err) {
-      console.error('Fetch facility design error:', err);
+      console.error('Debug facility design error:', err);
       return res.status(500).json({ error: err.message });
     }
-    res.json(row ? { ...row, objects: JSON.parse(row.objects) } : null);
+    res.json(rows.map((row) => ({
+      ...row,
+      objects: JSON.parse(row.objects || '[]'),
+    })));
   });
 });
 
@@ -1287,25 +1343,6 @@ app.post('/api/facility-design', (req, res) => {
       );
     }
   });
-});
-
-app.put('/api/facility-design', (req, res) => {
-  const { siteId, objects } = req.body;
-  if (!siteId || !objects) {
-    return res.status(400).json({ error: 'siteId and objects are required' });
-  }
-  db.run(
-    `INSERT OR REPLACE INTO facility_designs (siteId, objects) VALUES (?, ?)`,
-    [siteId, JSON.stringify(objects)],
-    (err) => {
-      if (err) {
-        console.error('Update facility design error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log(`Updated facility design for siteId: ${siteId}`);
-      res.json({ message: 'Design updated successfully' });
-    }
-  );
 });
 
 app.get('/api/daily-summary', (req, res) => {
