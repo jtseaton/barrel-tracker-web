@@ -125,6 +125,7 @@ db.serialize(() => {
       equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
       siteId TEXT,
+      abbreviation TEXT, -- Added
       enabled INTEGER,
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
@@ -1079,11 +1080,11 @@ app.get('/api/equipment', (req, res) => {
 });
 
 app.post('/api/equipment', (req, res) => {
-  const { name, siteId, enabled = 1 } = req.body;
-  if (!name || !siteId) return res.status(400).json({ error: 'name and siteId are required' });
+  const { name, abbreviation, siteId, enabled = 1 } = req.body;
+  if (!name || !abbreviation || !siteId) return res.status(400).json({ error: 'name, abbreviation, and siteId are required' });
   db.run(
-    'INSERT INTO equipment (name, siteId, enabled) VALUES (?, ?, ?)',
-    [name, siteId, enabled],
+    'INSERT INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)',
+    [name, abbreviation, siteId, enabled],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ equipmentId: this.lastID, message: 'Equipment created' });

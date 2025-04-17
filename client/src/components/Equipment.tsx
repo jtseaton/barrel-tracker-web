@@ -32,23 +32,23 @@ const EquipmentPage: React.FC = () => {
     }
   }, [siteId]);
 
-  // Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!siteId || !name) {
       setError('Site and equipment name are required');
       return;
     }
+    const abbreviation = name.slice(0, 3).toUpperCase(); // Derive if not provided
     fetch(`${API_BASE_URL}/api/equipment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, siteId, enabled: 1 }),
+      body: JSON.stringify({ name, abbreviation, siteId, enabled: 1 }),
     })
       .then((res) => res.json())
       .then((data) => {
         setSuccessMessage(data.message);
         setName('');
-        setEquipment([...equipment, { equipmentId: data.equipmentId, name, siteId, enabled: 1 }]);
+        setEquipment([...equipment, { equipmentId: data.equipmentId, name, abbreviation, siteId, enabled: 1 }]);
         setTimeout(() => setSuccessMessage(null), 2000);
       })
       .catch((err) => setError('Failed to add equipment: ' + err.message));
