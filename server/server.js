@@ -1069,7 +1069,6 @@ app.get('/api/locations', (req, res) => {
   });
 });
 
-// Equipment endpoints
 app.get('/api/equipment', (req, res) => {
   const { siteId } = req.query;
   if (!siteId) return res.status(400).json({ error: 'siteId is required' });
@@ -1082,14 +1081,75 @@ app.get('/api/equipment', (req, res) => {
 app.post('/api/equipment', (req, res) => {
   const { name, abbreviation, siteId, enabled = 1 } = req.body;
   if (!name || !abbreviation || !siteId) return res.status(400).json({ error: 'name, abbreviation, and siteId are required' });
-  db.run(
-    'INSERT INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)',
-    [name, abbreviation, siteId, enabled],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ equipmentId: this.lastID, message: 'Equipment created' });
-    }
-  );
+  db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(400).json({ error: 'Invalid siteId' });
+    db.run(
+      'INSERT INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)',
+      [name, abbreviation, siteId, enabled],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ equipmentId: this.lastID, message: 'Equipment created' });
+      }
+    );
+  });
+});
+
+app.put('/api/equipment/:equipmentId', (req, res) => {
+  const { equipmentId } = req.params;
+  const { name, abbreviation, siteId, enabled = 1 } = req.body;
+  if (!name || !abbreviation || !siteId) {
+    return res.status(400).json({ error: 'name, abbreviation, and siteId are required' });
+  }
+  db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(400).json({ error: 'Invalid siteId' });
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      db.run(
+        'UPDATE equipment SET name = ?, abbreviation = ?, siteId = ?, enabled = ? WHERE equipmentId = ?',
+        [name, abbreviation, siteId, enabled, equipmentId],
+        (err) => {
+          if (err) {
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: err.message });
+          }
+          // Update facility designs to reflect new siteId
+          db.all('SELECT id, siteId, objects FROM facility_designs', [], (err, rows) => {
+            if (err) {
+              db.run('ROLLBACK');
+              return res.status(500).json({ error: err.message });
+            }
+            rows.forEach((row) => {
+              let objects = JSON.parse(row.objects);
+              let updated = false;
+              objects = objects.map((obj) => {
+                if (obj.equipmentId === parseInt(equipmentId)) {
+                  updated = true;
+                  return { ...obj, siteId };
+                }
+                return obj;
+              });
+              if (updated) {
+                db.run(
+                  'UPDATE facility_designs SET objects = ?, updatedAt = ? WHERE id = ?',
+                  [JSON.stringify(objects), new Date().toISOString(), row.id],
+                  (err) => {
+                    if (err) {
+                      db.run('ROLLBACK');
+                      return res.status(500).json({ error: err.message });
+                    }
+                  }
+                );
+              }
+            });
+            db.run('COMMIT');
+            res.json({ message: 'Equipment updated', equipmentId });
+          });
+        }
+      );
+    });
+  });
 });
 
 app.get('/api/facility-design', (req, res) => {
