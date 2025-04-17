@@ -1,18 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-interface Location {
-  locationId: number; // Fixed from string to number
-  name: string;
-  siteId: string;
-  enabled: number;
-  abbreviation?: string;
-}
-
-interface Site {
-  siteId: string;
-  name: string;
-}
+import { Location, Site } from '../types/interfaces'; // Fixed: no .ts
+import '../App.css'; // Ensure App.css is imported
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -23,7 +12,7 @@ const Locations: React.FC = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(!!locationState?.fromReceive); // Auto-open modal if fromReceive
+  const [showModal, setShowModal] = useState(!!locationState?.fromReceive);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newLocation, setNewLocation] = useState({
     name: '',
@@ -141,36 +130,143 @@ const Locations: React.FC = () => {
   };
 
   if (error && !showModal && !editLocation) {
-    return <div style={{ color: 'red', textAlign: 'center', marginTop: '20px' }}>{error}</div>;
+    return <div style={{ color: 'red', marginTop: '20px' }}>{error}</div>;
   }
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h2 style={{ color: '#333', marginBottom: '20px' }}>Locations</h2>
-      {successMessage && (
-        <div style={{ color: 'green', marginBottom: '15px', textAlign: 'center' }}>
-          {successMessage}
-        </div>
-      )}
-      {!locationState?.fromReceive && (
-        <button
-          onClick={() => setShowModal(true)}
-          style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            marginBottom: '20px',
-            fontSize: '16px',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-        >
-          Add New Location
-        </button>
-      )}
+      <div className="page-container">
+        <h2 style={{ color: '#333', marginBottom: '20px' }}>Locations</h2>
+        {successMessage && (
+          <div style={{ color: 'green', marginBottom: '15px' }}>
+            {successMessage}
+          </div>
+        )}
+        {!locationState?.fromReceive && (
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              backgroundColor: '#2196F3',
+              color: '#fff',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              marginBottom: '20px',
+              fontSize: '16px',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+          >
+            Add New Location
+          </button>
+        )}
+        {!locationState?.fromReceive && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+            <thead>
+              <tr>
+                <th
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '12px',
+                    backgroundColor: '#f5f5f5',
+                    color: '#333',
+                  }}
+                >
+                  Location Name
+                </th>
+                <th
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '12px',
+                    backgroundColor: '#f5f5f5',
+                    color: '#333',
+                  }}
+                >
+                  Site
+                </th>
+                <th
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '12px',
+                    backgroundColor: '#f5f5f5',
+                    color: '#333',
+                  }}
+                >
+                  Abbreviation
+                </th>
+                <th
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '12px',
+                    backgroundColor: '#f5f5f5',
+                    color: '#333',
+                  }}
+                >
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {locations.map((location) => (
+                <tr key={location.locationId}>
+                  <td
+                    style={{
+                      border: '1px solid #ddd',
+                      padding: '12px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {location.name}
+                  </td>
+                  <td
+                    style={{
+                      border: '1px solid #ddd',
+                      padding: '12px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {sites.find((site) => site.siteId === location.siteId)?.name ||
+                      'Unknown Site'}
+                  </td>
+                  <td
+                    style={{
+                      border: '1px solid #ddd',
+                      padding: '12px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {location.abbreviation || 'None'}
+                  </td>
+                  <td
+                    style={{
+                      border: '1px solid #ddd',
+                      padding: '12px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <button
+                      onClick={() => handleEditLocation(location)}
+                      style={{
+                        backgroundColor: '#2196F3',
+                        color: '#fff',
+                        padding: '5px 10px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
       {(showModal || editLocation) && (
         <div
           style={{
@@ -372,111 +468,6 @@ const Locations: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
-      {!locationState?.fromReceive && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
-          <thead>
-            <tr>
-              <th
-                style={{
-                  border: '1px solid #ddd',
-                  padding: '12px',
-                  backgroundColor: '#f5f5f5',
-                  color: '#333',
-                }}
-              >
-                Location Name
-              </th>
-              <th
-                style={{
-                  border: '1px solid #ddd',
-                  padding: '12px',
-                  backgroundColor: '#f5f5f5',
-                  color: '#333',
-                }}
-              >
-                Site
-              </th>
-              <th
-                style={{
-                  border: '1px solid #ddd',
-                  padding: '12px',
-                  backgroundColor: '#f5f5f5',
-                  color: '#333',
-                }}
-              >
-                Abbreviation
-              </th>
-              <th
-                style={{
-                  border: '1px solid #ddd',
-                  padding: '12px',
-                  backgroundColor: '#f5f5f5',
-                  color: '#333',
-                }}
-              >
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {locations.map((location) => (
-              <tr key={location.locationId}>
-                <td
-                  style={{
-                    border: '1px solid #ddd',
-                    padding: '12px',
-                    textAlign: 'center',
-                  }}
-                >
-                  {location.name}
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #ddd',
-                    padding: '12px',
-                    textAlign: 'center',
-                  }}
-                >
-                  {sites.find((site) => site.siteId === location.siteId)?.name ||
-                    'Unknown Site'}
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #ddd',
-                    padding: '12px',
-                    textAlign: 'center',
-                  }}
-                >
-                  {location.abbreviation || 'None'}
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #ddd',
-                    padding: '12px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <button
-                    onClick={() => handleEditLocation(location)}
-                    style={{
-                      backgroundColor: '#2196F3',
-                      color: '#fff',
-                      padding: '5px 10px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-                  >
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       )}
     </div>
   );
