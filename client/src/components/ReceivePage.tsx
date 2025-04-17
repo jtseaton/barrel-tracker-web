@@ -40,9 +40,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     proof: '',
   });
   const [rowLocations, setRowLocations] = useState<Location[][]>([]);
-const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>([]);
-const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
+  const [rowFilteredLocations, setRowFilteredLocations] = useState<Location[][]>([]);
+  const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
   const locationInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [selectedSite, setSelectedSite] = useState<string>(locationState?.newSiteId || ''); // Initialize with newSiteId
   const [singleForm, setSingleForm] = useState<ReceiveForm>({
     identifier: '',
     item: '',
@@ -58,7 +59,7 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
     description: '',
     cost: '',
     poNumber: '',
-    siteId: locationState?.newSiteId || '', // Initialize with newSiteId or empty
+    siteId: locationState?.newSiteId || selectedSite || '', // Use selectedSite
     locationId: '',
   });
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
@@ -68,7 +69,6 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
   const [activeItemDropdownIndex, setActiveItemDropdownIndex] = useState<number | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const [itemDropdownPosition, setItemDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const [selectedSite, setSelectedSite] = useState<string>(locationState?.newSiteId || ''); // Initialize with newSiteId
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
   const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
@@ -260,6 +260,16 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
       setSiteDropdownPosition(null);
     }
   }, [activeSiteDropdownIndex]);
+
+  useEffect(() => {
+    setSingleForm((prev) => {
+      if (prev.siteId !== selectedSite) {
+        console.log('Syncing singleForm.siteId with selectedSite:', selectedSite);
+        return { ...prev, siteId: selectedSite, locationId: '' }; // Reset locationId when site changes
+      }
+      return prev;
+    });
+  }, [selectedSite]);
 
   useEffect(() => {
     if (
@@ -777,58 +787,59 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
                 }}
               />
               {showSiteSuggestions && (
-                <ul
-                  style={{
-                    border: '1px solid #ddd',
-                    maxHeight: '150px',
-                    overflowY: 'auto',
-                    position: 'absolute',
-                    backgroundColor: '#fff',
-                    width: '100%',
-                    listStyle: 'none',
-                    padding: 0,
-                    margin: 0,
-                    zIndex: 10000,
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  }}
-                >
-                  {filteredSites.map((site) => (
-                    <li
-                      key={site.siteId}
-                      onMouseDown={() => {
-                        setSelectedSite(site.siteId);
-                        setShowSiteSuggestions(false);
-                      }}
-                      style={{
-                        padding: '8px 10px',
-                        cursor: 'pointer',
-                        backgroundColor:
-                          selectedSite === site.siteId ? '#e0e0e0' : '#fff',
-                        borderBottom: '1px solid #eee',
-                      }}
-                    >
-                      {site.name}
-                    </li>
-                  ))}
-                  <li
-                    onMouseDown={() => {
-                      navigate('/sites', { state: { fromReceive: true } });
-                      setShowSiteSuggestions(false);
-                    }}
-                    style={{
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      backgroundColor: '#fff',
-                      borderBottom: '1px solid #eee',
-                      color: '#2196F3',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Add New Site
-                  </li>
-                </ul>
-              )}
+  <ul
+    style={{
+      border: '1px solid #ddd',
+      maxHeight: '150px',
+      overflowY: 'auto',
+      position: 'absolute',
+      backgroundColor: '#fff',
+      width: '100%',
+      listStyle: 'none',
+      padding: 0,
+      margin: 0,
+      zIndex: 10000,
+      borderRadius: '4px',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    }}
+  >
+    {filteredSites.map((site) => (
+      <li
+        key={site.siteId}
+        onMouseDown={() => {
+          console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+          setSelectedSite(site.siteId);
+          setSingleForm((prev) => ({ ...prev, siteId: site.siteId }));
+          setShowSiteSuggestions(false);
+        }}
+        style={{
+          padding: '8px 10px',
+          cursor: 'pointer',
+          backgroundColor: selectedSite === site.siteId ? '#e0e0e0' : '#fff',
+          borderBottom: '1px solid #eee',
+        }}
+      >
+        {site.name}
+      </li>
+    ))}
+    <li
+      onMouseDown={() => {
+        navigate('/sites', { state: { fromReceive: true } });
+        setShowSiteSuggestions(false);
+      }}
+      style={{
+        padding: '8px 10px',
+        cursor: 'pointer',
+        backgroundColor: '#fff',
+        borderBottom: '1px solid #eee',
+        color: '#2196F3',
+        fontWeight: 'bold',
+      }}
+    >
+      Add New Site
+    </li>
+  </ul>
+)}
             </div>
             <div style={{ position: 'relative' }}>
   <label
