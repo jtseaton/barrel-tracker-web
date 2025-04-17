@@ -1,21 +1,10 @@
 // src/components/FacilityDesigner.tsx
 import React, { useState, useEffect } from 'react';
-import { Stage, Layer, Rect, Circle, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Transformer, Text } from 'react-konva';
 import Konva from 'konva';
 import { useNavigate } from 'react-router-dom';
-import { Site, Location } from '../types/interfaces';
+import { Site, Location, DesignObject } from '../types/interfaces';
 
-interface DesignObject {
-  id: string;
-  type: 'Tank' | 'Storage';
-  shape: 'circle' | 'rectangle';
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  radius?: number;
-  locationId?: number;
-}
 
 // Define BoundingBox interface for Transformer boundBoxFunc
 interface BoundingBox {
@@ -30,7 +19,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 
 const FacilityDesigner: React.FC = () => {
   const navigate = useNavigate();
-  const [siteId, setSiteId] = useState<string>('DSP-AL-20010'); // Default to Madison Distillery
+  const [siteId, setSiteId] = useState<string>('DSP-AL-20010');
   const [sites, setSites] = useState<Site[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [objects, setObjects] = useState<DesignObject[]>([]);
@@ -72,12 +61,16 @@ const FacilityDesigner: React.FC = () => {
     }
   }, [siteId]);
 
-  // Add new object
+  // Add new object with name and abbreviation
   const addObject = (type: 'Tank' | 'Storage') => {
     if (!siteId) {
       setError('Please select a site first');
       return;
     }
+    // Prompt for name and abbreviation
+    const name = window.prompt(`Enter name for ${type} (e.g., Madison Fermenter 1):`) || `${type} ${Date.now()}`;
+    const abbreviation = window.prompt(`Enter abbreviation for ${type} (e.g., FV1):`) || name.slice(0, 3).toUpperCase();
+    
     const newObject: DesignObject = {
       id: Date.now().toString(),
       type,
@@ -87,6 +80,8 @@ const FacilityDesigner: React.FC = () => {
       width: type === 'Storage' ? 100 : undefined,
       height: type === 'Storage' ? 60 : undefined,
       radius: type === 'Tank' ? 30 : undefined,
+      name,
+      abbreviation,
     };
     setObjects([...objects, newObject]);
     setSelectedObjectId(newObject.id);
@@ -269,47 +264,79 @@ const FacilityDesigner: React.FC = () => {
               {objects.map((obj) => (
                 <React.Fragment key={obj.id}>
                   {obj.shape === 'circle' ? (
-                    <Circle
-                      id={obj.id}
-                      x={obj.x}
-                      y={obj.y}
-                      radius={obj.radius}
-                      fill="#90CAF9"
-                      stroke="black"
-                      draggable
-                      onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) =>
-                        handleDragEnd(obj.id, e.target.x(), e.target.y())
-                      }
-                      onClick={() => handleSelect(obj.id)}
-                      onTransform={(e: Konva.KonvaEventObject<Event>) => {
-                        const node = e.target as Konva.Circle;
-                        handleTransform(obj.id, { radius: node.radius() });
-                      }}
-                    />
+                    <>
+                      <Circle
+                        id={obj.id}
+                        x={obj.x}
+                        y={obj.y}
+                        radius={obj.radius}
+                        fill="#90CAF9"
+                        stroke="black"
+                        draggable
+                        onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) =>
+                          handleDragEnd(obj.id, e.target.x(), e.target.y())
+                        }
+                        onClick={() => handleSelect(obj.id)}
+                        onTransform={(e: Konva.KonvaEventObject<Event>) => {
+                          const node = e.target as Konva.Circle;
+                          handleTransform(obj.id, { radius: node.radius() });
+                        }}
+                      />
+                      {/* Text for abbreviation inside circle */}
+                      <Text
+                        x={obj.x - (obj.radius || 30) / 2}
+                        y={obj.y - (obj.radius || 30) / 2}
+                        width={obj.radius || 30}
+                        height={obj.radius || 30}
+                        text={obj.abbreviation}
+                        fontSize={12}
+                        fontFamily="Arial"
+                        fill="black"
+                        align="center"
+                        verticalAlign="middle"
+                        listening={false} // Prevents text from capturing click events
+                      />
+                    </>
                   ) : (
-                    <Rect
-                      id={obj.id}
-                      x={obj.x}
-                      y={obj.y}
-                      width={obj.width}
-                      height={obj.height}
-                      fill="#A5D6A7"
-                      stroke="black"
-                      draggable
-                      onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) =>
-                        handleDragEnd(obj.id, e.target.x(), e.target.y())
-                      }
-                      onClick={() => handleSelect(obj.id)}
-                      onTransform={(e: Konva.KonvaEventObject<Event>) => {
-                        const node = e.target as Konva.Rect;
-                        handleTransform(obj.id, {
-                          width: node.width() * node.scaleX(),
-                          height: node.height() * node.scaleY(),
-                        });
-                        node.scaleX(1);
-                        node.scaleY(1);
-                      }}
-                    />
+                    <>
+                      <Rect
+                        id={obj.id}
+                        x={obj.x}
+                        y={obj.y}
+                        width={obj.width}
+                        height={obj.height}
+                        fill="#A5D6A7"
+                        stroke="black"
+                        draggable
+                        onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) =>
+                          handleDragEnd(obj.id, e.target.x(), e.target.y())
+                        }
+                        onClick={() => handleSelect(obj.id)}
+                        onTransform={(e: Konva.KonvaEventObject<Event>) => {
+                          const node = e.target as Konva.Rect;
+                          handleTransform(obj.id, {
+                            width: node.width() * node.scaleX(),
+                            height: node.height() * node.scaleY(),
+                          });
+                          node.scaleX(1);
+                          node.scaleY(1);
+                        }}
+                      />
+                      {/* Text for abbreviation inside rectangle */}
+                      <Text
+                        x={obj.x}
+                        y={obj.y + ((obj.height || 60) / 2) - 6} // Center vertically
+                        width={obj.width || 100}
+                        height={12}
+                        text={obj.abbreviation}
+                        fontSize={12}
+                        fontFamily="Arial"
+                        fill="black"
+                        align="center"
+                        verticalAlign="middle"
+                        listening={false}
+                      />
+                    </>
                   )}
                 </React.Fragment>
               ))}
