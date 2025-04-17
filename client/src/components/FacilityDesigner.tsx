@@ -101,7 +101,7 @@ const FacilityDesigner: React.FC = () => {
     }
   };
 
-  const saveDesign = () => {
+  const saveDesign = async () => {
     if (!siteId) {
       setError('Please select a site to save the design');
       return;
@@ -114,20 +114,34 @@ const FacilityDesigner: React.FC = () => {
       setError('All objects must have a name and abbreviation');
       return;
     }
-    fetch(`${API_BASE_URL}/api/facility-design`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ siteId, objects }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        setSuccessMessage(data.message);
+    const payload = { siteId, objects };
+    console.log('Saving design:', payload); // Debug log
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/facility-design`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to save design (attempt ${attempt}): ${errorText}`);
+        }
+        const data = await response.json();
+        console.log('Save response:', data); // Debug log
+        setSuccessMessage(data.message || 'Design updated successfully');
         setTimeout(() => setSuccessMessage(null), 2000);
-      })
-      .catch((err) => setError('Failed to save design: ' + err.message));
+        setError(null);
+        return; // Success, exit retry loop
+      } catch (err: any) {
+        console.error(`Save design error (attempt ${attempt}):`, err);
+        if (attempt === 3) {
+          setError('Failed to save design after 3 attempts: ' + err.message);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+      }
+    }
   };
 
   const handleDragEnd = (id: string, x: number, y: number) => {
