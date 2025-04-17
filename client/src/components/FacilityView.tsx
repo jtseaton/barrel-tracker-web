@@ -1,9 +1,8 @@
-// src/components/FacilityView.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Stage, Layer, Rect, Circle, Text } from 'react-konva';
 import { Site, Location, Equipment, InventoryItem, DesignObject } from '../types/interfaces';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL: string = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 const FacilityView: React.FC = () => {
   const [siteId, setSiteId] = useState<string>('DSP-AL-20010');
@@ -16,48 +15,25 @@ const FacilityView: React.FC = () => {
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch sites
+  // Fetch sites, locations, equipment, and design concurrently
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/sites`)
-      .then((res) => res.json())
-      .then((data) => setSites(data))
-      .catch((err) => setError('Failed to load sites: ' + err.message));
-  }, []);
-
-  // Fetch locations
-  useEffect(() => {
-    if (siteId) {
-      fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`)
-        .then((res) => res.json())
-        .then((data) => setLocations(data))
-        .catch((err) => setError('Failed to load locations: ' + err.message));
-    } else {
-      setLocations([]);
-    }
-  }, [siteId]);
-
-  // Fetch equipment
-  useEffect(() => {
-    if (siteId) {
-      fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`)
-        .then((res) => res.json())
-        .then((data) => setEquipment(data))
-        .catch((err) => setError('Failed to load equipment: ' + err.message));
-    } else {
-      setEquipment([]);
-    }
-  }, [siteId]);
-
-  // Fetch existing design
-  useEffect(() => {
-    if (siteId) {
-      fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`)
-        .then((res) => res.json())
-        .then((data) => setObjects(data?.objects || []))
-        .catch((err) => setError('Failed to load design: ' + err.message));
-    } else {
-      setObjects([]);
-    }
+    const fetchData = async () => {
+      try {
+        const [sitesData, locationsData, equipmentData, designData] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/sites`).then((res) => res.json()),
+          siteId ? fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
+          siteId ? fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
+          siteId ? fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve(null),
+        ]);
+        setSites(sitesData);
+        setLocations(locationsData);
+        setEquipment(equipmentData);
+        setObjects(designData?.objects || []);
+      } catch (err) {
+        setError('Failed to load data: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      }
+    };
+    fetchData();
   }, [siteId]);
 
   // Fetch inventory for selected location
@@ -65,8 +41,11 @@ const FacilityView: React.FC = () => {
     if (selectedLocationId) {
       fetch(`${API_BASE_URL}/api/inventory?locationId=${selectedLocationId}`)
         .then((res) => res.json())
-        .then((data) => setInventory(data))
-        .catch((err) => setError('Failed to load inventory: ' + err.message));
+        .then((data: InventoryItem[]) => {
+          console.log('Inventory data:', data); // Debug inventory
+          setInventory(data);
+        })
+        .catch((err) => setError('Failed to load inventory: ' + (err instanceof Error ? err.message : 'Unknown error')));
     } else {
       setInventory([]);
     }
@@ -86,14 +65,16 @@ const FacilityView: React.FC = () => {
       )}
       <div style={{ display: 'flex' }}>
         {/* Sidebar */}
-        <div style={{
-          width: '250px',
-          marginRight: '20px',
-          backgroundColor: '#fff',
-          padding: '20px',
-          borderRadius: '8px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        }}>
+        <div
+          style={{
+            width: '250px',
+            marginRight: '20px',
+            backgroundColor: '#fff',
+            padding: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          }}
+        >
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>
               Site:
@@ -104,7 +85,7 @@ const FacilityView: React.FC = () => {
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
             >
               <option value="">Select Site</option>
-              {sites.map((site) => (
+              {sites.map((site: Site) => (
                 <option key={site.siteId} value={site.siteId}>
                   {site.name}
                 </option>
@@ -125,12 +106,12 @@ const FacilityView: React.FC = () => {
                     <p style={{ color: '#777' }}>No inventory items found</p>
                   ) : (
                     <ul style={{ listStyle: 'none', padding: 0 }}>
-                      {inventory.map((item) => (
+                      {inventory.map((item: InventoryItem) => (
                         <li
-                          key={item.identifier} // Fixed: Use identifier instead of itemId
+                          key={item.identifier || `${item.type}-${item.quantity}`}
                           style={{ padding: '10px', borderBottom: '1px solid #eee', color: '#333' }}
                         >
-                          {item.item}: {item.quantity} {item.unit}
+                          {item.identifier || item.description || item.type || 'Unknown Item'}: {item.quantity} {item.unit}
                         </li>
                       ))}
                     </ul>
@@ -144,10 +125,18 @@ const FacilityView: React.FC = () => {
           )}
         </div>
         {/* Canvas */}
-        <div style={{ flex: 1, backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <div
+          style={{
+            flex: 1,
+            backgroundColor: '#fff',
+            padding: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          }}
+        >
           <Stage width={800} height={600}>
             <Layer>
-              {objects.map((obj) => (
+              {objects.map((obj: DesignObject) => (
                 <React.Fragment key={obj.id}>
                   {obj.shape === 'circle' ? (
                     <>
