@@ -115,7 +115,8 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS locations (
       locationId INTEGER PRIMARY KEY AUTOINCREMENT,
       siteId TEXT,
-      name TEXT NOT NULL,       -- e.g., Spirits Storage, Grain Storage
+      name TEXT NOT NULL,
+      abbreviation TEXT, -- Added
       enabled INTEGER DEFAULT 1,
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
@@ -140,6 +141,13 @@ db.serialize(() => {
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
   `);
+  db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding abbreviation column:', err);
+    } else {
+      console.log('Added abbreviation column to locations');
+    }
+  });
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
   ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
@@ -167,7 +175,32 @@ db.serialize(() => {
   db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
   ['BR-AL-20019', 'Madison Mash Tun']);
   db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Boil Kettle']);  
+  ['BR-AL-20019', 'Madison Boil Kettle']); 
+  db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`, 
+  ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
+    if (err) console.error('Insert error:', err);
+    else console.log('Inserted: Athens Cold Storage, abbreviation=Athens Cooler, BR-AL-20088');
+}); 
+  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
+    ['Beer Cooler', 'Madison Cold Storage', 'BR-AL-20019'], (err) => {
+      if (err) console.error('Update error:', err);
+      else console.log('Updated: Madison Cold Storage, abbreviation=Beer Cooler');
+  });
+  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
+    ['Mash Tun', 'Madison Mash Tun', 'BR-AL-20019'], (err) => {
+      if (err) console.error('Update error:', err);
+      else console.log('Updated: Madison Mash Tun, abbreviation=Mash Tun');
+  });
+  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
+    ['Spirits', 'Spirits Storage', 'DSP-AL-20010'], (err) => {
+      if (err) console.error('Update error:', err);
+      else console.log('Updated: Spirits Storage, abbreviation=Spirits');
+  });
+  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
+    ['Athens Cooler', 'Athens Cold Storage', 'BR-AL-20088'], (err) => {
+      if (err) console.error('Update error:', err);
+      else console.log('Updated: Athens Cold Storage, abbreviation=Athens Cooler');
+  });
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
   });
@@ -181,11 +214,6 @@ db.serialize(() => {
 
   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-  });
-
-  db.run(`INSERT INTO locations (locationId, name, siteId) VALUES (?, ?, ?)`, [8, "Warehouse A", "BR-AL-20019"], (err) => {
-    if (err) console.error('Insert location error:', err);
-    else console.log('Inserted test location: locationId=8, name=Warehouse A');
   });
 
 const loadItemsFromXML = () => {
@@ -1085,15 +1113,19 @@ app.post('/api/locations', (req, res) => {
 });
 
 app.get('/api/locations', (req, res) => {
-  const { siteId, account } = req.query;
-  let query = 'SELECT * FROM locations WHERE enabled = 1';
+  const { siteId } = req.query;
+  let query = 'SELECT * FROM locations';
   let params = [];
   if (siteId) {
-    query += ' AND siteId = ?';
+    query += ' WHERE siteId = ?';
     params.push(siteId);
   }
   db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) {
+      console.error('Fetch locations error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Locations data:', rows);
     res.json(rows);
   });
 });
