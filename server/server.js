@@ -1130,6 +1130,29 @@ app.get('/api/locations', (req, res) => {
   });
 });
 
+app.put('/api/locations/:locationId', (req, res) => {
+  const { locationId } = req.params;
+  const { siteId, name, abbreviation, enabled } = req.body;
+  if (!siteId || !name) {
+    return res.status(400).json({ error: 'Site and Name are required' });
+  }
+  db.run(
+    `UPDATE locations SET siteId = ?, name = ?, abbreviation = ?, enabled = ? WHERE locationId = ?`,
+    [siteId, name, abbreviation || null, enabled !== undefined ? enabled : 1, parseInt(locationId)],
+    function (err) {
+      if (err) {
+        console.error('Update location error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+      console.log(`Updated location: locationId=${locationId}, siteId=${siteId}, name=${name}, abbreviation=${abbreviation || 'null'}`);
+      res.json({ message: 'Location updated successfully' });
+    }
+  );
+});
+
 app.get('/api/equipment', (req, res) => {
   const { siteId } = req.query;
   if (!siteId) return res.status(400).json({ error: 'siteId is required' });
