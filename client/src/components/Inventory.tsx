@@ -51,23 +51,41 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       .catch((err) => console.error('Daily summary error:', err));
   }, []);
 
-  // Fetch locations for the site
   useEffect(() => {
     const fetchLocations = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(OUR_DSP)}`);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        console.log('Fetched locations:', data);
-        setLocations(data);
+        // Get unique siteIds using reduce
+        const siteIds = inventory
+          .map(item => item.siteId)
+          .filter(Boolean)
+          .reduce((unique, siteId) => 
+            unique.includes(siteId) ? unique : [...unique, siteId], 
+            [] as string[]
+          );
+        if (siteIds.length === 0) {
+          // Fallback to OUR_DSP if no siteIds
+          siteIds.push(OUR_DSP);
+        }
+        const locationPromises = siteIds.map(siteId =>
+          fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`).then(res => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return res.json();
+          })
+        );
+        const locationArrays = await Promise.all(locationPromises);
+        const allLocations = locationArrays.flat();
+        console.log('Fetched locations:', allLocations);
+        setLocations(allLocations);
       } catch (err: any) {
         console.error('Failed to fetch locations:', err);
         setProductionError('Failed to fetch locations: ' + err.message);
       }
     };
-    fetchLocations();
-  }, [API_BASE_URL]);
-
+    if (inventory.length > 0) {
+      fetchLocations();
+    }
+  }, [API_BASE_URL, inventory]);
+  
   // Fetch sites
   useEffect(() => {
     const fetchSites = async () => {

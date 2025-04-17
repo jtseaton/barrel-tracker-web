@@ -183,6 +183,11 @@ db.serialize(() => {
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
   });
 
+  db.run(`INSERT INTO locations (locationId, name, siteId) VALUES (?, ?, ?)`, [8, "Warehouse A", "BR-AL-20019"], (err) => {
+    if (err) console.error('Insert location error:', err);
+    else console.log('Inserted test location: locationId=8, name=Warehouse A');
+  });
+
 const loadItemsFromXML = () => {
   fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
     if (err) {
@@ -427,16 +432,20 @@ app.post('/api/purchase-orders/email', (req, res) => {
 
 app.get('/api/inventory', (req, res) => {
   const { source, identifier } = req.query;
-  let query = 'SELECT * FROM inventory';
+  let query = `
+    SELECT i.*, l.name AS locationName
+    FROM inventory i
+    LEFT JOIN locations l ON i.locationId = l.locationId
+  `;
   let params = [];
   if (source || identifier) {
     query += ' WHERE';
     if (source) {
-      query += ' source = ?';
+      query += ' i.source = ?';
       params.push(source);
     }
     if (identifier) {
-      query += (source ? ' AND' : '') + ' identifier = ?';
+      query += (source ? ' AND' : '') + ' i.identifier = ?';
       params.push(identifier);
     }
   }
@@ -445,6 +454,21 @@ app.get('/api/inventory', (req, res) => {
       console.error('Fetch inventory error:', err);
       return res.status(500).json({ error: err.message });
     }
+    console.log('Inventory data:', rows); // Debug
+    res.json(rows);
+  });
+});
+
+app.get('/api/debug/inventory', (req, res) => {
+  db.all('SELECT * FROM inventory', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.get('/api/debug/locations', (req, res) => {
+  db.all('SELECT * FROM locations', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
