@@ -78,6 +78,9 @@
   transition: margin-left 0.3s ease;
   background-color: #FFFFFF;
   color: #000000;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 .menu.open + .content {
@@ -131,20 +134,20 @@ a:hover {
   color: #F86752;
 }
 
-.inventory-container {
+.page-container, .inventory-container {
   padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
   background-color: #FFFFFF;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
 }
 
-.inventory-container h2 {
+.page-container h2, .inventory-container h2 {
   color: #EEC930;
   font-size: 24px;
   margin-bottom: 20px;
-  text-align: center;
+  text-align: left;
 }
 
 .error {
@@ -153,12 +156,12 @@ a:hover {
   padding: 10px;
   border-radius: 4px;
   margin-bottom: 10px;
-  text-align: center;
+  text-align: left;
 }
 
 .inventory-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
   margin-bottom: 20px;
   flex-wrap: wrap;
@@ -215,8 +218,4 @@ a:hover {
   border-radius: 4px;
   font-size: 14px;
   box-sizing: border-box;
-}
-
-.inventory-table tbody tr:hover {
-  background-color: #f5f5f5;
 }
