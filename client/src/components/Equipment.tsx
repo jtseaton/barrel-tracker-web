@@ -4,7 +4,7 @@ import { Site, Equipment } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
-const Equipment: React.FC = () => {
+const EquipmentPage: React.FC = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<string>('');
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -151,4 +151,4 @@ const Equipment: React.FC = () => {
   );
 };
 
-export default Equipment;
+export default EquipmentPage;
