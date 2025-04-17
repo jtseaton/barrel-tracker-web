@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 interface Location {
-  locationId: string;
+  locationId: number; // Fixed from string to number
   name: string;
   siteId: string;
   enabled: number;
+  abbreviation?: string;
 }
 
 interface Site {
@@ -22,12 +23,14 @@ const Locations: React.FC = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(true); // Auto-open modal if fromReceive
+  const [showModal, setShowModal] = useState(!!locationState?.fromReceive); // Auto-open modal if fromReceive
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newLocation, setNewLocation] = useState({
     name: '',
     siteId: locationState?.siteId || '',
+    abbreviation: '',
   });
+  const [editLocation, setEditLocation] = useState<Location | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -39,6 +42,7 @@ const Locations: React.FC = () => {
         if (!locationsRes.ok || !sitesRes.ok) throw new Error('Failed to fetch data');
         const locationsData = await locationsRes.json();
         const sitesData = await sitesRes.json();
+        console.log('Fetched locations:', locationsData);
         setLocations(locationsData);
         setSites(sitesData);
       } catch (err: any) {
@@ -62,6 +66,7 @@ const Locations: React.FC = () => {
         body: JSON.stringify({
           name: newLocation.name,
           siteId: newLocation.siteId,
+          abbreviation: newLocation.abbreviation || null,
           enabled: 1,
         }),
       });
@@ -71,7 +76,7 @@ const Locations: React.FC = () => {
       }
       const newLoc = await res.json();
       setLocations([...locations, newLoc]);
-      setNewLocation({ name: '', siteId: locationState?.siteId || '' });
+      setNewLocation({ name: '', siteId: locationState?.siteId || '', abbreviation: '' });
       setShowModal(false);
       setSuccessMessage('Location created successfully!');
       setTimeout(() => {
@@ -87,7 +92,55 @@ const Locations: React.FC = () => {
     }
   };
 
-  if (error && !showModal) {
+  const handleEditLocation = (loc: Location) => {
+    setEditLocation(loc);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editLocation || !editLocation.name || !editLocation.siteId) {
+      setError('Location name and site are required');
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/locations/${editLocation.locationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editLocation.name,
+          siteId: editLocation.siteId,
+          abbreviation: editLocation.abbreviation || null,
+          enabled: editLocation.enabled,
+        }),
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Failed to update location: ${errorText}`);
+      }
+      setEditLocation(null);
+      const [locationsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/locations`),
+      ]);
+      if (!locationsRes.ok) throw new Error('Failed to fetch locations');
+      const locationsData = await locationsRes.json();
+      console.log('Fetched locations after update:', locationsData);
+      setLocations(locationsData);
+      setSuccessMessage('Location updated successfully!');
+      setTimeout(() => setSuccessMessage(null), 1000);
+    } catch (err: any) {
+      setError('Failed to update location: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditLocation(null);
+    setError(null);
+  };
+
+  if (error && !showModal && !editLocation) {
     return <div style={{ color: 'red', textAlign: 'center', marginTop: '20px' }}>{error}</div>;
   }
 
@@ -118,7 +171,7 @@ const Locations: React.FC = () => {
           Add New Location
         </button>
       )}
-      {showModal && (
+      {(showModal || editLocation) && (
         <div
           style={{
             position: 'fixed',
@@ -143,7 +196,7 @@ const Locations: React.FC = () => {
             }}
           >
             <h2 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
-              Add New Location
+              {editLocation ? 'Edit Location' : 'Add New Location'}
             </h2>
             {error && (
               <div style={{ color: 'red', marginBottom: '15px', textAlign: 'center' }}>
@@ -163,9 +216,11 @@ const Locations: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={newLocation.name}
+                value={editLocation ? editLocation.name : newLocation.name}
                 onChange={(e) =>
-                  setNewLocation({ ...newLocation, name: e.target.value })
+                  editLocation
+                    ? setEditLocation({ ...editLocation, name: e.target.value })
+                    : setNewLocation({ ...newLocation, name: e.target.value })
                 }
                 placeholder="e.g., Cold Storage"
                 style={{
@@ -189,11 +244,13 @@ const Locations: React.FC = () => {
                 Site:
               </label>
               <select
-                value={newLocation.siteId}
+                value={editLocation ? editLocation.siteId : newLocation.siteId}
                 onChange={(e) =>
-                  setNewLocation({ ...newLocation, siteId: e.target.value })
+                  editLocation
+                    ? setEditLocation({ ...editLocation, siteId: e.target.value })
+                    : setNewLocation({ ...newLocation, siteId: e.target.value })
                 }
-                disabled={!!locationState?.siteId}
+                disabled={!!locationState?.siteId && !editLocation}
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -210,13 +267,48 @@ const Locations: React.FC = () => {
                 ))}
               </select>
             </div>
+            <div style={{ marginBottom: '15px' }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '5px',
+                  fontWeight: 'bold',
+                  color: '#555',
+                }}
+              >
+                Abbreviation:
+              </label>
+              <input
+                type="text"
+                value={editLocation ? (editLocation.abbreviation || '') : newLocation.abbreviation}
+                onChange={(e) =>
+                  editLocation
+                    ? setEditLocation({ ...editLocation, abbreviation: e.target.value })
+                    : setNewLocation({ ...newLocation, abbreviation: e.target.value })
+                }
+                placeholder="e.g., Beer Cooler"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                }}
+              />
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <button
-                onClick={handleCreateLocation}
-                disabled={!newLocation.name || !newLocation.siteId || isSubmitting}
+                onClick={editLocation ? handleSaveEdit : handleCreateLocation}
+                disabled={
+                  (editLocation
+                    ? !editLocation.name || !editLocation.siteId
+                    : !newLocation.name || !newLocation.siteId) || isSubmitting
+                }
                 style={{
                   backgroundColor:
-                    !newLocation.name || !newLocation.siteId || isSubmitting
+                    (editLocation
+                      ? !editLocation.name || !editLocation.siteId
+                      : !newLocation.name || !newLocation.siteId) || isSubmitting
                       ? '#ccc'
                       : '#2196F3',
                   color: '#fff',
@@ -224,27 +316,39 @@ const Locations: React.FC = () => {
                   border: 'none',
                   borderRadius: '4px',
                   cursor:
-                    !newLocation.name || !newLocation.siteId || isSubmitting
+                    (editLocation
+                      ? !editLocation.name || !editLocation.siteId
+                      : !newLocation.name || !newLocation.siteId) || isSubmitting
                       ? 'not-allowed'
                       : 'pointer',
                   fontSize: '16px',
                 }}
                 onMouseOver={(e) => {
-                  if (newLocation.name && newLocation.siteId && !isSubmitting) {
+                  if (
+                    (editLocation
+                      ? editLocation.name && editLocation.siteId
+                      : newLocation.name && newLocation.siteId) &&
+                    !isSubmitting
+                  ) {
                     e.currentTarget.style.backgroundColor = '#1976D2';
                   }
                 }}
                 onMouseOut={(e) => {
-                  if (newLocation.name && newLocation.siteId && !isSubmitting) {
+                  if (
+                    (editLocation
+                      ? editLocation.name && editLocation.siteId
+                      : newLocation.name && newLocation.siteId) &&
+                    !isSubmitting
+                  ) {
                     e.currentTarget.style.backgroundColor = '#2196F3';
                   }
                 }}
               >
-                {isSubmitting ? 'Creating...' : 'Create'}
+                {isSubmitting ? 'Saving...' : editLocation ? 'Save' : 'Create'}
               </button>
               <button
-                onClick={() => {
-                  setNewLocation({ name: '', siteId: locationState?.siteId || '' });
+                onClick={editLocation ? handleCancelEdit : () => {
+                  setNewLocation({ name: '', siteId: locationState?.siteId || '', abbreviation: '' });
                   setShowModal(false);
                   setError(null);
                   if (locationState?.fromReceive) {
@@ -293,6 +397,26 @@ const Locations: React.FC = () => {
               >
                 Site
               </th>
+              <th
+                style={{
+                  border: '1px solid #ddd',
+                  padding: '12px',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                }}
+              >
+                Abbreviation
+              </th>
+              <th
+                style={{
+                  border: '1px solid #ddd',
+                  padding: '12px',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                }}
+              >
+                Action
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -316,6 +440,38 @@ const Locations: React.FC = () => {
                 >
                   {sites.find((site) => site.siteId === location.siteId)?.name ||
                     'Unknown Site'}
+                </td>
+                <td
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '12px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {location.abbreviation || 'None'}
+                </td>
+                <td
+                  style={{
+                    border: '1px solid #ddd',
+                    padding: '12px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <button
+                    onClick={() => handleEditLocation(location)}
+                    style={{
+                      backgroundColor: '#2196F3',
+                      color: '#fff',
+                      padding: '5px 10px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                  >
+                    Edit
+                  </button>
                 </td>
               </tr>
             ))}
