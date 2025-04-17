@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { PurchaseOrder, ReceiveItem, ReceivableItem, InventoryItem, Status, Vendor, ReceiveForm, PurchaseOrderItem, Site, Location } from '../types/interfaces';
@@ -271,6 +271,31 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
     }
   }, [activeItemDropdownIndex, activeLocationDropdownIndex]);
 
+  const calculateTotal = useMemo(() => {
+    let total = 0;
+  
+    // Item costs
+    if (useSingleItem) {
+      const singleCost = parseFloat(singleForm.cost || '0');
+      total += isNaN(singleCost) ? 0 : singleCost;
+    } else {
+      const itemsTotal = receiveItems.reduce((sum, item) => {
+        const cost = parseFloat(item.cost || '0');
+        return sum + (isNaN(cost) ? 0 : cost);
+      }, 0);
+      total += itemsTotal;
+  
+      // Other charges (only in Multiple Items mode)
+      const chargesTotal = otherCharges.reduce((sum, charge) => {
+        const cost = parseFloat(charge.cost || '0');
+        return sum + (isNaN(cost) ? 0 : cost);
+      }, 0);
+      total += chargesTotal;
+    }
+  
+    return total.toFixed(2); // Return as string with 2 decimal places
+  }, [useSingleItem, singleForm.cost, receiveItems, otherCharges]);
+
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSingleForm((prev: ReceiveForm) => ({ ...prev, source: value }));
@@ -449,7 +474,7 @@ const [rowFetchingLocations, setRowFetchingLocations] = useState<boolean[]>([]);
       fetchLocations(newReceiveItem.siteId, 9999);
     }
   };
-  
+
   const handleReceive = async () => {
     const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
     if (
@@ -615,6 +640,12 @@ const renderItemDropdown = (index: number, item: ReceiveItem) => {
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
       <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column' }}>
+        {/* Total Display */}
+      <div style={{ textAlign: 'center', marginBottom: '20px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+        <h2 style={{ color: '#555', fontSize: '20px', margin: 0 }}>
+          Total Receipt Value: ${calculateTotal}
+        </h2>
+      </div>
         <h1 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>Receive Inventory</h1>
         {productionError && <div style={{ color: '#F86752', backgroundColor: '#ffe6e6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{productionError}</div>}
         {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
