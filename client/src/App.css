@@ -76,7 +76,7 @@
   padding: 20px;
   margin-left: 0;
   transition: margin-left 0.3s ease;
-  background-color: #2E4655; /* Matches Chrome #2E4655 */
+  background-color: #2E4655;
   color: #FFFFFF;
   display: flex;
   justify-content: flex-start;
@@ -107,23 +107,23 @@ table {
   border-collapse: collapse;
   margin-top: 20px;
   background-color: #FFFFFF;
-  color: #555555; /* Matches Chrome #555555 */
-  border-radius: 8px; /* Matches Chrome */
+  color: #555555;
+  border-radius: 8px;
 }
 
 th {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
-  background-color: #F5F5F5; /* Matches Chrome #F5F5F5 */
-  color: #555555; /* Matches Chrome #555555 */
+  border-bottom: 1px solid #DDDDDD;
+  background-color: #F5F5F5;
+  color: #555555;
 }
 
 td {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
-  color: #555555; /* Matches Chrome #555555 */
+  border-bottom: 1px solid #DDDDDD;
+  color: #555555;
 }
 
 a {
@@ -148,7 +148,7 @@ a:hover {
   color: #EEC930;
   font-size: 24px;
   margin-bottom: 20px;
-  text-align: center; /* Matches Chrome */
+  text-align: center;
 }
 
 .error {
@@ -169,14 +169,14 @@ a:hover {
 }
 
 .inventory-actions button {
-  background-color: #EEC930; /* Matches Chrome #EEC930 */
-  color: #000000; /* Matches Chrome #000000 */
+  background-color: #EEC930;
+  color: #000000;
   padding: 10px 20px;
   border: none;
   border-radius: 4px;
   font-size: 16px;
   cursor: pointer;
-  transition: none; /* No hover change per Chrome */
+  transition: none;
 }
 
 .inventory-actions button:disabled {
@@ -186,40 +186,86 @@ a:hover {
 
 .inventory-table-container {
   overflow-x: auto;
-  margin-bottom: 20px; /* Matches Chrome */
+  margin-bottom: 20px;
 }
 
 .inventory-table {
   width: 100%;
-  min-width: 1000px; /* Matches prior fix */
+  min-width: 1000px;
   border-collapse: collapse;
   background-color: #FFFFFF;
-  color: #555555; /* Matches Chrome #555555 */
-  border-radius: 8px; /* Matches Chrome */
+  color: #555555;
+  border-radius: 8px;
 }
 
 .inventory-table th {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
-  background-color: #F5F5F5; /* Matches Chrome #F5F5F5 */
-  color: #555555; /* Matches Chrome #555555 */
-  font-weight: normal; /* Matches Chrome */
-  cursor: default; /* Remove cursor: pointer per Chrome */
+  border-bottom: 1px solid #DDDDDD;
+  background-color: #F5F5F5;
+  color: #555555;
+  font-weight: normal;
+  cursor: default;
 }
 
 .inventory-table td {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
-  color: #555555; /* Matches Chrome #555555 */
+  border-bottom: 1px solid #DDDDDD;
+  color: #555555;
 }
 
 .inventory-table th input {
   width: 100%;
   padding: 8px;
-  border: 1px solid #CCCCCC; /* Matches Chrome #CCCCCC */
+  border: 1px solid #CCCCCC;
   border-radius: 4px;
   font-size: 14px;
   box-sizing: border-box;
+}
+
+select, select option {
+  color: #000000;
+  background-color: #FFFFFF;
+  border: 1px solid #CCCCCC;
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 16px;
+}
+
+select:focus, select option:focus {
+  color: #000000;
+  background-color: #FFFFFF;
+}
+
+.typeahead {
+  border: 1px solid #DDDDDD;
+  max-height: 150px;
+  overflow-y: auto;
+  position: absolute;
+  background-color: #FFFFFF;
+  width: 100%;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  z-index: 10000;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.typeahead li {
+  padding: 8px 10px;
+  cursor: pointer;
+  background-color: #FFFFFF;
+  border-bottom: 1px solid #EEEEEE;
+  color: #000000;
+}
+
+.typeahead li:hover, .typeahead li.selected {
+  background-color: #E0E0E0;
+}
+
+.typeahead li.add-new {
+  color: #2196F3;
+  font-weight: bold;
 }

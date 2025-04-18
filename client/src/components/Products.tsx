@@ -180,39 +180,39 @@ const Products: React.FC = () => {
       </div>
 
       <div className="inventory-table-container">
-        <table className="inventory-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Name</th>
-              <th>Abbreviation</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((product) => (
-              <tr key={product.id}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedProducts.includes(product.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedProducts([...selectedProducts, product.id]);
-                      } else {
-                        setSelectedProducts(selectedProducts.filter(id => id !== product.id));
-                      }
-                    }}
-                  />
-                </td>
-                <td>
-                  <Link to={`/products/${product.id}`}>{product.name}</Link>
-                </td>
-                <td>{product.abbreviation}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  <table className="inventory-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Name</th>
+        <th>Abbreviation</th>
+      </tr>
+    </thead>
+    <tbody>
+      {products.map((product) => (
+        <tr key={product.id}>
+          <td>
+            <input
+              type="checkbox"
+              checked={selectedProducts.includes(product.id)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedProducts([...selectedProducts, product.id]);
+                } else {
+                  setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+                }
+              }}
+            />
+          </td>
+          <td>
+            <Link to={`/products/${product.id}`}>{product.name}</Link>
+          </td>
+          <td>{product.abbreviation}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
 
       {showAddModal && (
         <div
@@ -327,86 +327,67 @@ const Products: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div style={{ marginBottom: '15px', position: 'relative' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>
-                Style:
-              </label>
-              <input
-                type="text"
-                value={newProduct.style || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setNewProduct({ ...newProduct, style: value });
-                  setShowStyleSuggestions(true);
-                  if (value.trim() === '') {
-                    setFilteredStyles(styles.find(s => s.type === newProduct.type)?.styles || []);
-                  } else {
-                    const filtered = (styles.find(s => s.type === newProduct.type)?.styles || []).filter(s => s.toLowerCase().includes(value.toLowerCase()));
-                    setFilteredStyles(filtered);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && filteredStyles.length > 0) {
-                    e.preventDefault();
-                    setNewProduct({ ...newProduct, style: filteredStyles[0] });
-                    setShowStyleSuggestions(false);
-                  }
-                }}
-                placeholder="Type to search styles"
-                onFocus={() => setShowStyleSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowStyleSuggestions(false), 300)}
-                disabled={newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  fontSize: '16px',
-                  backgroundColor: (newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise) ? '#f0f0f0' : '#fff',
-                }}
-              />
-              {showStyleSuggestions && newProduct.type !== ProductType.Seltzer && newProduct.type !== ProductType.Merchandise && (
-                <ul
-                  style={{
-                    border: '1px solid #ddd',
-                    maxHeight: '150px',
-                    overflowY: 'auto',
-                    position: 'absolute',
-                    backgroundColor: '#fff',
-                    width: '100%',
-                    listStyle: 'none',
-                    padding: 0,
-                    margin: 0,
-                    zIndex: 1000,
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  }}
-                >
-                  {filteredStyles.length > 0 ? (
-                    filteredStyles.map((style) => (
-                      <li
-                        key={style}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setNewProduct({ ...newProduct, style });
-                          setShowStyleSuggestions(false);
-                        }}
-                        style={{
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          backgroundColor: newProduct.style === style ? '#e0e0e0' : '#fff',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        {style}
-                      </li>
-                    ))
-                  ) : (
-                    <li style={{ padding: '8px 10px' }}>No matches found</li>
-                  )}
-                </ul>
-              )}
-            </div>
+            <div className="typeahead-container" style={{ marginBottom: '15px', position: 'relative' }}>
+  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>
+    Style:
+  </label>
+  <input
+    type="text"
+    value={newProduct.style || ''}
+    onChange={(e) => {
+      const value = e.target.value;
+      setNewProduct({ ...newProduct, style: value });
+      setShowStyleSuggestions(true);
+      if (value.trim() === '') {
+        setFilteredStyles(styles.find(s => s.type === newProduct.type)?.styles || []);
+      } else {
+        const filtered = (styles.find(s => s.type === newProduct.type)?.styles || []).filter(s => s.toLowerCase().includes(value.toLowerCase()));
+        setFilteredStyles(filtered);
+      }
+    }}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' && filteredStyles.length > 0) {
+        e.preventDefault();
+        setNewProduct({ ...newProduct, style: filteredStyles[0] });
+        setShowStyleSuggestions(false);
+      }
+    }}
+    placeholder="Type to search styles"
+    onFocus={() => setShowStyleSuggestions(true)}
+    onBlur={() => setTimeout(() => setShowStyleSuggestions(false), 300)}
+    disabled={newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise}
+    style={{
+      width: '100%',
+      padding: '10px',
+      border: '1px solid #CCCCCC',
+      borderRadius: '4px',
+      fontSize: '16px',
+      backgroundColor: (newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise) ? '#f0f0f0' : '#FFFFFF',
+      color: '#000000',
+    }}
+  />
+  {showStyleSuggestions && newProduct.type !== ProductType.Seltzer && newProduct.type !== ProductType.Merchandise && (
+    <ul className="typeahead">
+      {filteredStyles.length > 0 ? (
+        filteredStyles.map((style) => (
+          <li
+            key={style}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setNewProduct({ ...newProduct, style });
+              setShowStyleSuggestions(false);
+            }}
+            className={newProduct.style === style ? 'selected' : ''}
+          >
+            {style}
+          </li>
+        ))
+      ) : (
+        <li>No matches found</li>
+      )}
+    </ul>
+  )}
+</div>
             <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>
                 ABV (%):
