@@ -269,3 +269,15 @@ select:focus, select option:focus {
   color: #2196F3 !important;
   font-weight: bold;
 }
+
+.modal-input {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px;
+  border: 1px solid #CCCCCC;
+  border-radius: 4px;
+  font-size: 16px;
+  box-sizing: border-box !important;
+  color: #000000;
+  background-color: #FFFFFF;
+}
