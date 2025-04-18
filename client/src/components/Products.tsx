@@ -45,14 +45,16 @@ const Products: React.FC = () => {
 
     const fetchStyles = async () => {
       try {
-        const res = await fetch('../../config/styles.xml');
+        const res = await fetch('/styles.xml');
         if (!res.ok) throw new Error(`Failed to fetch styles.xml: ${res.status}`);
         const text = await res.text();
+        console.log('Fetched styles.xml:', text.substring(0, 200));
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
         const styleNodes = xmlDoc.getElementsByTagName('style');
         const styleList = Array.from(styleNodes).map(node => node.textContent || '');
         if (styleList.length === 0) throw new Error('No styles found in XML');
+        console.log('Parsed styles:', styleList);
 
         // Map styles to ProductType
         const styleMap = [
@@ -113,12 +115,7 @@ const Products: React.FC = () => {
       }
       const addedProduct = await res.json();
       console.log('Server response:', addedProduct);
-      // Fetch updated products
-      const updatedRes = await fetch(`${API_BASE_URL}/api/products`);
-      if (!updatedRes.ok) throw new Error(`Failed to refresh products: ${updatedRes.status}`);
-      const updatedProducts = await updatedRes.json();
-      console.log('Updated products:', updatedProducts);
-      setProducts(updatedProducts);
+      setProducts([...products, addedProduct]);
       setShowAddModal(false);
       setNewProduct({ name: '', abbreviation: '', enabled: true, priority: 1, class: '', productColor: '', type: '', style: '', abv: 0, ibu: 0 });
       setError(null);
@@ -157,10 +154,11 @@ const Products: React.FC = () => {
 
   return (
     <div className="page-container">
-      <h2 style={{ color: '#EEC930', marginBottom: '20px', fontSize: '24px' }}>Products</h2>
+      <h2>Products</h2>
       {error && (
         <div className="error">{error}</div>
       )}
+      {stylesError && <div className="error">{stylesError}</div>}
       <div className="inventory-actions">
         <button
           onClick={() => setShowAddModal(true)}
@@ -173,7 +171,7 @@ const Products: React.FC = () => {
           disabled={selectedProducts.length === 0}
           className="inventory-actions button"
           style={{
-            backgroundColor: selectedProducts.length ? '#F86752' : '#ccc',
+            backgroundColor: selectedProducts.length ? undefined : '#CCCCCC',
             cursor: selectedProducts.length ? 'pointer' : 'not-allowed',
           }}
         >
@@ -181,7 +179,41 @@ const Products: React.FC = () => {
         </button>
       </div>
 
-      {/* Add Product Modal */}
+      <div className="inventory-table-container">
+        <table className="inventory-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Abbreviation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => (
+              <tr key={product.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.includes(product.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProducts([...selectedProducts, product.id]);
+                      } else {
+                        setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+                      }
+                    }}
+                  />
+                </td>
+                <td>
+                  <Link to={`/products/${product.id}`}>{product.name}</Link>
+                </td>
+                <td>{product.abbreviation}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {showAddModal && (
         <div
           style={{
@@ -194,8 +226,7 @@ const Products: React.FC = () => {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            zIndex: 2000,
-          }}
+            zIndex: 2000,          }}
         >
           <div
             style={{
@@ -221,7 +252,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -239,7 +270,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -255,7 +286,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -285,7 +316,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -328,7 +359,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                   backgroundColor: (newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise) ? '#f0f0f0' : '#fff',
@@ -389,7 +420,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -407,7 +438,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -425,7 +456,7 @@ const Products: React.FC = () => {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid #ccc',
                   borderRadius: '4px',
                   fontSize: '16px',
                 }}
@@ -437,7 +468,7 @@ const Products: React.FC = () => {
                 disabled={!newProduct.name || !newProduct.abbreviation || !newProduct.type || !newProduct.style}
                 className="inventory-actions button"
                 style={{
-                  backgroundColor: newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style ? '#2196F3' : '#ccc',
+                  backgroundColor: newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style ? undefined : '#CCCCCC',
                   cursor: newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style ? 'pointer' : 'not-allowed',
                 }}
               >
@@ -446,9 +477,6 @@ const Products: React.FC = () => {
               <button
                 onClick={handleCancelAdd}
                 className="inventory-actions button"
-                style={{
-                  backgroundColor: '#F86752',
-                }}
               >
                 Cancel
               </button>
@@ -456,39 +484,6 @@ const Products: React.FC = () => {
           </div>
         </div>
       )}
-
-      <table className="inventory-table">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Name</th>
-            <th>Abbreviation</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((product) => (
-            <tr key={product.id}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selectedProducts.includes(product.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedProducts([...selectedProducts, product.id]);
-                    } else {
-                      setSelectedProducts(selectedProducts.filter(id => id !== product.id));
-                    }
-                  }}
-                />
-              </td>
-              <td>
-                <Link to={`/products/${product.id}`}>{product.name}</Link>
-              </td>
-              <td>{product.abbreviation}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 };
