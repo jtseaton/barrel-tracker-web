@@ -30,9 +30,12 @@ const Products: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/products`);
+        const url = `${API_BASE_URL}/api/products`;
+        console.log('Fetching products from:', url);
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
+        console.log('Fetched products:', data);
         setProducts(data);
       } catch (err: any) {
         console.error('Fetch products error:', err);
@@ -42,7 +45,7 @@ const Products: React.FC = () => {
 
     const fetchStyles = async () => {
       try {
-        const res = await fetch('/styles.xml');
+        const res = await fetch('../../config/styles.xml');
         if (!res.ok) throw new Error(`Failed to fetch styles.xml: ${res.status}`);
         const text = await res.text();
         const parser = new DOMParser();
@@ -97,7 +100,9 @@ const Products: React.FC = () => {
   const handleAddProduct = async () => {
     console.log('Adding product:', newProduct);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/products`, {
+      const url = `${API_BASE_URL}/api/products`;
+      console.log('Sending POST to:', url);
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProduct),
@@ -108,9 +113,11 @@ const Products: React.FC = () => {
       }
       const addedProduct = await res.json();
       console.log('Server response:', addedProduct);
+      // Fetch updated products
       const updatedRes = await fetch(`${API_BASE_URL}/api/products`);
-      if (!updatedRes.ok) throw new Error('Failed to refresh products');
+      if (!updatedRes.ok) throw new Error(`Failed to refresh products: ${updatedRes.status}`);
       const updatedProducts = await updatedRes.json();
+      console.log('Updated products:', updatedProducts);
       setProducts(updatedProducts);
       setShowAddModal(false);
       setNewProduct({ name: '', abbreviation: '', enabled: true, priority: 1, class: '', productColor: '', type: '', style: '', abv: 0, ibu: 0 });
@@ -130,7 +137,9 @@ const Products: React.FC = () => {
   const handleDeleteSelected = async () => {
     if (selectedProducts.length === 0) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/products`, {
+      const url = `${API_BASE_URL}/api/products`;
+      console.log('Sending DELETE to:', url);
+      const res = await fetch(url, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedProducts }),
@@ -208,7 +217,7 @@ const Products: React.FC = () => {
                 type="text"
                 value={newProduct.name || ''}
                 onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                placeholder="e.g., Hoppy Red Ale"
+                placeholder="e.g., Hoppy Red"
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -226,7 +235,7 @@ const Products: React.FC = () => {
                 type="text"
                 value={newProduct.abbreviation || ''}
                 onChange={(e) => setNewProduct({ ...newProduct, abbreviation: e.target.value })}
-                placeholder="e.g., HRA"
+                placeholder="e.g., HR"
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -412,7 +421,7 @@ const Products: React.FC = () => {
                 type="text"
                 value={newProduct.productColor || ''}
                 onChange={(e) => setNewProduct({ ...newProduct, productColor: e.target.value })}
-                placeholder="e.g., Golden"
+                placeholder="e.g., Red"
                 style={{
                   width: '100%',
                   padding: '10px',

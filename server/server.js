@@ -614,43 +614,43 @@ app.get('/api/products/:id/recipes', (req, res) => {
   res.json(mockRecipes);
 });
 
+// Mock product storage
+let mockProducts = [
+  { id: 1, name: 'Whiskey', abbreviation: 'WH', enabled: true, priority: 1, class: 'Distilled', productColor: 'Amber', type: 'Spirits', style: 'Bourbon', abv: 40, ibu: 0 },
+  { id: 2, name: 'IPA', abbreviation: 'IP', enabled: true, priority: 2, class: 'Beer', productColor: 'Golden', type: 'Malt', style: 'American IPA', abv: 6.5, ibu: 60 },
+];
+
+// Products endpoints
 app.get('/api/products', (req, res) => {
-  const mockProducts = [
-    { id: 1, name: 'Whiskey', abbreviation: 'WH', enabled: true, priority: 1, class: 'Distilled', productColor: 'Amber', type: 'Spirits', style: 'Bourbon', abv: 40, ibu: 0 },
-    { id: 2, name: 'IPA', abbreviation: 'IP', enabled: true, priority: 2, class: 'Beer', productColor: 'Golden', type: 'Malt', style: 'American IPA', abv: 6.5, ibu: 60 },
-  ];
+  console.log('GET /api/products, returning:', mockProducts);
   res.json(mockProducts);
 });
 
 app.get('/api/products/:id', (req, res) => {
   const id = parseInt(req.params.id);
-  const mockProduct = {
-    id,
-    name: id === 1 ? 'Whiskey' : 'IPA',
-    abbreviation: id === 1 ? 'WH' : 'IP',
-    enabled: true,
-    priority: id,
-    class: id === 1 ? 'Distilled' : 'Beer',
-    productColor: id === 1 ? 'Amber' : 'Golden',
-    type: id === 1 ? 'Spirits' : 'Malt',
-    style: id === 1 ? 'Bourbon' : 'American IPA',
-    abv: id === 1 ? 40 : 6.5,
-    ibu: id === 1 ? 0 : 60,
-  };
-  res.json(mockProduct);
+  const product = mockProducts.find(p => p.id === id);
+  if (!product) {
+    console.log(`GET /api/products/${id}: Product not found`);
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  console.log(`GET /api/products/${id}, returning:`, product);
+  res.json(product);
 });
 
 app.post('/api/products', (req, res) => {
-  console.log('Received POST to /api/products:', req.body);
+  console.log('POST /api/products, payload:', req.body);
   const { name, abbreviation, enabled = true, priority = 1, class: prodClass, productColor, type, style, abv = 0, ibu = 0 } = req.body;
   if (!name || !abbreviation || !type || !style) {
+    console.log('POST /api/products: Missing required fields');
     return res.status(400).json({ error: 'Name, abbreviation, type, and style are required' });
   }
   const validProductTypes = ['Malt', 'Spirits', 'Wine', 'Merchandise', 'Cider', 'Seltzer'];
   if (!validProductTypes.includes(type)) {
+    console.log(`POST /api/products: Invalid type: ${type}`);
     return res.status(400).json({ error: `Invalid product type. Must be one of: ${validProductTypes.join(', ')}` });
   }
   if ((type === 'Seltzer' || type === 'Merchandise') && style !== 'Other') {
+    console.log(`POST /api/products: Invalid style for ${type}: ${style}`);
     return res.status(400).json({ error: 'Style must be "Other" for Seltzer or Merchandise' });
   }
   const newProduct = {
@@ -666,15 +666,20 @@ app.post('/api/products', (req, res) => {
     abv,
     ibu,
   };
+  mockProducts.push(newProduct);
+  console.log('POST /api/products, added:', newProduct);
   res.json(newProduct);
 });
 
 app.delete('/api/products', (req, res) => {
-  console.log('Received DELETE to /api/products:', req.body);
+  console.log('DELETE /api/products, payload:', req.body);
   const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) {
+    console.log('DELETE /api/products: Invalid IDs');
     return res.status(400).json({ error: 'IDs array is required' });
   }
+  mockProducts = mockProducts.filter(p => !ids.includes(p.id));
+  console.log('DELETE /api/products, deleted IDs:', ids);
   res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` });
 });
 
