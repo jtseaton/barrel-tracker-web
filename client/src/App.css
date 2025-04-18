@@ -106,24 +106,24 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
-  background-color: #FFFFFF;
-  color: #555555;
-  border-radius: 8px;
+  background-color: #FFFFFF !important;
+  color: #555555 !important;
+  border-radius: 8px !important;
 }
 
 th {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD;
-  background-color: #F5F5F5;
-  color: #555555;
+  border-bottom: 1px solid #DDDDDD !important;
+  background-color: #F5F5F5 !important;
+  color: #555555 !important;
 }
 
 td {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD;
-  color: #555555;
+  border-bottom: 1px solid #DDDDDD !important;
+  color: #555555 !important;
 }
 
 a {
@@ -138,7 +138,7 @@ a:hover {
 .page-container, .inventory-container {
   padding: 20px;
   width: 100%;
-  background-color: #2E4655;
+  background-color: #2E4655 !important;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   box-sizing: border-box;
@@ -193,17 +193,17 @@ a:hover {
   width: 100%;
   min-width: 1000px;
   border-collapse: collapse;
-  background-color: #FFFFFF;
-  color: #555555;
-  border-radius: 8px;
+  background-color: #FFFFFF !important;
+  color: #555555 !important;
+  border-radius: 8px !important;
 }
 
 .inventory-table th {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD;
-  background-color: #F5F5F5;
-  color: #555555;
+  border-bottom: 1px solid #DDDDDD !important;
+  background-color: #F5F5F5 !important;
+  color: #555555 !important;
   font-weight: normal;
   cursor: default;
 }
@@ -211,8 +211,8 @@ a:hover {
 .inventory-table td {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #DDDDDD;
-  color: #555555;
+  border-bottom: 1px solid #DDDDDD !important;
+  color: #555555 !important;
 }
 
 .inventory-table th input {
@@ -225,47 +225,47 @@ a:hover {
 }
 
 select, select option {
-  color: #000000;
-  background-color: #FFFFFF;
-  border: 1px solid #CCCCCC;
-  border-radius: 4px;
-  padding: 10px;
-  font-size: 16px;
+  color: #000000 !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #CCCCCC !important;
+  border-radius: 4px !important;
+  padding: 10px !important;
+  font-size: 16px !important;
 }
 
 select:focus, select option:focus {
-  color: #000000;
-  background-color: #FFFFFF;
+  color: #000000 !important;
+  background-color: #FFFFFF !important;
 }
 
 .typeahead {
-  border: 1px solid #DDDDDD;
+  border: 1px solid #DDDDDD !important;
   max-height: 150px;
   overflow-y: auto;
   position: absolute;
-  background-color: #FFFFFF;
+  background-color: #FFFFFF !important;
   width: 100%;
   list-style: none;
   padding: 0;
   margin: 0;
   z-index: 10000;
-  border-radius: 4px;
+  border-radius: 4px !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .typeahead li {
   padding: 8px 10px;
   cursor: pointer;
-  background-color: #FFFFFF;
-  border-bottom: 1px solid #EEEEEE;
-  color: #000000;
+  background-color: #FFFFFF !important;
+  border-bottom: 1px solid #EEEEEE !important;
+  color: #000000 !important;
 }
 
 .typeahead li:hover, .typeahead li.selected {
-  background-color: #E0E0E0;
+  background-color: #E0E0E0 !important;
 }
 
 .typeahead li.add-new {
-  color: #2196F3;
+  color: #2196F3 !important;
   font-weight: bold;
 }
