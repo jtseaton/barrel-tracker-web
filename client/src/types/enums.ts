@@ -33,6 +33,15 @@ export enum ProductClass {
   Spirits = 'Spirits',
 }
 
+export enum ProductType {
+  Malt = 'Malt',
+  Spirits = 'Spirits',
+  Wine = 'Wine',
+  Merchandise = 'Merchandise',
+  Cider = 'Cider',
+  Seltzer = 'Seltzer',
+}
+
 export enum Account {
   Storage = 'Storage',
   Processing = 'Processing',
