@@ -633,75 +633,40 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     }
   };
 
-const renderItemDropdown = (index: number, item: ReceiveItem) => {
-  if (activeItemDropdownIndex !== index || !itemDropdownPosition) return null;
-  return createPortal(
-    <ul
-      style={{
-        position: 'fixed',
-        top: `${itemDropdownPosition.top}px`,
-        left: `${itemDropdownPosition.left}px`,
-        border: '1px solid #ddd',
-        maxHeight: '150px',
-        overflowY: 'auto',
-        backgroundColor: '#fff',
-        width: '200px',
-        listStyle: 'none',
-        padding: 0,
-        margin: 0,
-        zIndex: 30000,
-        borderRadius: '4px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      }}
-    >
-      {filteredItems.length > 0 ? (
-        filteredItems.map((i) => (
-          <li
-            key={i.name}
-            onMouseDown={() => handleItemSelect(i, index)}
-            style={{
-              padding: '8px 10px',
-              cursor: 'pointer',
-              backgroundColor: item.item === i.name ? '#e0e0e0' : '#fff',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            {i.name}
+  const renderItemDropdown = (index: number, item: ReceiveItem) => {
+    if (activeItemDropdownIndex !== index || !itemDropdownPosition) return null;
+    return createPortal(
+      <ul className="typeahead">
+        {filteredItems.length > 0 ? (
+          filteredItems.map((i) => (
+            <li
+              key={i.name}
+              onMouseDown={() => handleItemSelect(i, index)}
+              className={item.item === i.name ? 'selected' : ''}
+            >
+              {i.name}
+            </li>
+          ))
+        ) : (
+          <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+            No items found
           </li>
-        ))
-      ) : (
+        )}
         <li
-          style={{
-            padding: '8px 10px',
-            color: '#888',
-            borderBottom: '1px solid #eee',
+          onMouseDown={() => {
+            setNewItem(item.item);
+            setNewItemType(item.materialType);
+            setShowNewItemModal(true);
+            setActiveItemDropdownIndex(null);
           }}
+          className="add-new"
         >
-          No items found
+          Add New Item
         </li>
-      )}
-      <li
-        onMouseDown={() => {
-          setNewItem(item.item);
-          setNewItemType(item.materialType);
-          setShowNewItemModal(true);
-          setActiveItemDropdownIndex(null);
-        }}
-        style={{
-          padding: '8px 10px',
-          cursor: 'pointer',
-          backgroundColor: '#fff',
-          borderBottom: '1px solid #eee',
-          color: '#2196F3',
-          fontWeight: 'bold',
-        }}
-      >
-        Add New Item
-      </li>
-    </ul>,
-    document.getElementById('dropdown-portal') || document.body
-  );
-};
+      </ul>,
+      document.getElementById('dropdown-portal') || document.body
+    );
+  };
 
 return (
   <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
