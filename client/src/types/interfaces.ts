@@ -213,6 +213,7 @@ export interface Location {
   locationId: number;
   siteId: string;
   name: string;
+  abbreviation: string; // Added
   enabled: number;
 }
 
@@ -220,5 +221,6 @@ export interface Equipment {
   equipmentId: number;
   siteId: string;
   name: string;
-  enabled: number; // Consistent with Location
+  abbreviation: string; // Added
+  enabled: number;
 }

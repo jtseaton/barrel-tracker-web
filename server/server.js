@@ -643,8 +643,15 @@ app.get('/api/products/:id/recipes', (req, res) => {
 app.post('/api/products', (req, res) => {
   console.log('Received POST to /api/products:', req.body);
   const { name, abbreviation, enabled = true, priority = 1, class: prodClass, productColor, type, style, abv = 0, ibu = 0 } = req.body;
-  if (!name || !abbreviation) {
-    return res.status(400).json({ error: 'Name and abbreviation are required' });
+  if (!name || !abbreviation || !type || !style) {
+    return res.status(400).json({ error: 'Name, abbreviation, type, and style are required' });
+  }
+  const validProductTypes = ['Malt', 'Spirits', 'Wine', 'Merchandise', 'Cider', 'Seltzer'];
+  if (!validProductTypes.includes(type)) {
+    return res.status(400).json({ error: `Invalid product type. Must be one of: ${validProductTypes.join(', ')}` });
+  }
+  if ((type === 'Seltzer' || type === 'Merchandise') && style !== 'Other') {
+    return res.status(400).json({ error: 'Style must be "Other" for Seltzer or Merchandise' });
   }
   const newProduct = {
     id: Date.now(),
