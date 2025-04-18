@@ -76,8 +76,8 @@
   padding: 20px;
   margin-left: 0;
   transition: margin-left 0.3s ease;
-  background-color: #FFFFFF;
-  color: #000000;
+  background-color: #2E4655; /* Matches Chrome #2E4655 */
+  color: #FFFFFF;
   display: flex;
   justify-content: flex-start;
   align-items: flex-start;
@@ -107,22 +107,23 @@ table {
   border-collapse: collapse;
   margin-top: 20px;
   background-color: #FFFFFF;
-  color: #000000;
+  color: #555555; /* Matches Chrome #555555 */
+  border-radius: 8px; /* Matches Chrome */
 }
 
 th {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #000000;
-  background-color: #E0E0E0;
-  color: #000000;
+  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
+  background-color: #F5F5F5; /* Matches Chrome #F5F5F5 */
+  color: #555555; /* Matches Chrome #555555 */
 }
 
 td {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #000000;
-  color: #000000;
+  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
+  color: #555555; /* Matches Chrome #555555 */
 }
 
 a {
@@ -147,7 +148,7 @@ a:hover {
   color: #EEC930;
   font-size: 24px;
   margin-bottom: 20px;
-  text-align: left;
+  text-align: center; /* Matches Chrome */
 }
 
 .error {
@@ -168,53 +169,56 @@ a:hover {
 }
 
 .inventory-actions button {
-  background-color: #F86752;
-  color: #FFFFFF;
+  background-color: #EEC930; /* Matches Chrome #EEC930 */
+  color: #000000; /* Matches Chrome #000000 */
   padding: 10px 20px;
   border: none;
   border-radius: 4px;
   font-size: 16px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: none; /* No hover change per Chrome */
 }
 
-.inventory-actions button:hover {
-  background-color: #EEC930;
-  color: #000000;
+.inventory-actions button:disabled {
+  background-color: #CCCCCC;
+  cursor: not-allowed;
 }
 
 .inventory-table-container {
   overflow-x: auto;
+  margin-bottom: 20px; /* Matches Chrome */
 }
 
 .inventory-table {
   width: 100%;
+  min-width: 1000px; /* Matches prior fix */
   border-collapse: collapse;
   background-color: #FFFFFF;
-  color: #000000;
+  color: #555555; /* Matches Chrome #555555 */
+  border-radius: 8px; /* Matches Chrome */
 }
 
 .inventory-table th {
-  padding: 12px;
+  padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #000000;
-  background-color: #E0E0E0;
-  color: #000000;
-  font-weight: bold;
-  cursor: pointer;
+  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
+  background-color: #F5F5F5; /* Matches Chrome #F5F5F5 */
+  color: #555555; /* Matches Chrome #555555 */
+  font-weight: normal; /* Matches Chrome */
+  cursor: default; /* Remove cursor: pointer per Chrome */
 }
 
 .inventory-table td {
-  padding: 12px;
+  padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #000000;
-  color: #000000;
+  border-bottom: 1px solid #DDDDDD; /* Matches Chrome #DDDDDD */
+  color: #555555; /* Matches Chrome #555555 */
 }
 
 .inventory-table th input {
   width: 100%;
   padding: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid #CCCCCC; /* Matches Chrome #CCCCCC */
   border-radius: 4px;
   font-size: 14px;
   box-sizing: border-box;
