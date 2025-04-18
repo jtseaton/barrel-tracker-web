@@ -24,6 +24,7 @@ const Products: React.FC = () => {
   const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
   const [styles, setStyles] = useState<{ type: string; styles: string[] }[]>([]);
   const [stylesError, setStylesError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
   useEffect(() => {
@@ -35,6 +36,7 @@ const Products: React.FC = () => {
         setProducts(data);
       } catch (err: any) {
         console.error('Fetch products error:', err);
+        setError(`Failed to load products: ${err.message}`);
       }
     };
 
@@ -65,7 +67,7 @@ const Products: React.FC = () => {
           },
           {
             type: ProductType.Cider,
-            styles: ['Cider'], // Add Cider style
+            styles: ['Cider'],
           },
           {
             type: ProductType.Seltzer,
@@ -112,6 +114,7 @@ const Products: React.FC = () => {
       setProducts(updatedProducts);
       setShowAddModal(false);
       setNewProduct({ name: '', abbreviation: '', enabled: true, priority: 1, class: '', productColor: '', type: '', style: '', abv: 0, ibu: 0 });
+      setError(null);
     } catch (err: any) {
       console.error('Add product error:', err);
       setError(`Failed to add product: ${err.message}`);
@@ -136,55 +139,33 @@ const Products: React.FC = () => {
       const updatedProducts = products.filter(p => !selectedProducts.includes(p.id));
       setProducts(updatedProducts);
       setSelectedProducts([]);
+      setError(null);
     } catch (err: any) {
       console.error('Delete products error:', err);
       setError(`Failed to delete products: ${err.message}`);
     }
   };
 
-  const [error, setError] = useState<string | null>(null);
-
   return (
     <div className="page-container">
-      <h2 style={{ color: '#EEC930', marginBottom: '20px' }}>Products</h2>
+      <h2 style={{ color: '#EEC930', marginBottom: '20px', fontSize: '24px' }}>Products</h2>
       {error && (
         <div className="error">{error}</div>
       )}
       <div className="inventory-actions">
         <button
           onClick={() => setShowAddModal(true)}
-          style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+          className="inventory-actions button"
         >
           Add Product
         </button>
         <button
           onClick={handleDeleteSelected}
           disabled={selectedProducts.length === 0}
+          className="inventory-actions button"
           style={{
             backgroundColor: selectedProducts.length ? '#F86752' : '#ccc',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
             cursor: selectedProducts.length ? 'pointer' : 'not-allowed',
-            fontSize: '16px',
-            marginLeft: '10px',
-          }}
-          onMouseOver={(e) => {
-            if (selectedProducts.length) e.currentTarget.style.backgroundColor = '#D32F2F';
-          }}
-          onMouseOut={(e) => {
-            if (selectedProducts.length) e.currentTarget.style.backgroundColor = '#F86752';
           }}
         >
           Delete Selected
@@ -445,41 +426,20 @@ const Products: React.FC = () => {
               <button
                 onClick={handleAddProduct}
                 disabled={!newProduct.name || !newProduct.abbreviation || !newProduct.type || !newProduct.style}
+                className="inventory-actions button"
                 style={{
                   backgroundColor: newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style ? '#2196F3' : '#ccc',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
                   cursor: newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style ? 'pointer' : 'not-allowed',
-                  fontSize: '16px',
-                }}
-                onMouseOver={(e) => {
-                  if (newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style) {
-                    e.currentTarget.style.backgroundColor = '#1976D2';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (newProduct.name && newProduct.abbreviation && newProduct.type && newProduct.style) {
-                    e.currentTarget.style.backgroundColor = '#2196F3';
-                  }
                 }}
               >
                 Add
               </button>
               <button
                 onClick={handleCancelAdd}
+                className="inventory-actions button"
                 style={{
                   backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
               >
                 Cancel
               </button>
@@ -488,18 +448,18 @@ const Products: React.FC = () => {
         </div>
       )}
 
-      <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', marginTop: '20px' }}>
+      <table className="inventory-table">
         <thead>
-          <tr style={{ backgroundColor: '#EEC930' }}>
-            <th style={{ border: '1px solid #000', padding: '12px', textAlign: 'left', color: '#000', fontWeight: 'bold' }}></th>
-            <th style={{ border: '1px solid #000', padding: '12px', textAlign: 'left', color: '#000', fontWeight: 'bold' }}>Name</th>
-            <th style={{ border: '1px solid #000', padding: '12px', textAlign: 'left', color: '#000', fontWeight: 'bold' }}>Abbreviation</th>
+          <tr>
+            <th></th>
+            <th>Name</th>
+            <th>Abbreviation</th>
           </tr>
         </thead>
         <tbody>
           {products.map((product) => (
-            <tr key={product.id} style={{ backgroundColor: '#fff' }}>
-              <td style={{ border: '1px solid #000', padding: '12px' }}>
+            <tr key={product.id}>
+              <td>
                 <input
                   type="checkbox"
                   checked={selectedProducts.includes(product.id)}
@@ -512,12 +472,10 @@ const Products: React.FC = () => {
                   }}
                 />
               </td>
-              <td style={{ border: '1px solid #000', padding: '12px' }}>
-                <Link to={`/products/${product.id}`} style={{ color: '#0066CC', textDecoration: 'underline' }}>
-                  {product.name}
-                </Link>
+              <td>
+                <Link to={`/products/${product.id}`}>{product.name}</Link>
               </td>
-              <td style={{ border: '1px solid #000', padding: '12px' }}>{product.abbreviation}</td>
+              <td>{product.abbreviation}</td>
             </tr>
           ))}
         </tbody>
