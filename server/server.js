@@ -131,21 +131,41 @@ db.serialize(() => {
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
   `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS facility_designs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      siteId TEXT NOT NULL,
-      objects TEXT NOT NULL,
-      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (siteId) REFERENCES sites(siteId),
-      UNIQUE(siteId)
-    )
-  `);
-  // Update existing table to add UNIQUE constraint (run once, then comment out)
-  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
-    if (err) console.error('Error adding UNIQUE index:', err);
-  });
+// In db.serialize (replace facility_designs table creation)
+db.run(`
+  CREATE TABLE IF NOT EXISTS facility_designs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    siteId TEXT NOT NULL,
+    objects TEXT NOT NULL,
+    createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (siteId) REFERENCES sites(siteId),
+    UNIQUE(siteId)
+  )
+`, (err) => {
+  if (err) console.error('Error creating facility_designs table:', err);
+  else console.log('Created facility_designs table');
+});
+
+// Ensure UNIQUE index (run once, then comment out if needed)
+db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
+  if (err) console.error('Error adding UNIQUE index:', err);
+  else console.log('Added UNIQUE index on siteId');
+});
+
+// Clean up duplicate siteId rows (run once, then comment out)
+db.run(`
+  DELETE FROM facility_designs
+  WHERE id NOT IN (
+    SELECT id FROM (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY siteId ORDER BY updatedAt DESC) AS rn
+      FROM facility_designs
+    ) WHERE rn = 1
+  )
+`, (err) => {
+  if (err) console.error('Error cleaning up duplicate designs:', err);
+  else console.log('Cleaned up duplicate facility designs');
+});
   db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding abbreviation column:', err);
@@ -1241,6 +1261,7 @@ app.put('/api/equipment/:equipmentId', (req, res) => {
   });
 });
 
+// GET /api/facility-design
 app.get('/api/facility-design', (req, res) => {
   const { siteId } = req.query;
   if (!siteId) {
@@ -1263,17 +1284,19 @@ app.get('/api/facility-design', (req, res) => {
   );
 });
 
-// PUT /api/facility-design (update or insert design)
+// PUT /api/facility-design
 app.put('/api/facility-design', (req, res) => {
   const { siteId, objects } = req.body;
   if (!siteId || !objects) {
     return res.status(400).json({ error: 'siteId and objects are required' });
   }
   const objectsJson = JSON.stringify(objects);
+  const timestamp = new Date().toISOString();
   db.run(
-    `INSERT INTO facility_designs (siteId, objects) VALUES (?, ?)
-     ON CONFLICT(siteId) DO UPDATE SET objects = ?, updatedAt = CURRENT_TIMESTAMP`,
-    [siteId, objectsJson, objectsJson],
+    `INSERT INTO facility_designs (siteId, objects, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(siteId) DO UPDATE SET objects = ?, updatedAt = ?`,
+    [siteId, objectsJson, timestamp, timestamp, objectsJson, timestamp],
     (err) => {
       if (err) {
         console.error('Update facility design error:', err);
@@ -1285,7 +1308,7 @@ app.put('/api/facility-design', (req, res) => {
   );
 });
 
-// Debug endpoint (optional, for inspecting all designs)
+// Debug endpoint
 app.get('/api/debug/facility-design', (req, res) => {
   const { siteId } = req.query;
   const query = siteId
