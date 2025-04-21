@@ -90,9 +90,9 @@ export interface Product {
   enabled: boolean;
   priority: number;
   class: string;
-  productColor: string;
   type: string;
   style: string;
+  productColor: string;
   abv: number;
   ibu: number;
 }
