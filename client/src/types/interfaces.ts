@@ -105,6 +105,17 @@ export interface Recipe {
   instructions: string;
 }
 
+export interface Batch {
+  batchId: string;
+  productId: number;
+  productName: string;
+  recipeId: number;
+  siteId: string;
+  siteName: string;
+  status: string;
+  date: string;
+}
+
 export interface ReceiveForm {
   identifier: string;
   item: string; // Replaces identifier
