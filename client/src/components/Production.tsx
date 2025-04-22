@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Batch, Product, Recipe, Site } from '../types/interfaces';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 const Production: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -21,24 +21,32 @@ const Production: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [batchesRes, productsRes, sitesRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/batches`),
-          fetch(`${API_BASE_URL}/api/products`),
-          fetch(`${API_BASE_URL}/api/sites`),
-        ]);
-        if (!batchesRes.ok) throw new Error(`Batches fetch error: ${batchesRes.status}`);
-        if (!productsRes.ok) throw new Error(`Products fetch error: ${productsRes.status}`);
-        if (!sitesRes.ok) throw new Error(`Sites fetch error: ${sitesRes.status}`);
-        const [batchesData, productsData, sitesData] = await Promise.all([
-          batchesRes.json(),
-          productsRes.json(),
-          sitesRes.json(),
-        ]);
-        setBatches(batchesData);
-        setProducts(productsData);
-        setSites(sitesData);
+        const endpoints = [
+          { url: `${API_BASE_URL}/api/batches`, setter: setBatches, name: 'batches' },
+          { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
+          { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
+        ];
+        const responses = await Promise.all(
+          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+        );
+        for (let i = 0; i < responses.length; i++) {
+          const res = responses[i];
+          const { name, setter } = endpoints[i];
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
+          }
+          const data = await res.json();
+          setter(data);
+        }
       } catch (err: any) {
-        setError('Failed to fetch data: ' + err.message);
+        console.error('Fetch error:', err);
+        setError('Failed to load production data: ' + err.message);
       }
     };
     fetchData();
@@ -46,11 +54,22 @@ const Production: React.FC = () => {
 
   const fetchRecipes = async (productId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${productId}`);
-      if (!res.ok) throw new Error(`Recipes fetch error: ${res.status}`);
+      const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${productId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch recipes: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(`Invalid response for recipes: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
+      }
       const data = await res.json();
       setRecipes(data);
     } catch (err: any) {
+      console.error('Fetch recipes error:', err);
       setError('Failed to fetch recipes: ' + err.message);
       setRecipes([]);
     }
@@ -64,7 +83,7 @@ const Production: React.FC = () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           batchId: newBatch.batchId,
           productId: newBatch.productId,
@@ -74,7 +93,15 @@ const Production: React.FC = () => {
           date: new Date().toISOString().split('T')[0],
         }),
       });
-      if (!res.ok) throw new Error(`Add batch error: ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Add batch error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(`Invalid response for batch: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
+      }
       const addedBatch = await res.json();
       setBatches([...batches, addedBatch]);
       setShowAddModal(false);
@@ -82,6 +109,7 @@ const Production: React.FC = () => {
       setRecipes([]);
       setError(null);
     } catch (err: any) {
+      console.error('Add batch error:', err);
       setError('Failed to add batch: ' + err.message);
     }
   };
@@ -129,15 +157,23 @@ const Production: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredBatches.map((batch) => (
-              <tr key={batch.batchId}>
-                <td>{batch.batchId}</td>
-                <td>{batch.productName}</td>
-                <td>{batch.status}</td>
-                <td>{batch.date}</td>
-                <td>{batch.siteName}</td>
+            {filteredBatches.length > 0 ? (
+              filteredBatches.map((batch) => (
+                <tr key={batch.batchId}>
+                  <td>{batch.batchId}</td>
+                  <td>{batch.productName}</td>
+                  <td>{batch.status}</td>
+                  <td>{batch.date}</td>
+                  <td>{batch.siteName}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                  No batches found
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
