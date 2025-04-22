@@ -161,12 +161,30 @@ db.serialize(() => {
     else console.log('Cleaned up duplicate facility designs');
   });
   db.run(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      abbreviation TEXT,
+      enabled INTEGER DEFAULT 1,
+      priority INTEGER DEFAULT 1,
+      class TEXT,
+      type TEXT,
+      style TEXT,
+      productColor TEXT,
+      abv REAL,
+      ibu INTEGER
+    )
+  `, (err) => {
+    if (err) console.error('Error creating products table:', err);
+    else console.log('Created products table');
+  });
+  db.run(`
     CREATE TABLE IF NOT EXISTS batches (
       batchId TEXT PRIMARY KEY,
       productId INTEGER,
       recipeId INTEGER,
       siteId TEXT,
-      status TEXT DEFAULT 'In Progress',
+      status TEXT,
       date TEXT,
       FOREIGN KEY (productId) REFERENCES products(id),
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
@@ -174,6 +192,17 @@ db.serialize(() => {
   `, (err) => {
     if (err) console.error('Error creating batches table:', err);
     else console.log('Created batches table');
+  });
+  db.run(`
+    CREATE TABLE IF NOT EXISTS recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      productId INTEGER,
+      FOREIGN KEY (productId) REFERENCES products(id)
+    )
+  `, (err) => {
+    if (err) console.error('Error creating recipes table:', err);
+    else console.log('Created recipes table');
   });
   db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
@@ -210,6 +239,18 @@ db.serialize(() => {
     ['BR-AL-20019', 'Madison Mash Tun']);
   db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
     ['BR-AL-20019', 'Madison Boil Kettle']); 
+  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, productColor, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 'Amber', 40, 0]);
+  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, productColor, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [2, 'IPA', 'IP', 1, 2, 'Beer', 'Malt', 'American IPA', 'Golden', 6.5, 60]);
+  // Insert mock recipes
+  db.run('INSERT OR IGNORE INTO recipes (id, name, productId) VALUES (?, ?, ?)',
+    [1, 'Whiskey Recipe', 1]);
+  db.run('INSERT OR IGNORE INTO recipes (id, name, productId) VALUES (?, ?, ?)',
+    [2, 'IPA Recipe', 2]);
+  // Insert mock batches
+  db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
+    ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`, 
     ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
       if (err) console.error('Insert error:', err);
@@ -247,16 +288,95 @@ db.serialize(() => {
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
 });
 
-// Add batches endpoint
+app.get('/api/products', (req, res) => {
+  db.all('SELECT * FROM products WHERE enabled = 1', (err, rows) => {
+    if (err) {
+      console.error('Fetch products error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/products, returning:', rows);
+    res.json(rows);
+  });
+});
+
+app.get('/api/products/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  db.get('SELECT * FROM products WHERE id = ?', [id], (err, row) => {
+    if (err) {
+      console.error('Fetch product error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) {
+      console.log(`GET /api/products/${id}: Product not found`);
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    console.log(`GET /api/products/${id}, returning:`, row);
+    res.json(row);
+  });
+});
+
+app.post('/api/products', (req, res) => {
+  console.log('POST /api/products, payload:', req.body);
+  const { name, abbreviation, enabled = true, priority = 1, class: prodClass, productColor, type, style, abv = 0, ibu = 0 } = req.body;
+  if (!name || !abbreviation || !type || !style) {
+    console.log('POST /api/products: Missing required fields');
+    return res.status(400).json({ error: 'Name, abbreviation, type, and style are required' });
+  }
+  const validProductTypes = ['Malt', 'Spirits', 'Wine', 'Merchandise', 'Cider', 'Seltzer'];
+  if (!validProductTypes.includes(type)) {
+    console.log(`POST /api/products: Invalid type: ${type}`);
+    return res.status(400).json({ error: `Invalid product type. Must be one of: ${validProductTypes.join(', ')}` });
+  }
+  if ((type === 'Seltzer' || type === 'Merchandise') && style !== 'Other') {
+    console.log(`POST /api/products: Invalid style for ${type}: ${style}`);
+    return res.status(400).json({ error: 'Style must be "Other" for Seltzer or Merchandise' });
+  }
+  db.run(
+    `INSERT INTO products (id, name, abbreviation, enabled, priority, class, type, style, productColor, abv, ibu)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [Date.now(), name, abbreviation, enabled ? 1 : 0, priority, prodClass, type, style, productColor, abv, ibu],
+    function(err) {
+      if (err) {
+        console.error('Insert product error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      const newProduct = { id: this.lastID, name, abbreviation, enabled, priority, class: prodClass, type, style, productColor, abv, ibu };
+      console.log('POST /api/products, added:', newProduct);
+      res.json(newProduct);
+    }
+  );
+});
+
+app.delete('/api/products', (req, res) => {
+  console.log('DELETE /api/products, payload:', req.body);
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    console.log('DELETE /api/products: Invalid IDs');
+    return res.status(400).json({ error: 'IDs array is required' });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  db.run(`DELETE FROM products WHERE id IN (${placeholders})`, ids, (err) => {
+    if (err) {
+      console.error('Delete products error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('DELETE /api/products, deleted IDs:', ids);
+    res.json({ message: `Deleted products with IDs: ${ids.join(', ')}` });
+  });
+});
+
+// Add batches endpoints (before app.get('*'), ~line 600)
 app.get('/api/batches', (req, res) => {
   db.all(`
-    SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, b.siteId, s.name AS siteName, b.status, b.date
+    SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+           b.siteId, s.name AS siteName, b.status, b.date
     FROM batches b
-    LEFT JOIN products p ON b.productId = p.id
-    LEFT JOIN sites s ON b.siteId = s.siteId
+    JOIN products p ON b.productId = p.id
+    JOIN recipes r ON b.recipeId = r.id
+    JOIN sites s ON b.siteId = s.siteId
   `, (err, rows) => {
     if (err) {
-      console.error('GET /api/batches error:', err);
+      console.error('Fetch batches error:', err);
       return res.status(500).json({ error: err.message });
     }
     console.log('GET /api/batches, returning:', rows);
@@ -265,46 +385,65 @@ app.get('/api/batches', (req, res) => {
 });
 
 app.post('/api/batches', (req, res) => {
-  const { batchId, productId, recipeId, siteId, status = 'In Progress', date } = req.body;
-  if (!batchId || !productId || !recipeId || !siteId || !date) {
+  const { batchId, productId, recipeId, siteId, status, date } = req.body;
+  if (!batchId || !productId || !recipeId || !siteId || !status || !date) {
     console.log('POST /api/batches: Missing required fields', req.body);
-    return res.status(400).json({ error: 'Batch ID, Product ID, Recipe ID, Site ID, and Date are required' });
+    return res.status(400).json({ error: 'All fields are required' });
   }
-  db.run(
-    `INSERT INTO batches (batchId, productId, recipeId, siteId, status, date)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [batchId, productId, recipeId, siteId, status, date],
-    function (err) {
-      if (err) {
-        console.error('POST /api/batches error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      const newBatch = {
-        batchId,
-        productId,
-        productName: mockProducts.find(p => p.id === productId)?.name || 'Unknown',
-        recipeId,
-        siteId,
-        siteName: sites.find(s => s.siteId === siteId)?.name || 'Unknown',
-        status,
-        date,
-      };
-      console.log('POST /api/batches, added:', newBatch);
-      res.json(newBatch);
-    }
-  );
+  db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!product) return res.status(400).json({ error: 'Invalid productId' });
+    db.get('SELECT id FROM recipes WHERE id = ? AND productId = ?', [recipeId, productId], (err, recipe) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!recipe) return res.status(400).json({ error: 'Invalid recipeId for selected product' });
+      db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!site) return res.status(400).json({ error: 'Invalid siteId' });
+        db.run(
+          'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
+          [batchId, productId, recipeId, siteId, status, date],
+          (err) => {
+            if (err) {
+              console.error('Insert batch error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            db.get(`
+              SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+                     b.siteId, s.name AS siteName, b.status, b.date
+              FROM batches b
+              JOIN products p ON b.productId = p.id
+              JOIN recipes r ON b.recipeId = r.id
+              JOIN sites s ON b.siteId = s.siteId
+              WHERE b.batchId = ?
+            `, [batchId], (err, row) => {
+              if (err) return res.status(500).json({ error: err.message });
+              console.log('POST /api/batches, added:', row);
+              res.json(row);
+            });
+          }
+        );
+      });
+    });
+  });
 });
 
-// Add recipes endpoint (mock, as no recipes table exists)
+// Add recipes endpoint
 app.get('/api/recipes', (req, res) => {
-  const productId = parseInt(req.query.productId, 10);
-  const mockRecipes = [
-    { id: 1, name: 'Standard Amber', productId: 1 },
-    { id: 2, name: 'Bourbon Base', productId: 2 },
-  ];
-  const filteredRecipes = productId ? mockRecipes.filter(r => r.productId === productId) : mockRecipes;
-  console.log(`GET /api/recipes?productId=${productId}, returning:`, filteredRecipes);
-  res.json(filteredRecipes);
+  const { productId } = req.query;
+  let query = 'SELECT id, name, productId FROM recipes';
+  let params = [];
+  if (productId) {
+    query += ' WHERE productId = ?';
+    params.push(parseInt(productId));
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('Fetch recipes error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log(`GET /api/recipes?productId=${productId || ''}, returning:`, rows);
+    res.json(rows);
+  });
 });
 
 // Existing routes (unchanged)
