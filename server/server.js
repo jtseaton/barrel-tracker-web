@@ -40,7 +40,7 @@ db.serialize(() => {
       proofGallons TEXT,
       receivedDate TEXT,
       source TEXT,
-      dspNumber TEXT,           -- Legacy, can phase out if siteId replaces it
+      dspNumber TEXT,
       siteId TEXT,
       locationId INTEGER,
       status TEXT,
@@ -98,25 +98,24 @@ db.serialize(() => {
       shipToState TEXT,
       shipToZip TEXT,
       status TEXT DEFAULT 'Open',
-      items TEXT  -- JSON string of items
+      items TEXT
     )
   `);
   db.run(`
     CREATE TABLE IF NOT EXISTS sites (
-      siteId TEXT PRIMARY KEY,  -- e.g., DSP-AL-20010, BREW-BHM-001
-      name TEXT NOT NULL,       -- e.g., Athens AL DSP
-      type TEXT,                -- e.g., DSP, Brewery
+      siteId TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT,
       address TEXT,
       enabled INTEGER DEFAULT 1
     )
   `);
-  
   db.run(`
     CREATE TABLE IF NOT EXISTS locations (
       locationId INTEGER PRIMARY KEY AUTOINCREMENT,
       siteId TEXT,
       name TEXT NOT NULL,
-      abbreviation TEXT, -- Added
+      abbreviation TEXT,
       enabled INTEGER DEFAULT 1,
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
@@ -126,46 +125,56 @@ db.serialize(() => {
       equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
       siteId TEXT,
-      abbreviation TEXT, -- Added
+      abbreviation TEXT,
       enabled INTEGER,
       FOREIGN KEY (siteId) REFERENCES sites(siteId)
     )
   `);
-// In db.serialize (replace facility_designs table creation)
-db.run(`
-  CREATE TABLE IF NOT EXISTS facility_designs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    siteId TEXT NOT NULL,
-    objects TEXT NOT NULL,
-    createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (siteId) REFERENCES sites(siteId),
-    UNIQUE(siteId)
-  )
-`, (err) => {
-  if (err) console.error('Error creating facility_designs table:', err);
-  else console.log('Created facility_designs table');
-});
-
-// Ensure UNIQUE index (run once, then comment out if needed)
-db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
-  if (err) console.error('Error adding UNIQUE index:', err);
-  else console.log('Added UNIQUE index on siteId');
-});
-
-// Clean up duplicate siteId rows (run once, then comment out)
-db.run(`
-  DELETE FROM facility_designs
-  WHERE id NOT IN (
-    SELECT id FROM (
-      SELECT id, ROW_NUMBER() OVER (PARTITION BY siteId ORDER BY updatedAt DESC) AS rn
-      FROM facility_designs
-    ) WHERE rn = 1
-  )
-`, (err) => {
-  if (err) console.error('Error cleaning up duplicate designs:', err);
-  else console.log('Cleaned up duplicate facility designs');
-});
+  db.run(`
+    CREATE TABLE IF NOT EXISTS facility_designs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      siteId TEXT NOT NULL,
+      objects TEXT NOT NULL,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (siteId) REFERENCES sites(siteId),
+      UNIQUE(siteId)
+    )
+  `, (err) => {
+    if (err) console.error('Error creating facility_designs table:', err);
+    else console.log('Created facility_designs table');
+  });
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
+    if (err) console.error('Error adding UNIQUE index:', err);
+    else console.log('Added UNIQUE index on siteId');
+  });
+  db.run(`
+    DELETE FROM facility_designs
+    WHERE id NOT IN (
+      SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY siteId ORDER BY updatedAt DESC) AS rn
+        FROM facility_designs
+      ) WHERE rn = 1
+    )
+  `, (err) => {
+    if (err) console.error('Error cleaning up duplicate designs:', err);
+    else console.log('Cleaned up duplicate facility designs');
+  });
+  db.run(`
+    CREATE TABLE IF NOT EXISTS batches (
+      batchId TEXT PRIMARY KEY,
+      productId INTEGER,
+      recipeId INTEGER,
+      siteId TEXT,
+      status TEXT DEFAULT 'In Progress',
+      date TEXT,
+      FOREIGN KEY (productId) REFERENCES products(id),
+      FOREIGN KEY (siteId) REFERENCES sites(siteId)
+    )
+  `, (err) => {
+    if (err) console.error('Error creating batches table:', err);
+    else console.log('Created batches table');
+  });
   db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding abbreviation column:', err);
@@ -174,38 +183,38 @@ db.run(`
     }
   });
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-  ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
+    ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-  ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
+    ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-  ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
+    ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-  ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
+    ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-  ['DSP-AL-20010', 'Spirits Storage']);
+    ['DSP-AL-20010', 'Spirits Storage']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-  ['DSP-AL-20010', 'Grain Storage']);
+    ['DSP-AL-20010', 'Grain Storage']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-  ['DSP-AL-20010', 'Fermentation Tanks']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Fermenter 1']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Fermenter 2']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Fermenter 3']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Fermenter 4']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Cold Storage']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Mash Tun']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)',
-  ['BR-AL-20019', 'Madison Boil Kettle']); 
+    ['DSP-AL-20010', 'Fermentation Tanks']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Fermenter 1']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Fermenter 2']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Fermenter 3']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Fermenter 4']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Cold Storage']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Mash Tun']);
+  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
+    ['BR-AL-20019', 'Madison Boil Kettle']); 
   db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`, 
-  ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
-    if (err) console.error('Insert error:', err);
-    else console.log('Inserted: Athens Cold Storage, abbreviation=Athens Cooler, BR-AL-20088');
-}); 
+    ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
+      if (err) console.error('Insert error:', err);
+      else console.log('Inserted: Athens Cold Storage, abbreviation=Athens Cooler, BR-AL-20088');
+  }); 
   db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
     ['Beer Cooler', 'Madison Cold Storage', 'BR-AL-20019'], (err) => {
       if (err) console.error('Update error:', err);
@@ -229,18 +238,76 @@ db.run(`
   db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
     if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
   });
-
-  // Migrate existing data (run once, then comment out or remove)
   db.run(`ALTER TABLE purchase_orders ADD COLUMN status TEXT DEFAULT 'Open'`, (err) => {
-   if (err && !err.message.includes('duplicate column')) {
+    if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding status column:', err);
-   } 
+    } 
   });
-
   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-  });
+});
 
+// Add batches endpoint
+app.get('/api/batches', (req, res) => {
+  db.all(`
+    SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, b.siteId, s.name AS siteName, b.status, b.date
+    FROM batches b
+    LEFT JOIN products p ON b.productId = p.id
+    LEFT JOIN sites s ON b.siteId = s.siteId
+  `, (err, rows) => {
+    if (err) {
+      console.error('GET /api/batches error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/batches, returning:', rows);
+    res.json(rows);
+  });
+});
+
+app.post('/api/batches', (req, res) => {
+  const { batchId, productId, recipeId, siteId, status = 'In Progress', date } = req.body;
+  if (!batchId || !productId || !recipeId || !siteId || !date) {
+    console.log('POST /api/batches: Missing required fields', req.body);
+    return res.status(400).json({ error: 'Batch ID, Product ID, Recipe ID, Site ID, and Date are required' });
+  }
+  db.run(
+    `INSERT INTO batches (batchId, productId, recipeId, siteId, status, date)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [batchId, productId, recipeId, siteId, status, date],
+    function (err) {
+      if (err) {
+        console.error('POST /api/batches error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      const newBatch = {
+        batchId,
+        productId,
+        productName: mockProducts.find(p => p.id === productId)?.name || 'Unknown',
+        recipeId,
+        siteId,
+        siteName: sites.find(s => s.siteId === siteId)?.name || 'Unknown',
+        status,
+        date,
+      };
+      console.log('POST /api/batches, added:', newBatch);
+      res.json(newBatch);
+    }
+  );
+});
+
+// Add recipes endpoint (mock, as no recipes table exists)
+app.get('/api/recipes', (req, res) => {
+  const productId = parseInt(req.query.productId, 10);
+  const mockRecipes = [
+    { id: 1, name: 'Standard Amber', productId: 1 },
+    { id: 2, name: 'Bourbon Base', productId: 2 },
+  ];
+  const filteredRecipes = productId ? mockRecipes.filter(r => r.productId === productId) : mockRecipes;
+  console.log(`GET /api/recipes?productId=${productId}, returning:`, filteredRecipes);
+  res.json(filteredRecipes);
+});
+
+// Existing routes (unchanged)
 const loadItemsFromXML = () => {
   fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
     if (err) {
@@ -395,14 +462,14 @@ app.get('/api/purchase-orders', (req, res) => {
   let query = 'SELECT * FROM purchase_orders WHERE status = "Open"';
   let params = [];
   if (source) {
-    query += ' AND supplier = ?'; // Changed from 'source' to 'supplier'
+    query += ' AND supplier = ?';
     params.push(source);
   }
   db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows.map(row => ({
       ...row,
-      items: JSON.parse(row.items || '[]'), // Ensure items is always parsed
+      items: JSON.parse(row.items || '[]'),
     })));
   });
 });
@@ -421,7 +488,7 @@ app.post('/api/purchase-orders', (req, res) => {
   if (!poNumber || !supplier || !items.length) {
     return res.status(400).json({ error: 'PO Number, Supplier, and at least one item are required' });
   }
-  console.log('Received PO:', req.body); // Add logging
+  console.log('Received PO:', req.body);
   db.run(
     `INSERT INTO purchase_orders (
       poNumber, site, poDate, supplier, supplierAddress, supplierCity, supplierState, supplierZip, 
@@ -433,7 +500,7 @@ app.post('/api/purchase-orders', (req, res) => {
     ],
     (err) => {
       if (err) {
-        console.error('Insert PO error:', err.message); // Log the error
+        console.error('Insert PO error:', err.message);
         return res.status(500).json({ error: err.message });
       }
       res.json({ message: 'PO created' });
@@ -533,7 +600,7 @@ app.get('/api/debug/locations', (req, res) => {
 
 app.put('/api/inventory/:identifier', (req, res) => {
   const { identifier } = req.params;
-  const { quantity, proof, totalCost, description, status, account } = req.body; // Editable fields
+  const { quantity, proof, totalCost, description, status, account } = req.body;
   if (!quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) < 0) {
     return res.status(400).json({ error: 'Valid quantity is required' });
   }
@@ -572,11 +639,10 @@ app.post('/api/inventory/adjust', (req, res) => {
 
       const oldQuantity = parseFloat(row.quantity);
       const newQuantityNum = parseFloat(newQuantity);
-      const unitCost = row.cost ? parseFloat(row.cost) : (parseFloat(row.totalCost) / oldQuantity) || 0; // Fallback to derived unit cost
+      const unitCost = row.cost ? parseFloat(row.cost) : (parseFloat(row.totalCost) / oldQuantity) || 0;
       const newTotalCost = (unitCost * newQuantityNum).toFixed(2);
       const quantityDiff = (oldQuantity - newQuantityNum).toFixed(2);
 
-      // Update inventory
       db.run(
         'UPDATE inventory SET quantity = ?, totalCost = ? WHERE identifier = ?',
         [newQuantity, newTotalCost, identifier],
@@ -586,7 +652,6 @@ app.post('/api/inventory/adjust', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
 
-          // Log adjustment in transactions
           db.run(
             `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber, toAccount)
              VALUES (?, ?, ?, ?, ?, ?, ?, 'Adjusted')`,
@@ -1235,7 +1300,6 @@ app.put('/api/equipment/:equipmentId', (req, res) => {
             db.run('ROLLBACK');
             return res.status(500).json({ error: err.message });
           }
-          // Update facility designs to reflect new siteId
           db.all('SELECT id, siteId, objects FROM facility_designs', [], (err, rows) => {
             if (err) {
               db.run('ROLLBACK');
@@ -1273,7 +1337,6 @@ app.put('/api/equipment/:equipmentId', (req, res) => {
   });
 });
 
-// GET /api/facility-design
 app.get('/api/facility-design', (req, res) => {
   const { siteId } = req.query;
   if (!siteId) {
@@ -1296,7 +1359,6 @@ app.get('/api/facility-design', (req, res) => {
   );
 });
 
-// PUT /api/facility-design
 app.put('/api/facility-design', (req, res) => {
   const { siteId, objects } = req.body;
   if (!siteId || !objects) {
@@ -1320,7 +1382,6 @@ app.put('/api/facility-design', (req, res) => {
   );
 });
 
-// Debug endpoint
 app.get('/api/debug/facility-design', (req, res) => {
   const { siteId } = req.query;
   const query = siteId
@@ -1351,7 +1412,6 @@ app.post('/api/facility-design', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     if (row) {
-      // Update existing design
       db.run(
         'UPDATE facility_designs SET objects = ?, updatedAt = ? WHERE siteId = ?',
         [JSON.stringify(objects), timestamp, siteId],
@@ -1364,7 +1424,6 @@ app.post('/api/facility-design', (req, res) => {
         }
       );
     } else {
-      // Create new design
       db.run(
         'INSERT INTO facility_designs (siteId, objects, createdAt, updatedAt) VALUES (?, ?, ?, ?)',
         [siteId, JSON.stringify(objects), timestamp, timestamp],
