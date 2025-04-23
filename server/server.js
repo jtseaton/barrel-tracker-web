@@ -467,24 +467,15 @@ app.post('/api/recipes', (req, res) => {
   db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!product) return res.status(400).json({ error: 'Invalid productId' });
-    // Validate ingredients
     const invalidIngredients = ingredients.filter(ing => !ing.itemName || isNaN(ing.quantity) || ing.quantity <= 0);
     if (invalidIngredients.length > 0) {
       return res.status(400).json({ error: 'All ingredients must have a valid itemName and positive quantity' });
     }
-    // Check inventory for each ingredient
     const checks = ingredients.map(ing => new Promise((resolve, reject) => {
       db.get('SELECT name FROM items WHERE name = ? AND enabled = 1', [ing.itemName], (err, item) => {
         if (err) return reject(err);
         if (!item) return reject(new Error(`Item not found: ${ing.itemName}`));
-        db.get('SELECT SUM(quantity) AS totalQuantity FROM inventory WHERE type = ?', [ing.itemName], (err, row) => {
-          if (err) return reject(err);
-          const available = parseFloat(row.totalQuantity || 0);
-          if (available < ing.quantity) {
-            return reject(new Error(`Insufficient inventory for ${ing.itemName}: ${available} available, ${ing.quantity} needed`));
-          }
-          resolve();
-        });
+        resolve();
       });
     }));
     Promise.all(checks).then(() => {
