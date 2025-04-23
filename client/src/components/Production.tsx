@@ -3,18 +3,34 @@ import { Batch, Product, Recipe, Site } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
+interface Ingredient {
+  itemName: string;
+  quantity: number;
+}
+
 const Production: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddBatchModal, setShowAddBatchModal] = useState(false);
+  const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [newBatch, setNewBatch] = useState<Partial<Batch>>({
     batchId: '',
     productId: 0,
     recipeId: 0,
     siteId: '',
+  });
+  const [newRecipe, setNewRecipe] = useState<{
+    name: string;
+    productId: number;
+    ingredients: Ingredient[];
+  }>({
+    name: '',
+    productId: 0,
+    ingredients: [{ itemName: '', quantity: 0 }],
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +41,7 @@ const Production: React.FC = () => {
           { url: `${API_BASE_URL}/api/batches`, setter: setBatches, name: 'batches' },
           { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
           { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
+          { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
         ];
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
@@ -104,7 +121,7 @@ const Production: React.FC = () => {
       }
       const addedBatch = await res.json();
       setBatches([...batches, addedBatch]);
-      setShowAddModal(false);
+      setShowAddBatchModal(false);
       setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
       setRecipes([]);
       setError(null);
@@ -112,6 +129,57 @@ const Production: React.FC = () => {
       console.error('Add batch error:', err);
       setError('Failed to add batch: ' + err.message);
     }
+  };
+
+  const handleAddRecipe = async () => {
+    if (!newRecipe.name || !newRecipe.productId || newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0)) {
+      setError('Recipe name, product, and valid ingredients are required');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/recipes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(newRecipe),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Add recipe error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(`Invalid response for recipe: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
+      }
+      const addedRecipe = await res.json();
+      setRecipes([...recipes, addedRecipe]);
+      setShowAddRecipeModal(false);
+      setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0 }] });
+      setError(null);
+    } catch (err: any) {
+      console.error('Add recipe error:', err);
+      setError('Failed to add recipe: ' + err.message);
+    }
+  };
+
+  const addIngredient = () => {
+    setNewRecipe({
+      ...newRecipe,
+      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0 }],
+    });
+  };
+
+  const removeIngredient = (index: number) => {
+    setNewRecipe({
+      ...newRecipe,
+      ingredients: newRecipe.ingredients.filter((_, i) => i !== index),
+    });
+  };
+
+  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) => {
+    const updatedIngredients = [...newRecipe.ingredients];
+    updatedIngredients[index] = { ...updatedIngredients[index], [field]: value };
+    setNewRecipe({ ...newRecipe, ingredients: updatedIngredients });
   };
 
   const filteredBatches = batches.filter(batch =>
@@ -124,7 +192,8 @@ const Production: React.FC = () => {
       <h2>Production</h2>
       {error && <div className="error">{error}</div>}
       <div className="inventory-actions">
-        <button onClick={() => setShowAddModal(true)}>Add New Batch</button>
+        <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
+        <button onClick={() => setShowAddRecipeModal(true)}>Add Recipe</button>
       </div>
       <div style={{ marginBottom: '20px' }}>
         <input
@@ -177,7 +246,7 @@ const Production: React.FC = () => {
           </tbody>
         </table>
       </div>
-      {showAddModal && (
+      {showAddBatchModal && (
         <div
           style={{
             position: 'fixed',
@@ -207,7 +276,6 @@ const Production: React.FC = () => {
               Add New Batch
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-              {/* Batch # */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Batch # (required):
@@ -230,7 +298,6 @@ const Production: React.FC = () => {
                   }}
                 />
               </div>
-              {/* Product */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Product (required):
@@ -260,7 +327,6 @@ const Production: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* Recipe */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Recipe (required):
@@ -287,7 +353,6 @@ const Production: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* Site */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Site (required):
@@ -334,9 +399,208 @@ const Production: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  setShowAddModal(false);
+                  setShowAddBatchModal(false);
                   setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
                   setRecipes([]);
+                  setError(null);
+                }}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAddRecipeModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '500px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
+              Create New Recipe
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+              {/* Recipe Name */}
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Recipe Name (required):
+                </label>
+                <input
+                  type="text"
+                  value={newRecipe.name}
+                  onChange={(e) => setNewRecipe({ ...newRecipe, name: e.target.value })}
+                  placeholder="Enter recipe name"
+                  style={{
+                    width: '100%',
+                    maxWidth: '450px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                />
+              </div>
+              {/* Product */}
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Product (required):
+                </label>
+                <select
+                  value={newRecipe.productId || ''}
+                  onChange={(e) => setNewRecipe({ ...newRecipe, productId: parseInt(e.target.value, 10) })}
+                  style={{
+                    width: '100%',
+                    maxWidth: '450px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Ingredients */}
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Ingredients (required):
+                </label>
+                {newRecipe.ingredients.map((ingredient, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                    <select
+                      value={ingredient.itemName}
+                      onChange={(e) => updateIngredient(index, 'itemName', e.target.value)}
+                      style={{
+                        width: '200px',
+                        padding: '10px',
+                        border: '1px solid #CCCCCC',
+                        borderRadius: '4px',
+                        fontSize: '16px',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#FFFFFF',
+                      }}
+                    >
+                      <option value="">Select Item</option>
+                      {items.filter(item => item.enabled).map((item) => (
+                        <option key={item.name} value={item.name}>{item.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={ingredient.quantity || ''}
+                      onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
+                      placeholder="Quantity"
+                      step="0.01"
+                      min="0"
+                      style={{
+                        width: '100px',
+                        padding: '10px',
+                        border: '1px solid #CCCCCC',
+                        borderRadius: '4px',
+                        fontSize: '16px',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#FFFFFF',
+                      }}
+                    />
+                    <button
+                      onClick={() => removeIngredient(index)}
+                      style={{
+                        backgroundColor: '#F86752',
+                        color: '#fff',
+                        padding: '8px 12px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={addIngredient}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    marginTop: '10px',
+                  }}
+                >
+                  Add Ingredient
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+              <button
+                onClick={handleAddRecipe}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+              >
+                Create
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddRecipeModal(false);
+                  setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0 }] });
                   setError(null);
                 }}
                 style={{

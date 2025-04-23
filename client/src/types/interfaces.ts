@@ -92,17 +92,16 @@ export interface Product {
   class: string;
   type: string;
   style: string;
-  productColor: string;
   abv: number;
   ibu: number;
 }
 
+
 export interface Recipe {
   id: number;
-  productId: number;
   name: string;
-  ingredients: string;
-  instructions: string;
+  productId: number;
+  ingredients: { itemName: string; quantity: number }[];
 }
 
 export interface Batch {
@@ -110,6 +109,7 @@ export interface Batch {
   productId: number;
   productName: string;
   recipeId: number;
+  recipeName: string;
   siteId: string;
   siteName: string;
   status: string;

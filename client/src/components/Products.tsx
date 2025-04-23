@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { Product } from '../types/interfaces';
-import { ProductType, ProductClass } from '../types/enums';
-import '../App.css';
+import { ProductClass, ProductType } from '../types/enums';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: '',
     abbreviation: '',
@@ -16,205 +19,148 @@ const Products: React.FC = () => {
     class: '',
     type: '',
     style: '',
-    productColor: '',
     abv: 0,
     ibu: 0,
   });
   const [filteredStyles, setFilteredStyles] = useState<string[]>([]);
   const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
   const [styles, setStyles] = useState<{ type: string; styles: string[] }[]>([]);
-  const [stylesError, setStylesError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const url = `${API_BASE_URL}/api/products`;
-        console.log('Fetching products from:', url);
-        const res = await fetch(url);
+        const res = await fetch(`${API_BASE_URL}/api/products`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        console.log('Fetched products:', data);
         setProducts(data);
       } catch (err: any) {
-        console.error('Fetch products error:', err);
-        setError(`Failed to load products: ${err.message}`);
+        setError('Failed to fetch products: ' + err.message);
       }
     };
 
     const fetchStyles = async () => {
       try {
         const res = await fetch('/styles.xml');
-        if (!res.ok) throw new Error(`Failed to fetch styles.xml: ${res.status}`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const text = await res.text();
-        console.log('Fetched styles.xml:', text.substring(0, 200));
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
-        const styleNodes = xmlDoc.getElementsByTagName('style');
-        const styleList = Array.from(styleNodes).map(node => node.textContent || '');
-        if (styleList.length === 0) throw new Error('No styles found in XML');
-        console.log('Parsed styles:', styleList);
-
-        // Map styles to ProductType
-        const styleMap = [
-          {
-            type: ProductType.Malt,
-            styles: styleList.filter(s => s.includes('Ale') || s.includes('Stout') || s.includes('Pilsner') || s.includes('Weisse') || s.includes('Saison') || s.includes('Lambic') || s.includes('Kölsch') || s.includes('Altbier')),
-          },
-          {
-            type: ProductType.Spirits,
-            styles: styleList.filter(s => s.includes('Whiskey') || s.includes('Gin') || s.includes('Vodka') || s.includes('Tequila') || s.includes('Mezcal') || s.includes('Rum') || s.includes('Brandy') || s.includes('Cognac') || s.includes('Armagnac') || s.includes('Pisco') || s.includes('Grappa')),
-          },
-          {
-            type: ProductType.Wine,
-            styles: styleList.filter(s => s.includes('Sauvignon') || s.includes('Merlot') || s.includes('Pinot') || s.includes('Syrah') || s.includes('Zinfandel') || s.includes('Chardonnay') || s.includes('Riesling') || s.includes('Rosé') || s.includes('Prosecco') || s.includes('Champagne') || s.includes('Lambrusco') || s.includes('Port') || s.includes('Sherry') || s.includes('Madeira') || s.includes('Marsala')),
-          },
-          {
-            type: ProductType.Cider,
-            styles: ['Cider'],
-          },
-          {
-            type: ProductType.Seltzer,
-            styles: ['Other'],
-          },
-          {
-            type: ProductType.Merchandise,
-            styles: ['Other'],
-          },
-        ];
-
-        setStyles(styleMap);
-        setFilteredStyles(styleMap.find(m => m.type === newProduct.type)?.styles || styleList);
-        setStylesError(null);
+        const types = Array.from(xmlDoc.getElementsByTagName('Type')).map(type => ({
+          type: type.getAttribute('name') || '',
+          styles: Array.from(type.getElementsByTagName('Style')).map(style => style.textContent || ''),
+        }));
+        setStyles(types);
       } catch (err: any) {
-        console.error('Fetch styles error:', err);
-        setStylesError(`Styles fetch failed: ${err.message}`);
-        setStyles([{ type: ProductType.Malt, styles: ['Fallback Style'] }]);
-        setFilteredStyles(['Fallback Style']);
+        setError('Failed to fetch styles: ' + err.message);
       }
     };
 
     fetchProducts();
     fetchStyles();
-  }, [API_BASE_URL, newProduct.type]);
+  }, []);
 
   const handleAddProduct = async () => {
-    console.log('Adding product:', newProduct);
+    if (!newProduct.name || !newProduct.class || !newProduct.type) {
+      setError('Name, Class, and Type are required');
+      return;
+    }
+
     try {
-      const url = `${API_BASE_URL}/api/products`;
-      console.log('Sending POST to:', url);
-      const res = await fetch(url, {
+      const payload = {
+        ...newProduct,
+        abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
+        ibu: newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : 0,
+      };
+      const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProduct),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const errorData = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorData}`);
-      }
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const addedProduct = await res.json();
-      console.log('Server response:', addedProduct);
       setProducts([...products, addedProduct]);
       setShowAddModal(false);
-      setNewProduct({ name: '', abbreviation: '', enabled: true, priority: 1, class: '', productColor: '', type: '', style: '', abv: 0, ibu: 0 });
+      setNewProduct({
+        name: '',
+        abbreviation: '',
+        enabled: true,
+        priority: 1,
+        class: '',
+        type: '',
+        style: '',
+        abv: 0,
+        ibu: 0,
+      });
       setError(null);
     } catch (err: any) {
-      console.error('Add product error:', err);
-      setError(`Failed to add product: ${err.message}`);
+      setError('Failed to add product: ' + err.message);
     }
   };
 
   const handleCancelAdd = () => {
     setShowAddModal(false);
-    setNewProduct({ name: '', abbreviation: '', enabled: true, priority: 1, class: '', productColor: '', type: '', style: '', abv: 0, ibu: 0 });
+    setNewProduct({
+      name: '',
+      abbreviation: '',
+      enabled: true,
+      priority: 1,
+      class: '',
+      type: '',
+      style: '',
+      abv: 0,
+      ibu: 0,
+    });
     setError(null);
-  };
-
-  const handleDeleteSelected = async () => {
-    if (selectedProducts.length === 0) return;
-    try {
-      const url = `${API_BASE_URL}/api/products`;
-      console.log('Sending DELETE to:', url);
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedProducts }),
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const updatedProducts = products.filter(p => !selectedProducts.includes(p.id));
-      setProducts(updatedProducts);
-      setSelectedProducts([]);
-      setError(null);
-    } catch (err: any) {
-      console.error('Delete products error:', err);
-      setError(`Failed to delete products: ${err.message}`);
-    }
   };
 
   return (
     <div className="page-container">
       <h2>Products</h2>
-      {error && (
-        <div className="error">{error}</div>
-      )}
-      {stylesError && <div className="error">{stylesError}</div>}
+      {error && <div className="error">{error}</div>}
       <div className="inventory-actions">
+        <button onClick={() => setShowAddModal(true)}>Add Product</button>
         <button
-          onClick={() => setShowAddModal(true)}
-          className="inventory-actions button"
-        >
-          Add Product
-        </button>
-        <button
-          onClick={handleDeleteSelected}
           disabled={selectedProducts.length === 0}
-          className="inventory-actions button"
-          style={{
-            backgroundColor: selectedProducts.length ? undefined : '#CCCCCC',
-            cursor: selectedProducts.length ? 'pointer' : 'not-allowed',
-          }}
+          style={selectedProducts.length === 0 ? { backgroundColor: '#CCCCCC', cursor: 'not-allowed' } : {}}
         >
           Delete Selected
         </button>
       </div>
-
-<div className="inventory-table-container">
-  <table className="inventory-table">
-    <thead>
-      <tr>
-        <th></th>
-        <th>Name</th>
-        <th>Abbreviation</th>
-      </tr>
-    </thead>
-    <tbody>
-      {products.map((product) => (
-        <tr key={product.id}>
-          <td>
-            <input
-              type="checkbox"
-              checked={selectedProducts.includes(product.id)}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  setSelectedProducts([...selectedProducts, product.id]);
-                } else {
-                  setSelectedProducts(selectedProducts.filter(id => id !== product.id));
-                }
-              }}
-            />
-          </td>
-          <td>
-            <Link to={`/products/${product.id}`}>{product.name}</Link>
-          </td>
-          <td>{product.abbreviation}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-
-{showAddModal && (
+      <div className="inventory-table-container">
+        <table className="inventory-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Abbreviation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => (
+              <tr key={product.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.includes(product.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProducts([...selectedProducts, product.id]);
+                      } else {
+                        setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+                      }
+                    }}
+                  />
+                </td>
+                <td>
+                  <Link to={`/products/${product.id}`}>{product.name}</Link>
+                </td>
+                <td>{product.abbreviation}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showAddModal && (
         <div
           style={{
             position: 'fixed',
@@ -467,29 +413,6 @@ const Products: React.FC = () => {
                   }}
                 />
               </div>
-              {/* Product Color */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Product Color:
-                </label>
-                <input
-                  type="text"
-                  value={newProduct.productColor || ''}
-                  onChange={(e) => setNewProduct({ ...newProduct, productColor: e.target.value })}
-                  placeholder="Enter color (e.g., Amber)"
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                />
-              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
               <button
@@ -510,23 +433,7 @@ const Products: React.FC = () => {
                 Add
               </button>
               <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setNewProduct({
-                    name: '',
-                    abbreviation: '',
-                    enabled: true,
-                    priority: 1,
-                    class: '',
-                    type: '',
-                    style: '',
-                    productColor: '',
-                    abv: 0,
-                    ibu: 0,
-                  });
-                  setFilteredStyles([]);
-                  setShowStyleSuggestions(false);
-                }}
+                onClick={handleCancelAdd}
                 style={{
                   backgroundColor: '#F86752',
                   color: '#fff',
