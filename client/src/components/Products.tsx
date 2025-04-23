@@ -45,13 +45,26 @@ const Products: React.FC = () => {
         const text = await res.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
+        const parseError = xmlDoc.querySelector('parsererror');
+        if (parseError) throw new Error('Invalid XML format in styles.xml');
         const types = Array.from(xmlDoc.getElementsByTagName('Type')).map(type => ({
           type: type.getAttribute('name') || '',
-          styles: Array.from(type.getElementsByTagName('Style')).map(style => style.textContent || ''),
+          styles: Array.from(type.getElementsByTagName('Style')).map(style => style.textContent || '').filter(Boolean),
         }));
         setStyles(types);
+        console.log('Fetched styles:', types);
       } catch (err: any) {
-        setError('Failed to fetch styles: ' + err.message);
+        console.error('Fetch styles error:', err);
+        setError('Failed to load styles: ' + err.message);
+        // Fallback to mock styles
+        setStyles([
+          { type: ProductType.Malt, styles: ['IPA', 'Stout', 'Porter', 'American Amber Ale'] },
+          { type: ProductType.Spirits, styles: ['Bourbon', 'Whiskey', 'Vodka', 'Gin'] },
+          { type: ProductType.Wine, styles: ['Red', 'White', 'Rosé'] },
+          { type: ProductType.Cider, styles: ['Dry', 'Sweet'] },
+          { type: ProductType.Seltzer, styles: ['Other'] },
+          { type: ProductType.Merchandise, styles: ['Other'] },
+        ]);
       }
     };
 
@@ -276,7 +289,8 @@ const Products: React.FC = () => {
                       type,
                       style: type === ProductType.Seltzer || type === ProductType.Merchandise ? 'Other' : '',
                     });
-                    setFilteredStyles(styles.find(s => s.type === type)?.styles || []);
+                    const selectedStyles = styles.find(s => s.type.toLowerCase() === type.toLowerCase())?.styles || [];
+                    setFilteredStyles(selectedStyles);
                     setShowStyleSuggestions(true);
                   }}
                   style={{
@@ -310,9 +324,10 @@ const Products: React.FC = () => {
                     setNewProduct({ ...newProduct, style: value });
                     setShowStyleSuggestions(true);
                     if (value.trim() === '') {
-                      setFilteredStyles(styles.find(s => s.type === newProduct.type)?.styles || []);
+                      setFilteredStyles(styles.find(s => s.type.toLowerCase() === newProduct.type?.toLowerCase())?.styles || []);
                     } else {
-                      const filtered = (styles.find(s => s.type === newProduct.type)?.styles || []).filter(s => s.toLowerCase().includes(value.toLowerCase()));
+                      const filtered = (styles.find(s => s.type.toLowerCase() === newProduct.type?.toLowerCase())?.styles || [])
+                        .filter(s => s.toLowerCase().includes(value.toLowerCase()));
                       setFilteredStyles(filtered);
                     }
                   }}
