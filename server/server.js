@@ -375,6 +375,67 @@ app.delete('/api/products', (req, res) => {
   });
 });
 
+app.get('/api/batches', (req, res) => {
+  db.all(`
+    SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+           b.siteId, s.name AS siteName, b.status, b.date
+    FROM batches b
+    JOIN products p ON b.productId = p.id
+    JOIN recipes r ON b.recipeId = r.id
+    JOIN sites s ON b.siteId = s.siteId
+  `, (err, rows) => {
+    if (err) {
+      console.error('Fetch batches error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/batches, returning:', rows);
+    res.json(rows);
+  });
+});
+
+app.post('/api/batches', (req, res) => {
+  const { batchId, productId, recipeId, siteId, status, date } = req.body;
+  if (!batchId || !productId || !recipeId || !siteId || !status || !date) {
+    console.log('POST /api/batches: Missing required fields', req.body);
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+  db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!product) return res.status(400).json({ error: 'Invalid productId' });
+    db.get('SELECT id FROM recipes WHERE id = ? AND productId = ?', [recipeId, productId], (err, recipe) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!recipe) return res.status(400).json({ error: 'Invalid recipeId for selected product' });
+      db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!site) return res.status(400).json({ error: 'Invalid siteId' });
+        db.run(
+          'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
+          [batchId, productId, recipeId, siteId, status, date],
+          (err) => {
+            if (err) {
+              console.error('Insert batch error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            db.get(`
+              SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+                     b.siteId, s.name AS siteName, b.status, b.date
+              FROM batches b
+              JOIN products p ON b.productId = p.id
+              JOIN recipes r ON b.recipeId = r.id
+              JOIN sites s ON b.siteId = s.siteId
+              WHERE b.batchId = ?
+            `, [batchId], (err, row) => {
+              if (err) return res.status(500).json({ error: err.message });
+              console.log('POST /api/batches, added:', row);
+              res.json(row);
+            });
+          }
+        );
+      });
+    });
+  });
+});
+
 // Update /api/recipes to handle ingredients (replace existing /api/recipes, ~line 600)
 app.get('/api/recipes', (req, res) => {
   const { productId } = req.query;
