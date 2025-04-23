@@ -170,7 +170,6 @@ db.serialize(() => {
       class TEXT,
       type TEXT,
       style TEXT,
-      productColor TEXT,
       abv REAL,
       ibu INTEGER
     )
@@ -198,6 +197,7 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       productId INTEGER,
+      ingredients TEXT,
       FOREIGN KEY (productId) REFERENCES products(id)
     )
   `, (err) => {
@@ -239,18 +239,28 @@ db.serialize(() => {
     ['BR-AL-20019', 'Madison Mash Tun']);
   db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
     ['BR-AL-20019', 'Madison Boil Kettle']); 
-  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, productColor, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 'Amber', 40, 0]);
-  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, productColor, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [2, 'IPA', 'IP', 1, 2, 'Beer', 'Malt', 'American IPA', 'Golden', 6.5, 60]);
-  // Insert mock recipes
-  db.run('INSERT OR IGNORE INTO recipes (id, name, productId) VALUES (?, ?, ?)',
-    [1, 'Whiskey Recipe', 1]);
-  db.run('INSERT OR IGNORE INTO recipes (id, name, productId) VALUES (?, ?, ?)',
-    [2, 'IPA Recipe', 2]);
-  // Insert mock batches
-  db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
-    ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
+    db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 40, 0]);
+    db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [2, 'IPA', 'IP', 1, 2, 'Beer', 'Malt', 'American IPA', 6.5, 60]);
+    // Insert mock items (for ingredients)
+    db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+      ['Corn', 'Grain', 1]);
+    db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+      ['Hops', 'Hops', 1]);
+    // Insert mock inventory
+    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['CORN-001', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['HOPS-001', 'Storage', 'Hops', '200', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+    // Insert mock recipes
+    db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
+      [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100 }])]);
+    db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
+      [2, 'IPA Recipe', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50 }])]);
+    // Insert mock batches
+    db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
+      ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`, 
     ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
       if (err) console.error('Insert error:', err);
@@ -317,7 +327,7 @@ app.get('/api/products/:id', (req, res) => {
 
 app.post('/api/products', (req, res) => {
   console.log('POST /api/products, payload:', req.body);
-  const { name, abbreviation, enabled = true, priority = 1, class: prodClass, productColor, type, style, abv = 0, ibu = 0 } = req.body;
+  const { name, abbreviation, enabled = true, priority = 1, class: prodClass, type, style, abv = 0, ibu = 0 } = req.body;
   if (!name || !abbreviation || !type || !style) {
     console.log('POST /api/products: Missing required fields');
     return res.status(400).json({ error: 'Name, abbreviation, type, and style are required' });
@@ -332,15 +342,15 @@ app.post('/api/products', (req, res) => {
     return res.status(400).json({ error: 'Style must be "Other" for Seltzer or Merchandise' });
   }
   db.run(
-    `INSERT INTO products (id, name, abbreviation, enabled, priority, class, type, style, productColor, abv, ibu)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [Date.now(), name, abbreviation, enabled ? 1 : 0, priority, prodClass, type, style, productColor, abv, ibu],
+    `INSERT INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [Date.now(), name, abbreviation, enabled ? 1 : 0, priority, prodClass, type, style, abv, ibu],
     function(err) {
       if (err) {
         console.error('Insert product error:', err);
         return res.status(500).json({ error: err.message });
       }
-      const newProduct = { id: this.lastID, name, abbreviation, enabled, priority, class: prodClass, type, style, productColor, abv, ibu };
+      const newProduct = { id: this.lastID, name, abbreviation, enabled, priority, class: prodClass, type, style, abv, ibu };
       console.log('POST /api/products, added:', newProduct);
       res.json(newProduct);
     }
@@ -365,72 +375,10 @@ app.delete('/api/products', (req, res) => {
   });
 });
 
-// Add batches endpoints (before app.get('*'), ~line 600)
-app.get('/api/batches', (req, res) => {
-  db.all(`
-    SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-           b.siteId, s.name AS siteName, b.status, b.date
-    FROM batches b
-    JOIN products p ON b.productId = p.id
-    JOIN recipes r ON b.recipeId = r.id
-    JOIN sites s ON b.siteId = s.siteId
-  `, (err, rows) => {
-    if (err) {
-      console.error('Fetch batches error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log('GET /api/batches, returning:', rows);
-    res.json(rows);
-  });
-});
-
-app.post('/api/batches', (req, res) => {
-  const { batchId, productId, recipeId, siteId, status, date } = req.body;
-  if (!batchId || !productId || !recipeId || !siteId || !status || !date) {
-    console.log('POST /api/batches: Missing required fields', req.body);
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-  db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!product) return res.status(400).json({ error: 'Invalid productId' });
-    db.get('SELECT id FROM recipes WHERE id = ? AND productId = ?', [recipeId, productId], (err, recipe) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!recipe) return res.status(400).json({ error: 'Invalid recipeId for selected product' });
-      db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!site) return res.status(400).json({ error: 'Invalid siteId' });
-        db.run(
-          'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
-          [batchId, productId, recipeId, siteId, status, date],
-          (err) => {
-            if (err) {
-              console.error('Insert batch error:', err);
-              return res.status(500).json({ error: err.message });
-            }
-            db.get(`
-              SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-                     b.siteId, s.name AS siteName, b.status, b.date
-              FROM batches b
-              JOIN products p ON b.productId = p.id
-              JOIN recipes r ON b.recipeId = r.id
-              JOIN sites s ON b.siteId = s.siteId
-              WHERE b.batchId = ?
-            `, [batchId], (err, row) => {
-              if (err) return res.status(500).json({ error: err.message });
-              console.log('POST /api/batches, added:', row);
-              res.json(row);
-            });
-          }
-        );
-      });
-    });
-  });
-});
-
-// Add recipes endpoint
+// Update /api/recipes to handle ingredients (replace existing /api/recipes, ~line 600)
 app.get('/api/recipes', (req, res) => {
   const { productId } = req.query;
-  let query = 'SELECT id, name, productId FROM recipes';
+  let query = 'SELECT id, name, productId, ingredients FROM recipes';
   let params = [];
   if (productId) {
     query += ' WHERE productId = ?';
@@ -442,7 +390,60 @@ app.get('/api/recipes', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     console.log(`GET /api/recipes?productId=${productId || ''}, returning:`, rows);
-    res.json(rows);
+    res.json(rows.map(row => ({
+      ...row,
+      ingredients: JSON.parse(row.ingredients || '[]')
+    })));
+  });
+});
+
+app.post('/api/recipes', (req, res) => {
+  const { name, productId, ingredients } = req.body;
+  if (!name || !productId || !Array.isArray(ingredients) || ingredients.length === 0) {
+    console.log('POST /api/recipes: Missing required fields', req.body);
+    return res.status(400).json({ error: 'Name, productId, and at least one ingredient are required' });
+  }
+  db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!product) return res.status(400).json({ error: 'Invalid productId' });
+    // Validate ingredients
+    const invalidIngredients = ingredients.filter(ing => !ing.itemName || isNaN(ing.quantity) || ing.quantity <= 0);
+    if (invalidIngredients.length > 0) {
+      return res.status(400).json({ error: 'All ingredients must have a valid itemName and positive quantity' });
+    }
+    // Check inventory for each ingredient
+    const checks = ingredients.map(ing => new Promise((resolve, reject) => {
+      db.get('SELECT name FROM items WHERE name = ? AND enabled = 1', [ing.itemName], (err, item) => {
+        if (err) return reject(err);
+        if (!item) return reject(new Error(`Item not found: ${ing.itemName}`));
+        db.get('SELECT SUM(quantity) AS totalQuantity FROM inventory WHERE type = ?', [ing.itemName], (err, row) => {
+          if (err) return reject(err);
+          const available = parseFloat(row.totalQuantity || 0);
+          if (available < ing.quantity) {
+            return reject(new Error(`Insufficient inventory for ${ing.itemName}: ${available} available, ${ing.quantity} needed`));
+          }
+          resolve();
+        });
+      });
+    }));
+    Promise.all(checks).then(() => {
+      db.run(
+        'INSERT INTO recipes (name, productId, ingredients) VALUES (?, ?, ?)',
+        [name, productId, JSON.stringify(ingredients)],
+        function(err) {
+          if (err) {
+            console.error('Insert recipe error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          const newRecipe = { id: this.lastID, name, productId, ingredients };
+          console.log('POST /api/recipes, added:', newRecipe);
+          res.json(newRecipe);
+        }
+      );
+    }).catch(err => {
+      console.error('Ingredient validation error:', err);
+      res.status(400).json({ error: err.message });
+    });
   });
 });
 
