@@ -90,6 +90,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
+  const [showMultipleItemsModal, setShowMultipleItemsModal] = useState(false);
 
   // Updated fetchLocations with enhanced logging to diagnose blank Location dropdowns
 const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
@@ -129,6 +130,7 @@ const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 999
 
   try {
     const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
+    console.log(`Fetching locations from: ${url}`);
     const res = await fetch(url);
     if (!res.ok) {
       const errorText = await res.text();
@@ -427,6 +429,17 @@ useEffect(() => {
     return total.toFixed(2); // Return as string with 2 decimal places
   }, [useSingleItem, singleForm.cost, receiveItems, otherCharges]);
 
+  useEffect(() => {
+    if (showAddItemModal) {
+      console.log('Add Item Modal State:', {
+        newReceiveItem,
+        filteredSites,
+        rowLocations_9999: rowLocations[9999],
+        filteredItems,
+      });
+    }
+  }, [showAddItemModal, newReceiveItem, filteredSites, rowLocations, filteredItems]);
+
   const handleVendorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSingleForm((prev: ReceiveForm) => ({ ...prev, source: value }));
@@ -597,48 +610,18 @@ useEffect(() => {
   };
 
   const addItemRow = () => {
-    setShowAddItemModal(true);
-    // Initialize modal location data
-    const defaultSiteId = selectedSite || 'DSP-AL-20010';
-  setNewReceiveItem({
-    ...newReceiveItem,
-    siteId: defaultSiteId,
-  });
-  setRowLocations((prev) => {
-    const newLocations = [...prev];
-    newLocations[9999] = [];
-    return newLocations;
-  });
-  setRowFilteredLocations((prev) => {
-    const newFiltered = [...prev];
-    newFiltered[9999] = [];
-    return newFiltered;
-  });
-  setRowFetchingLocations((prev) => {
-    const newFetching = [...prev];
-    newFetching[9999] = false;
-    return newFetching;
-  });
-  console.log(`Fetching locations for modal with siteId: ${defaultSiteId}`);
-  fetchLocations(defaultSiteId, 9999);
+    setShowMultipleItemsModal(true);
+    setReceiveItems([]); // Reset list for new batch
   };
 
-  const handleReceive = async () => {
-    const itemsToReceive: ReceivableItem[] = useSingleItem ? [singleForm] : receiveItems;
-    // Debug singleForm in Single Item mode
+  const handleReceive = async (items?: ReceivableItem[]) => {
+    const itemsToReceive: ReceivableItem[] = items || (useSingleItem ? [singleForm] : receiveItems);
     if (useSingleItem) {
-      console.log('singleForm on Receive:', {
-        item: singleForm.item,
-        materialType: singleForm.materialType,
-        quantity: singleForm.quantity,
-        unit: singleForm.unit,
-        siteId: singleForm.siteId,
-        locationId: singleForm.locationId,
-        locationIdType: typeof singleForm.locationId,
-        locationIdLength: singleForm.locationId?.length,
-      });
+      console.log('Single Item Receive:', singleForm);
+    } else {
+      console.log('Multiple Items Receive:', itemsToReceive);
     }
-    
+  
     if (
       !itemsToReceive.length ||
       itemsToReceive.some(
@@ -705,13 +688,13 @@ useEffect(() => {
       };
     });
   
-    console.log('Payload to /api/receive:', JSON.stringify(useSingleItem ? inventoryItems[0] : inventoryItems, null, 2));
+    console.log('Payload to /api/receive:', JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems, null, 2));
   
     try {
       const res = await fetch(`${API_BASE_URL}/api/receive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(useSingleItem ? inventoryItems[0] : inventoryItems),
+        body: JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems),
       });
       if (!res.ok) {
         const errorText = await res.text();
@@ -721,6 +704,8 @@ useEffect(() => {
       await refreshInventory();
       setTimeout(() => {
         setSuccessMessage(null);
+        setShowMultipleItemsModal(false); // Close Multiple Items modal
+        setReceiveItems([]); // Clear list
         navigate('/inventory');
       }, 1000);
     } catch (err: any) {
@@ -1130,7 +1115,7 @@ return (
           </div>
           <div style={{ gridColumn: 'span 2', textAlign: 'center' }}>
             <button
-              onClick={handleReceive}
+              onClick={() => handleReceive([singleForm])}
               style={{
                 backgroundColor: '#2196F3',
                 color: '#fff',
@@ -1151,377 +1136,308 @@ return (
           </div>
         </div>
       ) : (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
-            <button
-              onClick={addItemRow}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                transition: 'background-color 0.3s',
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-            >
-              Add Item
-            </button>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
-              <input
-                type="text"
-                value={singleForm.source}
-                onChange={handleVendorInputChange}
-                placeholder="Type to search vendors"
-                onFocus={() => setShowVendorSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-              />
-              {showVendorSuggestions && (
-                <ul className="typeahead">
-                  {filteredVendors.map((vendor) => (
-                    <li
-                      key={vendor.name}
-                      onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
-                      className={singleForm.source === vendor.name ? 'selected' : ''}
-                    >
-                      {vendor.name}
-                    </li>
-                  ))}
-                  <li
-                    onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
-                    className="add-new"
-                  >
-                    Add New Vendor
-                  </li>
-                </ul>
-              )}
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto', marginBottom: '20px', position: 'relative', zIndex: 1000 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
-              <thead>
-                <tr>
-                  <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '200px' }}>Name</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Qty</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Unit</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px' }}>Cost</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '180px' }}>Location</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px 16px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555', minWidth: '100px', position: 'sticky', right: 0, zIndex: 1 }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receiveItems.map((item, index) => (
-                  <tr key={index}>
-                    <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '200px' }}>
-                      <input
-                        type="text"
-                        value={item.item}
-                        ref={(el) => { inputRefs.current[index] = el; }}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].item = e.target.value;
-                          setReceiveItems(updatedItems);
-                          setFilteredItems(items.filter((i) => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
-                          setActiveItemDropdownIndex(index);
-                        }}
-                        onFocus={() => {
-                          setActiveItemDropdownIndex(index);
-                          setFilteredItems(items);
-                        }}
-                        onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-                        placeholder="Select item"
-                        style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                      {renderItemDropdown(index, item)}
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].quantity = e.target.value;
-                          setReceiveItems(updatedItems);
-                        }}
-                        step="0.01"
-                        min="0"
-                        style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
-                      <select
-                        value={item.unit}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].unit = e.target.value as Unit;
-                          setReceiveItems(updatedItems);
-                        }}
-                      >
-                        {Object.values(Unit).map((unit) => (
-                          <option key={unit} value={unit}>{unit}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px' }}>
-                      <input
-                        type="number"
-                        value={item.cost || ''}
-                        onChange={(e) => {
-                          const updatedItems = [...receiveItems];
-                          updatedItems[index].cost = e.target.value;
-                          setReceiveItems(updatedItems);
-                        }}
-                        step="0.01"
-                        min="0"
-                        style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '180px' }}>
-                      <>
-                        {console.log(`Table Location for index ${index}:`, {
-                          locationId: item.locationId,
-                          locations: rowLocations[index],
-                          name: rowLocations[index]?.find((loc) => loc.locationId.toString() === item.locationId)?.name,
-                        })}
-                        <input
-                          type="text"
-                          value={
-                            item.locationId && rowLocations[index]
-                              ? rowLocations[index].find((loc) => loc.locationId.toString() === item.locationId)?.name || ''
-                              : ''
-                          }
-                          ref={(el) => { locationInputRefs.current[index] = el; }}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const updatedItems = [...receiveItems];
-                            updatedItems[index].locationId = '';
-                            setReceiveItems(updatedItems);
-                            setRowFilteredLocations((prev) => {
-                              const newFiltered = [...prev];
-                              newFiltered[index] = rowLocations[index]?.filter((loc) =>
-                                loc.name.toLowerCase().includes(value.toLowerCase())
-                              ) || [];
-                              return newFiltered;
-                            });
-                            setActiveLocationDropdownIndex(index);
-                          }}
-                          onFocus={() => {
-                            if (!rowFetchingLocations[index] && rowLocations[index]?.length > 0) {
-                              setActiveLocationDropdownIndex(index);
-                              setRowFilteredLocations((prev) => {
-                                const newFiltered = [...prev];
-                                newFiltered[index] = rowLocations[index] || [];
-                                return newFiltered;
-                              });
-                            }
-                          }}
-                          onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 300)}
-                          placeholder={rowFetchingLocations[index] ? 'Loading locations...' : 'Select location'}
-                          disabled={!item.siteId || rowFetchingLocations[index]}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            boxSizing: 'border-box',
-                            fontSize: '16px',
-                            backgroundColor: !item.siteId || rowFetchingLocations[index] ? '#f5f5f5' : '#fff',
-                          }}
-                        />
-                        {activeLocationDropdownIndex === index && !rowFetchingLocations[index] && dropdownPosition && createPortal(
-                          <ul className="typeahead">
-                            {rowFilteredLocations[index]?.length > 0 ? (
-                              rowFilteredLocations[index].map((location) => (
-                                <li
-                                  key={location.locationId}
-                                  onMouseDown={() => {
-                                    const updatedItems = [...receiveItems];
-                                    updatedItems[index].locationId = location.locationId.toString();
-                                    setReceiveItems(updatedItems);
-                                    setActiveLocationDropdownIndex(null);
-                                  }}
-                                  className={item.locationId === location.locationId.toString() ? 'selected' : ''}
-                                >
-                                  {location.name}
-                                </li>
-                              ))
-                            ) : (
-                              <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                                No locations found
-                              </li>
-                            )}
-                            <li
-                              onMouseDown={() => {
-                                navigate('/locations', { state: { fromReceive: true, siteId: item.siteId } });
-                                setActiveLocationDropdownIndex(null);
-                              }}
-                              className="add-new"
-                            >
-                              Add New Location
-                            </li>
-                          </ul>,
-                          document.getElementById('dropdown-portal') || document.body
-                        )}
-                      </>
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px 16px', minWidth: '100px', position: 'sticky', right: 0, backgroundColor: '#fff', zIndex: 1 }}>
-                      <button
-                        onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
-                        style={{
-                          backgroundColor: '#F86752',
-                          color: '#fff',
-                          padding: '8px 16px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          width: '100%',
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ marginBottom: '20px', position: 'relative', zIndex: 500 }}>
-            <h3 style={{ color: '#555', marginBottom: '10px' }}>Other Charges (e.g., Freight, Milling)</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <thead>
-                <tr>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Description</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Cost</th>
-                  <th style={{ border: '1px solid #ddd', padding: '12px', backgroundColor: '#f5f5f5', fontWeight: 'bold', color: '#555' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {otherCharges.map((charge, index) => (
-                  <tr key={index}>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <input
-                        type="text"
-                        value={charge.description}
-                        onChange={(e) => {
-                          const updatedCharges = [...otherCharges];
-                          updatedCharges[index].description = e.target.value;
-                          setOtherCharges(updatedCharges);
-                        }}
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <input
-                        type="number"
-                        value={charge.cost}
-                        onChange={(e) => {
-                          const updatedCharges = [...otherCharges];
-                          updatedCharges[index].cost = e.target.value;
-                          setOtherCharges(updatedCharges);
-                        }}
-                        step="0.01"
-                        min="0"
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
-                        style={{
-                          backgroundColor: '#F86752',
-                          color: '#fff',
-                          padding: '8px 16px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          transition: 'background-color 0.3s',
-                        }}
-                        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button
-              onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                marginTop: '10px',
-                transition: 'background-color 0.3s',
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-            >
-              Add Charge
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
-              <input
-                type="date"
-                value={singleForm.receivedDate}
-                onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, receivedDate: e.target.value }))}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
-              <select
-                value={singleForm.poNumber || ''}
-                onChange={(e) => {
-                  const poNumber = e.target.value;
-                  setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
-                  if (poNumber) handlePOSelect(poNumber);
-                }}
+        <div style={{ textAlign: 'center' }}>
+    <button
+      onClick={addItemRow}
+      style={{
+        backgroundColor: '#2196F3',
+        color: '#fff',
+        padding: '12px 24px',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '16px',
+        transition: 'background-color 0.3s',
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+    >
+      Open Multiple Items Modal
+    </button>
+  </div>
+)}
+{showMultipleItemsModal && (
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 10000,
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: '#fff',
+        padding: '20px',
+        borderRadius: '8px',
+        width: '600px',
+        maxHeight: '80vh',
+        overflowY: 'auto',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+      }}
+    >
+      <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
+        Add Multiple Items
+      </h3>
+      <div style={{ position: 'relative', marginBottom: '20px' }}>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+        <input
+          type="text"
+          value={singleForm.source}
+          onChange={handleVendorInputChange}
+          placeholder="Type to search vendors"
+          onFocus={() => setShowVendorSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+        />
+        {showVendorSuggestions && (
+          <ul className="typeahead">
+            {filteredVendors.map((vendor) => (
+              <li
+                key={vendor.name}
+                onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
+                className={singleForm.source === vendor.name ? 'selected' : ''}
               >
-                <option value="">Select PO (optional)</option>
-                {purchaseOrders.map(po => (
-                  <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div style={{ textAlign: 'center', paddingBottom: '20px' }}>
-            <button
-              onClick={handleReceive}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '12px 24px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                width: '100%',
-                maxWidth: '300px',
-                transition: 'background-color 0.3s',
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                {vendor.name}
+              </li>
+            ))}
+            <li
+              onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+              className="add-new"
             >
-              Receive Items
-            </button>
-          </div>
-        </div>
-      )}
+              Add New Vendor
+            </li>
+          </ul>
+        )}
+      </div>
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
+        <input
+          type="date"
+          value={singleForm.receivedDate}
+          onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, receivedDate: e.target.value }))}
+          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+        />
+      </div>
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
+        <select
+          value={singleForm.poNumber || ''}
+          onChange={(e) => {
+            const poNumber = e.target.value;
+            setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+            if (poNumber) handlePOSelect(poNumber);
+          }}
+          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+        >
+          <option value="">Select PO (optional)</option>
+          {purchaseOrders.map(po => (
+            <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
+          ))}
+        </select>
+      </div>
+      <div style={{ marginBottom: '20px' }}>
+        <h4 style={{ color: '#555', marginBottom: '10px' }}>Items</h4>
+        {receiveItems.length === 0 ? (
+          <p style={{ color: '#888', textAlign: 'center' }}>No items added yet</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Item</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Site</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Location</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Quantity</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receiveItems.map((item, index) => (
+                <tr key={index}>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.item}</td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    {sites.find((s) => s.siteId === item.siteId)?.name || item.siteId}
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    {locations.find((loc) => loc.locationId.toString() === item.locationId)?.name || item.locationId}
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.quantity} {item.unit}</td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => setReceiveItems(receiveItems.filter((_, i) => i !== index))}
+                      style={{
+                        backgroundColor: '#F86752',
+                        color: '#fff',
+                        padding: '6px 12px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <div style={{ marginBottom: '20px' }}>
+        <h4 style={{ color: '#555', marginBottom: '10px' }}>Other Charges</h4>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Description</th>
+              <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Cost</th>
+              <th style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f5f5f5' }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {otherCharges.map((charge, index) => (
+              <tr key={index}>
+                <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                  <input
+                    type="text"
+                    value={charge.description}
+                    onChange={(e) => {
+                      const updatedCharges = [...otherCharges];
+                      updatedCharges[index].description = e.target.value;
+                      setOtherCharges(updatedCharges);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  />
+                </td>
+                <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                  <input
+                    type="number"
+                    value={charge.cost}
+                    onChange={(e) => {
+                      const updatedCharges = [...otherCharges];
+                      updatedCharges[index].cost = e.target.value;
+                      setOtherCharges(updatedCharges);
+                    }}
+                    step="0.01"
+                    min="0"
+                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  />
+                </td>
+                <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => setOtherCharges(otherCharges.filter((_, i) => i !== index))}
+                    style={{
+                      backgroundColor: '#F86752',
+                      color: '#fff',
+                      padding: '6px 12px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button
+          onClick={() => setOtherCharges([...otherCharges, { description: '', cost: '' }])}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '8px 16px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            marginTop: '10px',
+          }}
+        >
+          Add Charge
+        </button>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <button
+          onClick={() => {
+            setShowAddItemModal(true);
+            setNewReceiveItem({
+              identifier: '',
+              item: '',
+              lotNumber: '',
+              materialType: MaterialType.Grain,
+              quantity: '',
+              unit: Unit.Pounds,
+              cost: '',
+              description: '',
+              siteId: selectedSite || 'DSP-AL-20010',
+              locationId: '',
+              account: Account.Storage,
+              proof: '',
+            });
+            if (selectedSite || 'DSP-AL-20010') {
+              fetchLocations(selectedSite || 'DSP-AL-20010', 9999);
+            }
+          }}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+          }}
+        >
+          Add Item
+        </button>
+        <button
+          onClick={() => handleReceive(receiveItems)}
+          disabled={receiveItems.length === 0}
+          style={{
+            backgroundColor: receiveItems.length === 0 ? '#ccc' : '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: receiveItems.length === 0 ? 'not-allowed' : 'pointer',
+            fontSize: '16px',
+          }}
+        >
+          Receive Items
+        </button>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <button
+          onClick={() => {
+            setShowMultipleItemsModal(false);
+            setReceiveItems([]);
+            setOtherCharges([]);
+          }}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {showNewItemModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
@@ -1582,668 +1498,656 @@ return (
         </div>
       )}
       {showAddItemModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 10000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              maxHeight: '80vh',
-              overflowY: 'auto',
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 10000,
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: '#fff',
+        padding: '20px',
+        borderRadius: '8px',
+        width: '400px',
+        maxHeight: '80vh',
+        overflowY: 'auto',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+      }}
+    >
+      <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
+        Add Item
+      </h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+        {/* Item */}
+        <div style={{ position: 'relative' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Item (required):
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.item}
+            ref={(el) => { inputRefs.current[9999] = el; }}
+            onChange={(e) => {
+              setNewReceiveItem({ ...newReceiveItem, item: e.target.value });
+              setFilteredItems(
+                items.filter((i) =>
+                  i.name.toLowerCase().includes(e.target.value.toLowerCase())
+                )
+              );
+              setActiveItemDropdownIndex(9999);
             }}
-          >
-            <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
-              Add New Item
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-              {/* Item */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Item (required):
-                </label>
-                <input
-                  type="text"
-                  value={newReceiveItem.item}
-                  ref={(el) => { inputRefs.current[9999] = el; }}
-                  onChange={(e) => {
-                    setNewReceiveItem({ ...newReceiveItem, item: e.target.value });
-                    setFilteredItems(
-                      items.filter((i) =>
-                        i.name.toLowerCase().includes(e.target.value.toLowerCase())
-                      )
-                    );
-                    setActiveItemDropdownIndex(9999);
-                  }}
-                  onFocus={() => {
-                    setActiveItemDropdownIndex(9999);
-                    setFilteredItems(items);
-                  }}
-                  onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 200)}
-                  placeholder="Type to search items"
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                  }}
-                />
-                {activeItemDropdownIndex === 9999 && itemDropdownPosition && createPortal(
-                  <ul className="typeahead">
-                    {filteredItems.length > 0 ? (
-                      filteredItems.map((filteredItem) => (
-                        <li
-                          key={filteredItem.name}
-                          onMouseDown={() => {
-                            setNewReceiveItem({
-                              ...newReceiveItem,
-                              item: filteredItem.name,
-                              materialType: (filteredItem.type.charAt(0).toUpperCase() +
-                                filteredItem.type.slice(1).toLowerCase()) as MaterialType,
-                            });
-                            setActiveItemDropdownIndex(null);
-                          }}
-                          className={newReceiveItem.item === filteredItem.name ? 'selected' : ''}
-                        >
-                          {filteredItem.name}
-                        </li>
-                      ))
-                    ) : (
-                      <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                        No items found
-                      </li>
-                    )}
-                    <li
-                      onMouseDown={() => {
-                        setNewItem(newReceiveItem.item);
-                        setNewItemType(newReceiveItem.materialType);
-                        setShowNewItemModal(true);
-                        setActiveItemDropdownIndex(null);
-                      }}
-                      className="add-new"
-                    >
-                      Add New Item
-                    </li>
-                  </ul>,
-                  document.getElementById('dropdown-portal') || document.body
-                )}
-              </div>
-              {/* Site */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Site (required):
-                </label>
-                <input
-                  type="text"
-                  value={
-                    sites.find((s) => s.siteId === newReceiveItem.siteId)?.name || ''
-                  }
-                  ref={(el) => { siteInputRefs.current[9999] = el; }}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setNewReceiveItem({ ...newReceiveItem, siteId: '', locationId: '' });
-                    setFilteredSites(
-                      sites.filter((s) =>
-                        s.name.toLowerCase().includes(value.toLowerCase())
-                      )
-                    );
-                    setActiveSiteDropdownIndex(9999);
-                  }}
-                  onFocus={() => {
-                    setActiveSiteDropdownIndex(9999);
-                    setFilteredSites(sites);
-                  }}
-                  onBlur={() => setTimeout(() => setActiveSiteDropdownIndex(null), 200)}
-                  placeholder="Type to search sites"
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                  }}
-                />
-                {activeSiteDropdownIndex === 9999 && siteDropdownPosition && createPortal(
-                  <ul className="typeahead">
-                    {filteredSites.length > 0 ? (
-                      filteredSites.map((site) => (
-                        <li
-                          key={site.siteId}
-                          onMouseDown={() => {
-                            setNewReceiveItem({
-                              ...newReceiveItem,
-                              siteId: site.siteId,
-                              locationId: '',
-                            });
-                            fetchLocations(site.siteId, 9999);
-                            setActiveSiteDropdownIndex(null);
-                          }}
-                          className={newReceiveItem.siteId === site.siteId ? 'selected' : ''}
-                        >
-                          {site.name}
-                        </li>
-                      ))
-                    ) : (
-                      <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                        No sites found
-                      </li>
-                    )}
-                    <li
-                      onMouseDown={() => {
-                        navigate('/sites', { state: { fromReceive: true } });
-                        setActiveSiteDropdownIndex(null);
-                      }}
-                      className="add-new"
-                    >
-                      Add New Site
-                    </li>
-                  </ul>,
-                  document.getElementById('dropdown-portal') || document.body
-                )}
-              </div>
-              {/* Location */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Location (required):
-                </label>
-                <input
-                  type="text"
-                  value={
-                    newReceiveItem.locationId && rowLocations[9999]
-                      ? rowLocations[9999].find(
-                          (loc) => loc.locationId.toString() === newReceiveItem.locationId
-                        )?.name || ''
-                      : ''
-                  }
-                  ref={(el) => { locationInputRefs.current[9999] = el; }}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setRowFilteredLocations((prev) => {
-                      const newFiltered = [...prev];
-                      newFiltered[9999] =
-                        rowLocations[9999]?.filter((loc) =>
-                          loc.name.toLowerCase().includes(value.toLowerCase())
-                        ) || [];
-                      return newFiltered;
-                    });
-                    setActiveLocationDropdownIndex(9999);
-                  }}
-                  onFocus={() => {
-                    if (!rowFetchingLocations[9999] && rowLocations[9999]?.length > 0) {
-                      setActiveLocationDropdownIndex(9999);
-                      setRowFilteredLocations((prev) => {
-                        const newFiltered = [...prev];
-                        newFiltered[9999] = rowLocations[9999] || [];
-                        return newFiltered;
-                      });
-                    }
-                  }}
-                  onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 200)}
-                  placeholder={
-                    rowFetchingLocations[9999]
-                      ? 'Loading locations...'
-                      : newReceiveItem.siteId
-                      ? 'Type to search locations'
-                      : 'Select a site first'
-                  }
-                  disabled={!newReceiveItem.siteId || rowFetchingLocations[9999]}
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    backgroundColor:
-                      !newReceiveItem.siteId || rowFetchingLocations[9999]
-                        ? '#f5f5f5'
-                        : '#fff',
-                  }}
-                />
-                {activeLocationDropdownIndex === 9999 &&
-                  !rowFetchingLocations[9999] &&
-                  dropdownPosition && (
-                    <>
-                      {console.log('Location dropdown rendering:', {
-                        locations: rowLocations[9999],
-                        filtered: rowFilteredLocations[9999],
-                      })}
-                      {createPortal(
-                        <ul className="typeahead">
-                          {rowFilteredLocations[9999]?.length > 0 ? (
-                            rowFilteredLocations[9999].map((location) => (
-                              <li
-                                key={location.locationId}
-                                onMouseDown={() => {
-                                  setNewReceiveItem({
-                                    ...newReceiveItem,
-                                    locationId: location.locationId.toString(),
-                                  });
-                                  setActiveLocationDropdownIndex(null);
-                                }}
-                                className={newReceiveItem.locationId === location.locationId.toString() ? 'selected' : ''}
-                              >
-                                {location.name}
-                              </li>
-                            ))
-                          ) : (
-                            <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                              No locations found
-                            </li>
-                          )}
-                          <li
-                            onMouseDown={() => {
-                              navigate('/locations', {
-                                state: { fromReceive: true, siteId: newReceiveItem.siteId },
-                              });
-                              setActiveLocationDropdownIndex(null);
-                            }}
-                            className="add-new"
-                          >
-                            Add New Location
-                          </li>
-                        </ul>,
-                        document.getElementById('dropdown-portal') || document.body
-                      )}
-                    </>
-                  )}
-              </div>
-              {/* Material Type */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Material Type (required):
-                </label>
-                <select
-                  value={newReceiveItem.materialType}
-                  onChange={(e) =>
-                    setNewReceiveItem({
-                      ...newReceiveItem,
-                      materialType: e.target.value as MaterialType,
-                      proof: '',
-                      account: Account.Storage,
-                    })
-                  }
-                >
-                  {Object.values(MaterialType).map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* Quantity */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Quantity (required):
-                </label>
-                <input
-                  type="number"
-                  value={newReceiveItem.quantity}
-                  onChange={(e) =>
-                    setNewReceiveItem({ ...newReceiveItem, quantity: e.target.value })
-                  }
-                  step="0.01"
-                  min="0"
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                  }}
-                />
-              </div>
-              {/* Unit */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Unit (required):
-                </label>
-                <select
-                  value={newReceiveItem.unit}
-                  onChange={(e) =>
-                    setNewReceiveItem({
-                      ...newReceiveItem,
-                      unit: e.target.value as Unit,
-                    })
-                  }
-                >
-                  {Object.values(Unit).map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* Lot Number */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Lot Number:
-                </label>
-                <input
-                  type="text"
-                  value={newReceiveItem.lotNumber}
-                  onChange={(e) =>
-                    setNewReceiveItem({ ...newReceiveItem, lotNumber: e.target.value })
-                  }
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                  }}
-                />
-              </div>
-              {/* Account (for Spirits) */}
-              {newReceiveItem.materialType === MaterialType.Spirits && (
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Account:
-                  </label>
-                  <select
-                    value={newReceiveItem.account || Account.Storage}
-                    onChange={(e) =>
+            onFocus={() => {
+              setActiveItemDropdownIndex(9999);
+              setFilteredItems(items);
+            }}
+            onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 200)}
+            placeholder="Type to search items"
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+          {activeItemDropdownIndex === 9999 && itemDropdownPosition && createPortal(
+            <ul className="typeahead">
+              {filteredItems.length > 0 ? (
+                filteredItems.map((filteredItem) => (
+                  <li
+                    key={filteredItem.name}
+                    onMouseDown={() => {
                       setNewReceiveItem({
                         ...newReceiveItem,
-                        account: e.target.value as Account,
-                      })
-                    }
-                  >
-                    <option value={Account.Storage}>Storage</option>
-                    <option value={Account.Processing}>Processing</option>
-                    <option value={Account.Production}>Production</option>
-                  </select>
-                </div>
-              )}
-              {/* Proof (for Spirits) */}
-              {newReceiveItem.materialType === MaterialType.Spirits && (
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Proof:
-                  </label>
-                  <input
-                    type="number"
-                    value={newReceiveItem.proof || ''}
-                    onChange={(e) =>
-                      setNewReceiveItem({ ...newReceiveItem, proof: e.target.value })
-                    }
-                    step="0.01"
-                    min="0"
-                    max="200"
-                    style={{
-                      width: '100%',
-                      maxWidth: '300px',
-                      padding: '10px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '16px',
+                        item: filteredItem.name,
+                        materialType: (filteredItem.type.charAt(0).toUpperCase() +
+                          filteredItem.type.slice(1).toLowerCase()) as MaterialType,
+                      });
+                      setActiveItemDropdownIndex(null);
                     }}
-                  />
-                </div>
+                    className={newReceiveItem.item === filteredItem.name ? 'selected' : ''}
+                  >
+                    {filteredItem.name}
+                  </li>
+                ))
+              ) : (
+                <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                  No items found
+                </li>
               )}
-              {/* Cost */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Cost:
-                </label>
-                <input
-                  type="number"
-                  value={newReceiveItem.cost || ''}
-                  onChange={(e) =>
-                    setNewReceiveItem({ ...newReceiveItem, cost: e.target.value })
-                  }
-                  step="0.01"
-                  min="0"
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                  }}
-                />
-              </div>
-              {/* Description */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Description:
-                </label>
-                <input
-                  type="text"
-                  value={newReceiveItem.description || ''}
-                  onChange={(e) =>
-                    setNewReceiveItem({
-                      ...newReceiveItem,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder={
-                    newReceiveItem.materialType === MaterialType.Other
-                      ? 'Required for Other'
-                      : 'Optional'
-                  }
-                  style={{
-                    width: '100%',
-                    maxWidth: '300px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-              <button
-                onClick={() => {
-                  // Validation
-                  if (!newReceiveItem.item) {
-                    setProductionError('Item is required');
-                    return;
-                  }
-                  if (!newReceiveItem.siteId) {
-                    setProductionError('Site is required');
-                    return;
-                  }
-                  if (!newReceiveItem.locationId) {
-                    setProductionError('Location is required');
-                    return;
-                  }
-                  if (
-                    newReceiveItem.materialType === MaterialType.Spirits &&
-                    (!newReceiveItem.lotNumber || !newReceiveItem.proof)
-                  ) {
-                    setProductionError('Spirits require Lot Number and Proof');
-                    return;
-                  }
-                  if (
-                    newReceiveItem.materialType === MaterialType.Other &&
-                    !newReceiveItem.description
-                  ) {
-                    setProductionError('Other items require a Description');
-                    return;
-                  }
-                  if (
-                    !newReceiveItem.quantity ||
-                    isNaN(parseFloat(newReceiveItem.quantity)) ||
-                    parseFloat(newReceiveItem.quantity) <= 0
-                  ) {
-                    setProductionError('Valid Quantity is required');
-                    return;
-                  }
-                  if (
-                    newReceiveItem.proof &&
-                    (isNaN(parseFloat(newReceiveItem.proof)) ||
-                      parseFloat(newReceiveItem.proof) > 200 ||
-                      parseFloat(newReceiveItem.proof) < 0)
-                  ) {
-                    setProductionError('Proof must be between 0 and 200');
-                    return;
-                  }
-                  if (
-                    newReceiveItem.cost &&
-                    (isNaN(parseFloat(newReceiveItem.cost)) ||
-                      parseFloat(newReceiveItem.cost) < 0)
-                  ) {
-                    setProductionError('Cost must be non-negative');
-                    return;
-                  }
-                  // Update rowLocations and rowFilteredLocations first
-                  const newIndex = receiveItems.length;
-                  setRowLocations((prev) => {
-                    const newLocations = [...prev];
-                    newLocations[newIndex] = rowLocations[9999] || [];
-                    console.log(`Setting rowLocations[${newIndex}]:`, newLocations[newIndex]);
-                    return newLocations;
-                  });
-                  setRowFilteredLocations((prev) => {
-                    const newFiltered = [...prev];
-                    newFiltered[newIndex] = rowFilteredLocations[9999] || [];
-                    return newFiltered;
-                  });
-                  setRowFetchingLocations((prev) => {
-                    const newFetching = [...prev];
-                    newFetching[newIndex] = false;
-                    return newFetching;
-                  });
-                  // Add to receiveItems
-                  const newItem = {
-                    ...newReceiveItem,
-                    identifier: newReceiveItem.item || 'UNKNOWN_ITEM',
-                  };
-                  setReceiveItems((prev) => {
-                    const updatedItems = [...prev, newItem];
-                    console.log(`Added item to receiveItems[${newIndex}]:`, newItem);
-                    return updatedItems;
-                  });
-                  // Reset modal state
-                  setNewReceiveItem({
-                    identifier: '',
-                    item: '',
-                    lotNumber: '',
-                    materialType: MaterialType.Grain,
-                    quantity: '',
-                    unit: Unit.Pounds,
-                    cost: '',
-                    description: '',
-                    siteId: '',
-                    locationId: '',
-                    account: Account.Storage,
-                    proof: '',
-                  });
-                  // Clear modal location data
-                  setRowLocations((prev) => {
-                    const newLocations = [...prev];
-                    newLocations[9999] = [];
-                    return newLocations;
-                  });
-                  setRowFilteredLocations((prev) => {
-                    const newFiltered = [...prev];
-                    newFiltered[9999] = [];
-                    return newFiltered;
-                  });
-                  setRowFetchingLocations((prev) => {
-                    const newFetching = [...prev];
-                    newFetching[9999] = false;
-                    return newFetching;
-                  });
-                  setShowAddItemModal(false);
-                  setProductionError(null);
+              <li
+                onMouseDown={() => {
+                  setNewItem(newReceiveItem.item);
+                  setNewItemType(newReceiveItem.materialType);
+                  setShowNewItemModal(true);
                   setActiveItemDropdownIndex(null);
-                  setActiveSiteDropdownIndex(null);
-                  setActiveLocationDropdownIndex(null);
                 }}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                className="add-new"
               >
-                Add
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddItemModal(false);
-                  setNewReceiveItem({
-                    identifier: '',
-                    item: '',
-                    lotNumber: '',
-                    materialType: MaterialType.Grain,
-                    quantity: '',
-                    unit: Unit.Pounds,
-                    cost: '',
-                    description: '',
-                    siteId: '',
-                    locationId: '',
-                    account: Account.Storage,
-                    proof: '',
-                  });
-                  setActiveItemDropdownIndex(null);
-                  setActiveSiteDropdownIndex(null);
-                  setActiveLocationDropdownIndex(null);
-                  // Clear modal location data
-                  setRowLocations((prev) => {
-                    const newLocations = [...prev];
-                    newLocations[9999] = [];
-                    return newLocations;
-                  });
-                  setRowFilteredLocations((prev) => {
-                    const newFiltered = [...prev];
-                    newFiltered[9999] = [];
-                    return newFiltered;
-                  });
-                  setRowFetchingLocations((prev) => {
-                    const newFetching = [...prev];
-                    newFetching[9999] = false;
-                    return newFetching;
-                  });
-                }}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+                Add New Item
+              </li>
+            </ul>,
+            document.getElementById('dropdown-portal') || document.body
+          )}
         </div>
-      )}
+        {/* Site */}
+        <div style={{ position: 'relative' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Site (required):
+          </label>
+          <input
+            type="text"
+            value={
+              sites.find((s) => s.siteId === newReceiveItem.siteId)?.name || ''
+            }
+            ref={(el) => { siteInputRefs.current[9999] = el; }}
+            onChange={(e) => {
+              const value = e.target.value;
+              setNewReceiveItem({ ...newReceiveItem, siteId: '', locationId: '' });
+              setFilteredSites(
+                sites.filter((s) =>
+                  s.name.toLowerCase().includes(value.toLowerCase())
+                )
+              );
+              setActiveSiteDropdownIndex(9999);
+            }}
+            onFocus={() => {
+              setActiveSiteDropdownIndex(9999);
+              setFilteredSites(sites);
+            }}
+            onBlur={() => setTimeout(() => setActiveSiteDropdownIndex(null), 200)}
+            placeholder="Type to search sites"
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+          {activeSiteDropdownIndex === 9999 && siteDropdownPosition && createPortal(
+            <ul className="typeahead">
+              {filteredSites.length > 0 ? (
+                filteredSites.map((site) => (
+                  <li
+                    key={site.siteId}
+                    onMouseDown={() => {
+                      setNewReceiveItem({
+                        ...newReceiveItem,
+                        siteId: site.siteId,
+                        locationId: '',
+                      });
+                      fetchLocations(site.siteId, 9999);
+                      setActiveSiteDropdownIndex(null);
+                    }}
+                    className={newReceiveItem.siteId === site.siteId ? 'selected' : ''}
+                  >
+                    {site.name}
+                  </li>
+                ))
+              ) : (
+                <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                  No sites found
+                </li>
+              )}
+              <li
+                onMouseDown={() => {
+                  navigate('/sites', { state: { fromReceive: true } });
+                  setActiveSiteDropdownIndex(null);
+                }}
+                className="add-new"
+              >
+                Add New Site
+              </li>
+            </ul>,
+            document.getElementById('dropdown-portal') || document.body
+          )}
+        </div>
+        {/* Location */}
+        <div style={{ position: 'relative' }}>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Location (required):
+          </label>
+          <input
+            type="text"
+            value={
+              newReceiveItem.locationId && rowLocations[9999]
+                ? rowLocations[9999].find(
+                    (loc) => loc.locationId.toString() === newReceiveItem.locationId
+                  )?.name || ''
+                : ''
+            }
+            ref={(el) => { locationInputRefs.current[9999] = el; }}
+            onChange={(e) => {
+              const value = e.target.value;
+              setNewReceiveItem({ ...newReceiveItem, locationId: '' });
+              setRowFilteredLocations((prev) => {
+                const newFiltered = [...prev];
+                newFiltered[9999] =
+                  rowLocations[9999]?.filter((loc) =>
+                    loc.name.toLowerCase().includes(value.toLowerCase())
+                  ) || [];
+                return newFiltered;
+              });
+              setActiveLocationDropdownIndex(9999);
+            }}
+            onFocus={() => {
+              if (!rowFetchingLocations[9999] && rowLocations[9999]?.length > 0) {
+                setActiveLocationDropdownIndex(9999);
+                setRowFilteredLocations((prev) => {
+                  const newFiltered = [...prev];
+                  newFiltered[9999] = rowLocations[9999] || [];
+                  return newFiltered;
+                });
+              }
+            }}
+            onBlur={() => setTimeout(() => setActiveLocationDropdownIndex(null), 200)}
+            placeholder={
+              rowFetchingLocations[9999]
+                ? 'Loading locations...'
+                : newReceiveItem.siteId
+                ? 'Type to search locations'
+                : 'Select a site first'
+            }
+            disabled={!newReceiveItem.siteId || rowFetchingLocations[9999]}
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+              backgroundColor:
+                !newReceiveItem.siteId || rowFetchingLocations[9999]
+                  ? '#f5f5f5'
+                  : '#fff',
+            }}
+          />
+          {activeLocationDropdownIndex === 9999 &&
+            !rowFetchingLocations[9999] &&
+            dropdownPosition && (
+              <>
+                {console.log('Location dropdown rendering:', {
+                  siteId: newReceiveItem.siteId,
+                  locations: rowLocations[9999],
+                  filtered: rowFilteredLocations[9999],
+                })}
+                {createPortal(
+                  <ul className="typeahead">
+                    {rowFilteredLocations[9999]?.length > 0 ? (
+                      rowFilteredLocations[9999].map((location) => (
+                        <li
+                          key={location.locationId}
+                          onMouseDown={() => {
+                            setNewReceiveItem({
+                              ...newReceiveItem,
+                              locationId: location.locationId.toString(),
+                            });
+                            setActiveLocationDropdownIndex(null);
+                          }}
+                          className={
+                            newReceiveItem.locationId === location.locationId.toString()
+                              ? 'selected'
+                              : ''
+                          }
+                        >
+                          {location.name}
+                        </li>
+                      ))
+                    ) : (
+                      <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                        No locations found
+                      </li>
+                    )}
+                    <li
+                      onMouseDown={() => {
+                        navigate('/locations', {
+                          state: { fromReceive: true, siteId: newReceiveItem.siteId },
+                        });
+                        setActiveLocationDropdownIndex(null);
+                      }}
+                      className="add-new"
+                    >
+                      Add New Location
+                    </li>
+                  </ul>,
+                  document.getElementById('dropdown-portal') || document.body
+                )}
+              </>
+            )}
+        </div>
+        {/* Material Type */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Material Type (required):
+          </label>
+          <select
+            value={newReceiveItem.materialType}
+            onChange={(e) =>
+              setNewReceiveItem({
+                ...newReceiveItem,
+                materialType: e.target.value as MaterialType,
+                proof: '',
+                account: Account.Storage,
+              })
+            }
+          >
+            {Object.values(MaterialType).map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* Quantity */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Quantity (required):
+          </label>
+          <input
+            type="number"
+            value={newReceiveItem.quantity}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, quantity: e.target.value })
+            }
+            step="0.01"
+            min="0"
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+        {/* Unit */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Unit (required):
+          </label>
+          <select
+            value={newReceiveItem.unit}
+            onChange={(e) =>
+              setNewReceiveItem({
+                ...newReceiveItem,
+                unit: e.target.value as Unit,
+              })
+            }
+          >
+            {Object.values(Unit).map((uint) => (
+              <option key={uint} value={uint}>
+                {uint}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* Lot Number */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Lot Number:
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.lotNumber}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, lotNumber: e.target.value })
+            }
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+        {/* Account (for Spirits) */}
+        {newReceiveItem.materialType === MaterialType.Spirits && (
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Account:
+            </label>
+            <select
+              value={newReceiveItem.account || Account.Storage}
+              onChange={(e) =>
+                setNewReceiveItem({
+                  ...newReceiveItem,
+                  account: e.target.value as Account,
+                })
+              }
+            >
+              <option value={Account.Storage}>Storage</option>
+              <option value={Account.Processing}>Processing</option>
+              <option value={Account.Production}>Production</option>
+            </select>
+          </div>
+        )}
+        {/* Proof (for Spirits) */}
+        {newReceiveItem.materialType === MaterialType.Spirits && (
+          <div>
+            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              Proof:
+            </label>
+            <input
+              type="number"
+              value={newReceiveItem.proof || ''}
+              onChange={(e) =>
+                setNewReceiveItem({ ...newReceiveItem, proof: e.target.value })
+              }
+              step="0.01"
+              min="0"
+              max="200"
+              style={{
+                width: '100%',
+                maxWidth: '300px',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '16px',
+              }}
+            />
+          </div>
+        )}
+        {/* Cost */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Cost:
+          </label>
+          <input
+            type="number"
+            value={newReceiveItem.cost || ''}
+            onChange={(e) =>
+              setNewReceiveItem({ ...newReceiveItem, cost: e.target.value })
+            }
+            step="0.01"
+            min="0"
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+        {/* Description */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Description:
+          </label>
+          <input
+            type="text"
+            value={newReceiveItem.description || ''}
+            onChange={(e) =>
+              setNewReceiveItem({
+                ...newReceiveItem,
+                description: e.target.value,
+              })
+            }
+            placeholder={
+              newReceiveItem.materialType === MaterialType.Other
+                ? 'Required for Other'
+                : 'Optional'
+            }
+            style={{
+              width: '100%',
+              maxWidth: '300px',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px',
+            }}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+        <button
+          onClick={() => {
+            // Validation
+            if (!newReceiveItem.item) {
+              setProductionError('Item is required');
+              return;
+            }
+            if (!newReceiveItem.siteId) {
+              setProductionError('Site is required');
+              return;
+            }
+            if (!newReceiveItem.locationId) {
+              setProductionError('Location is required');
+              return;
+            }
+            if (
+              newReceiveItem.materialType === MaterialType.Spirits &&
+              (!newReceiveItem.lotNumber || !newReceiveItem.proof)
+            ) {
+              setProductionError('Spirits require Lot Number and Proof');
+              return;
+            }
+            if (
+              newReceiveItem.materialType === MaterialType.Other &&
+              !newReceiveItem.description
+            ) {
+              setProductionError('Other items require a Description');
+              return;
+            }
+            if (
+              !newReceiveItem.quantity ||
+              isNaN(parseFloat(newReceiveItem.quantity)) ||
+              parseFloat(newReceiveItem.quantity) <= 0
+            ) {
+              setProductionError('Valid Quantity is required');
+              return;
+            }
+            if (
+              newReceiveItem.proof &&
+              (isNaN(parseFloat(newReceiveItem.proof)) ||
+                parseFloat(newReceiveItem.proof) > 200 ||
+                parseFloat(newReceiveItem.proof) < 0)
+            ) {
+              setProductionError('Proof must be between 0 and 200');
+              return;
+            }
+            if (
+              newReceiveItem.cost &&
+              (isNaN(parseFloat(newReceiveItem.cost)) ||
+                parseFloat(newReceiveItem.cost) < 0)
+            ) {
+              setProductionError('Cost must be non-negative');
+              return;
+            }
+            // Add to receiveItems
+            const newItem = {
+              ...newReceiveItem,
+              identifier: newReceiveItem.item || 'UNKNOWN_ITEM',
+              poNumber: singleForm.poNumber || undefined,
+            };
+            setReceiveItems((prev) => {
+              const updatedItems = [...prev, newItem];
+              console.log('Added item to receiveItems:', newItem);
+              return updatedItems;
+            });
+            // Reset modal state
+            setNewReceiveItem({
+              identifier: '',
+              item: '',
+              lotNumber: '',
+              materialType: MaterialType.Grain,
+              quantity: '',
+              unit: Unit.Pounds,
+              cost: '',
+              description: '',
+              siteId: selectedSite || 'DSP-AL-20010',
+              locationId: '',
+              account: Account.Storage,
+              proof: '',
+            });
+            // Clear modal location data
+            setRowLocations((prev) => {
+              const newLocations = [...prev];
+              newLocations[9999] = [];
+              return newLocations;
+            });
+            setRowFilteredLocations((prev) => {
+              const newFiltered = [...prev];
+              newFiltered[9999] = [];
+              return newFiltered;
+            });
+            setRowFetchingLocations((prev) => {
+              const newFetching = [...prev];
+              newFetching[9999] = false;
+              return newFetching;
+            });
+            setShowAddItemModal(false);
+            setProductionError(null);
+            setActiveItemDropdownIndex(null);
+            setActiveSiteDropdownIndex(null);
+            setActiveLocationDropdownIndex(null);
+          }}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+        >
+          Add to List
+        </button>
+        <button
+          onClick={() => {
+            setShowAddItemModal(false);
+            setNewReceiveItem({
+              identifier: '',
+              item: '',
+              lotNumber: '',
+              materialType: MaterialType.Grain,
+              quantity: '',
+              unit: Unit.Pounds,
+              cost: '',
+              description: '',
+              siteId: selectedSite || 'DSP-AL-20010',
+              locationId: '',
+              account: Account.Storage,
+              proof: '',
+            });
+            setActiveItemDropdownIndex(null);
+            setActiveSiteDropdownIndex(null);
+            setActiveLocationDropdownIndex(null);
+            setRowLocations((prev) => {
+              const newLocations = [...prev];
+              newLocations[9999] = [];
+              return newLocations;
+            });
+            setRowFilteredLocations((prev) => {
+              const newFiltered = [...prev];
+              newFiltered[9999] = [];
+              return newFiltered;
+            });
+            setRowFetchingLocations((prev) => {
+              const newFetching = [...prev];
+              newFetching[9999] = false;
+              return newFetching;
+            });
+          }}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {poItemToSplit && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
