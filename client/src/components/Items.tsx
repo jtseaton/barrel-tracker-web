@@ -84,41 +84,43 @@ const Items: React.FC = () => {
   };
 
   return (
-    <div>
-      <h2>Items List</h2>
-      {productionError && <p style={{ color: '#F86752' }}>{productionError}</p>}
-      <div style={{ marginBottom: '20px' }}>
+    <div className="page-container" style={{ overflowY: 'auto', maxHeight: '100vh' }}>
+      <h2 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>Items List</h2>
+      {productionError && <div className="error">{productionError}</div>}
+      <div className="inventory-actions">
         <button onClick={handleAddItem}>Add Item</button>
-        <button onClick={handleDeleteItems} style={{ marginLeft: '10px' }}>Delete Item</button>
-        <button onClick={() => handleToggleEnable(true)} style={{ marginLeft: '10px' }}>Enable Item</button>
-        <button onClick={() => handleToggleEnable(false)} style={{ marginLeft: '10px' }}>Disable Item</button>
+        <button onClick={handleDeleteItems} disabled={selectedItems.length === 0}>Delete Item</button>
+        <button onClick={() => handleToggleEnable(true)} disabled={selectedItems.length === 0}>Enable Item</button>
+        <button onClick={() => handleToggleEnable(false)} disabled={selectedItems.length === 0}>Disable Item</button>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Select</th>
-            <th>Item Name</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item.name}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selectedItems.includes(item.name)}
-                  onChange={() => handleCheckboxChange(item.name)}
-                />
-              </td>
-              <td>
-                <Link to={`/items/${item.name}`}>{item.name}</Link>
-              </td>
-              <td>{item.enabled ? 'Enabled' : 'Disabled'}</td>
+      <div className="inventory-table-container">
+        <table className="inventory-table">
+          <thead>
+            <tr>
+              <th>Select</th>
+              <th>Item Name</th>
+              <th>Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.name}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedItems.includes(item.name)}
+                    onChange={() => handleCheckboxChange(item.name)}
+                  />
+                </td>
+                <td>
+                  <Link to={`/items/${item.name}`}>{item.name}</Link>
+                </td>
+                <td>{item.enabled ? 'Enabled' : 'Disabled'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
