@@ -63,9 +63,8 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <div className="page-container">
-        <h2 style={{ color: '#333', marginBottom: '20px' }}>Facility View</h2>
+    <div className="page-container">
+        <h2>Facility View</h2>
         {error && (
           <div style={{ color: 'red', marginBottom: '15px' }}>{error}</div>
         )}
@@ -199,7 +198,6 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
           </div>
         </div>
       </div>
-    </div>
   );
 };
 
