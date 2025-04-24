@@ -24,7 +24,7 @@ const Login: React.FC = () => {
       const user = await res.json();
       localStorage.setItem('user', JSON.stringify(user));
       navigate('/', { replace: true }); // Use replace to avoid history stack issues
-      window.location.reload(); // Force reload to ensure state sync
+      //window.location.reload(); // Force reload to ensure state sync
     } catch (err: any) {
       setError(err.message);
     }

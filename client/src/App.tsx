@@ -1,6 +1,7 @@
-// src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Role } from './types/enums';
+import { InventoryItem, Vendor, User } from './types/interfaces';
 import Home from './components/Home';
 import Production from './components/Production';
 import Inventory from './components/Inventory';
@@ -20,18 +21,20 @@ import ProductDetails from './components/ProductDetails';
 import InventoryItemDetails from './components/InventoryItemDetails';
 import Locations from './components/Locations';
 import Sites from './components/Sites';
-import FacilityDesigner from './components/FacilityDesigner'; // New
-import FacilityView from './components/FacilityView'; // New
+import FacilityDesigner from './components/FacilityDesigner';
+import FacilityView from './components/FacilityView';
+import EquipmentPage from './components/Equipment';
+import Login from './components/Login';
 import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
-import { InventoryItem, Vendor } from './types/interfaces';
 import './App.css';
 
-// Stub components
+// Stub component
 const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
-const Equipment: React.FC = () => <div><h2>Equipment</h2><p>Equipment page coming soon</p></div>;
 
 interface InventoryProps {
+  vendors: Vendor[];
+  refreshVendors: () => Promise<void>;
   inventory: InventoryItem[];
   refreshInventory: () => Promise<void>;
 }
@@ -49,6 +52,28 @@ const AppContent: React.FC = () => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Authentication state
+  const [currentUser, setCurrentUser] = useState<User | null>(
+    JSON.parse(localStorage.getItem('user') || 'null')
+  );
+  const isAuthenticated = !!currentUser?.email;
+  const isAdmin = currentUser && [Role.SuperAdmin, Role.Admin].includes(currentUser.role as Role);
+
+  // Force re-render on currentUser change
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user !== currentUser) {
+      setCurrentUser(user);
+    }
+  }, [location.pathname]);
+
+  // Reset activeSection to Home on login
+  //useEffect(() => {
+    //if (isAuthenticated && location.pathname === '/') {
+      //setActiveSection('Home');
+    //}
+  //}, [isAuthenticated, location.pathname]);
 
   const refreshInventory = async () => {
     try {
@@ -116,6 +141,14 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleLogOff = () => {
+    localStorage.removeItem('user');
+    setCurrentUser(null);
+    setActiveSection('Home');
+    setShowManagementSubmenu(false);
+    navigate('/login');
+  };
+
   const handleBackClick = () => {
     setShowInventorySubmenu(false);
     setShowProductionSubmenu(false);
@@ -123,6 +156,10 @@ const AppContent: React.FC = () => {
     setActiveSection('Home');
     navigate('/');
   };
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
 
   if (isLoading) {
     return (
@@ -163,11 +200,9 @@ const AppContent: React.FC = () => {
               { name: 'Back', action: handleBackClick },
               { name: 'Planning', path: '/planning', disabled: true },
               { name: 'Products', path: '/products' },
-              { name: 'Facility', path: '/facility' },
-              { name: 'Production', path: '/production-page' },
+              { name: 'Facility View', path: '/facility-view' },
+              { name: 'Production', path: '/production' },
               { name: 'Equipment', path: '/equipment' },
-              { name: 'Facility Designer', path: '/facility-designer' }, // Enabled
-              { name: 'Facility View', path: '/facility-view' }, // New
             ].map((item) => (
               <li key={item.name}>
                 {item.disabled ? (
@@ -181,11 +216,13 @@ const AppContent: React.FC = () => {
                 )}
               </li>
             ))
-          ) : showManagementSubmenu ? (
+          ) : showManagementSubmenu && isAdmin ? (
             [
               { name: 'Back', action: handleBackClick },
               { name: 'Locations', path: '/locations' },
               { name: 'Sites', path: '/sites' },
+              { name: 'Facility Designer', path: '/facility-designer' },
+              { name: 'Log Off', action: handleLogOff },
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
@@ -206,7 +243,7 @@ const AppContent: React.FC = () => {
               { name: 'Sales & Distribution', subMenu: null },
               { name: 'Users', subMenu: null },
               { name: 'Reporting', subMenu: null },
-              { name: 'Management', subMenu: true },
+              ...(isAdmin ? [{ name: 'Management', subMenu: true }] : []),
             ].map((section) => (
               <li key={section.name}>
                 <button
@@ -235,13 +272,12 @@ const AppContent: React.FC = () => {
         </ul>
       </nav>
       <div className="content">
-        <h1>Tilly - Distillery Dog</h1>
         <Routes>
           <Route
             path="/"
             element={
               <>
-                {activeSection === 'Home' && <Home />}
+                {activeSection === 'Home' && <FacilityView siteId="DSP-AL-20010" />}
                 {activeSection === 'Inventory' && (
                   <Inventory
                     vendors={vendors}
@@ -252,23 +288,23 @@ const AppContent: React.FC = () => {
                 )}
                 {activeSection === 'Production' && location.pathname === '/production' && <Production />}
                 {activeSection === 'Products' && <Products />}
-                {activeSection === 'Facility' && <div><h2>Facility</h2><p>Facility page coming soon</p></div>}
                 {activeSection === 'Production' && location.pathname === '/production-page' && <ProductionPage />}
-                {activeSection === 'Locations' && <Locations />}
-                {activeSection === 'Equipment' && <Equipment />}
+                {activeSection === 'Locations' && isAdmin && <Locations />}
+                {activeSection === 'Equipment' && <EquipmentPage />}
                 {activeSection === 'Planning' && <div><h2>Planning</h2><p>Coming soon</p></div>}
-                {activeSection === 'Facility Designer' && <FacilityDesigner />}
-                {activeSection === 'Facility View' && <FacilityView />}
+                {activeSection === 'Facility Designer' && isAdmin && <FacilityDesigner />}
+                {activeSection === 'Facility View' && <FacilityView siteId="DSP-AL-20010" />}
                 {activeSection === 'Vendors' && <Vendors vendors={vendors} refreshVendors={refreshVendors} />}
                 {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing inventory={inventory} refreshInventory={refreshInventory} />}
                 {activeSection === 'Sales & Distribution' && <Sales />}
                 {activeSection === 'Users' && <Users />}
                 {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
-                {activeSection === 'Management' && location.pathname === '/management' && <div><h2>Management</h2><p>Select an option from the menu</p></div>}
+                {activeSection === 'Management' && isAdmin && location.pathname === '/management' && <div><h2>Management</h2><p>Select an option from the menu</p></div>}
               </>
             }
           />
+          <Route path="/login" element={<Login />} />
           <Route
             path="/inventory"
             element={
@@ -281,10 +317,10 @@ const AppContent: React.FC = () => {
             }
           />
           <Route path="/inventory/:identifier" element={<InventoryItemDetails inventory={inventory} refreshInventory={refreshInventory} />} />
-          <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
+          <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
-          <Route path="/sites" element={<Sites />} />
+          <Route path="/sites" element={isAdmin ? <Sites /> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
           <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} vendors={vendors} refreshVendors={refreshVendors} />} />
           <Route path="/vendors" element={<Vendors vendors={vendors} refreshVendors={refreshVendors} />} />
           <Route path="/vendors/:name" element={<VendorDetails vendors={vendors} refreshVendors={refreshVendors} refreshInventory={refreshInventory} />} />
@@ -294,14 +330,15 @@ const AppContent: React.FC = () => {
           <Route path="/processing" element={<Processing inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
-          <Route path="/facility" element={<div><h2>Facility</h2><p>Facility page coming soon</p></div>} />
+          <Route path="/production" element={<Production />} />
           <Route path="/production-page" element={<ProductionPage />} />
-          <Route path="/locations" element={<Locations />} />
-          <Route path="/equipment" element={<Equipment />} />
+          <Route path="/locations" element={isAdmin ? <Locations /> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/equipment" element={<EquipmentPage />} />
           <Route path="/planning" element={<div><h2>Planning</h2><p>Coming soon</p></div>} />
-          <Route path="/facility-designer" element={<FacilityDesigner />} />
-          <Route path="/facility-view" element={<FacilityView />} />
-          <Route path="/management" element={<div><h2>Management</h2><p>Select an option from the menu</p></div>} />
+          <Route path="/facility-designer" element={isAdmin ? <FacilityDesigner /> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/facility-view" element={<FacilityView siteId="DSP-AL-20010" />} />
+          <Route path="/management" element={isAdmin ? <div><h2>Management</h2><p>Select an option from the menu</p></div> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/users" element={<Users />} />
         </Routes>
       </div>
     </div>
