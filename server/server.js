@@ -507,63 +507,58 @@ app.get('/api/batches', (req, res) => {
 });
 
 app.post('/api/batches', (req, res) => {
-  const { batchId, productId, recipeId, siteId, status, date } = req.body;
-  if (!batchId || !productId || !recipeId || !siteId || !status || !date) {
-    console.log('POST /api/batches: Missing required fields', req.body);
-    return res.status(400).json({ error: 'All fields are required' });
+  const { productId, quantity, unit, startDate, recipeId } = req.body;
+  if (!productId || !quantity || !unit || !startDate || !recipeId) {
+    return res.status(400).json({ error: 'Missing required fields' });
   }
-  db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!product) return res.status(400).json({ error: 'Invalid productId' });
-    db.get('SELECT id, ingredients FROM recipes WHERE id = ? AND productId = ?', [recipeId, productId], (err, recipe) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!recipe) return res.status(400).json({ error: 'Invalid recipeId for selected product' });
-      db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!site) return res.status(400).json({ error: 'Invalid siteId' });
-        // Validate inventory for recipe ingredients
-        const ingredients = JSON.parse(recipe.ingredients || '[]');
-        if (!Array.isArray(ingredients) || ingredients.length === 0) {
-          return res.status(400).json({ error: 'Recipe has no valid ingredients' });
+
+  // Fetch recipe ingredients
+  db.get('SELECT ingredients FROM recipes WHERE id = ?', [recipeId], (err, recipe) => {
+    if (err) {
+      console.error('Error fetching recipe:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    const ingredients = JSON.parse(recipe.ingredients || '[]');
+    console.log('Recipe ingredients:', ingredients); // Debug log
+
+    // Check inventory for each ingredient
+    const errors = [];
+    let remaining = ingredients.length;
+    ingredients.forEach((ing) => {
+      db.get('SELECT SUM(quantity) as total FROM inventory WHERE itemName = ? AND unit = ?', [ing.itemName, ing.unit], (err, row) => {
+        if (err) {
+          console.error(`Error querying inventory for ${ing.itemName}:`, err);
+          errors.push(`Database error for ${ing.itemName}`);
+        } else {
+          const available = row && row.total ? row.total : 0;
+          console.log(`Inventory check for ${ing.itemName}: Available ${available}${ing.unit}, Needed ${ing.quantity}${ing.unit}`); // Debug log
+          if (available < ing.quantity) {
+            errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${ing.unit} available, ${ing.quantity}${ing.unit} needed`);
+          }
         }
-        const checks = ingredients.map(ing => new Promise((resolve, reject) => {
-          db.get('SELECT SUM(quantity) AS totalQuantity FROM inventory WHERE type = ?', [ing.itemName], (err, row) => {
-            if (err) return reject(err);
-            const available = parseFloat(row.totalQuantity || 0);
-            if (available < ing.quantity) {
-              return reject(new Error(`Insufficient inventory for ${ing.itemName}: ${available} available, ${ing.quantity} needed`));
-            }
-            resolve();
-          });
-        }));
-        Promise.all(checks).then(() => {
+        remaining--;
+        if (remaining === 0) {
+          if (errors.length > 0) {
+            return res.status(400).json({ error: errors.join('; ') });
+          }
+          // Proceed with batch creation
           db.run(
-            'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
-            [batchId, productId, recipeId, siteId, status, date],
-            (err) => {
+            'INSERT INTO batches (productId, quantity, unit, startDate, recipeId) VALUES (?, ?, ?, ?, ?)',
+            [productId, quantity, unit, startDate, recipeId],
+            function(err) {
               if (err) {
-                console.error('Insert batch error:', err);
+                console.error('Error inserting batch:', err);
                 return res.status(500).json({ error: err.message });
               }
-              db.get(`
-                SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-                       b.siteId, s.name AS siteName, b.status, b.date
-                FROM batches b
-                JOIN products p ON b.productId = p.id
-                JOIN recipes r ON b.recipeId = r.id
-                JOIN sites s ON b.siteId = s.siteId
-                WHERE b.batchId = ?
-              `, [batchId], (err, row) => {
-                if (err) return res.status(500).json({ error: err.message });
-                console.log('POST /api/batches, added:', row);
-                res.json(row);
-              });
+              console.log('Batch created:', { id: this.lastID, productId, quantity, unit, startDate, recipeId });
+              res.json({ id: this.lastID, productId, quantity, unit, startDate, recipeId });
             }
           );
-        }).catch(err => {
-          console.error('Inventory validation error:', err);
-          res.status(400).json({ error: err.message });
-        });
+        }
       });
     });
   });
