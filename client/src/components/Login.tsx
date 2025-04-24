@@ -23,14 +23,14 @@ const Login: React.FC = () => {
       }
       const user = await res.json();
       localStorage.setItem('user', JSON.stringify(user));
-      navigate('/');
+      navigate('/', { replace: true }); // Use replace to avoid history stack issues
+      window.location.reload(); // Force reload to ensure state sync
     } catch (err: any) {
       setError(err.message);
     }
   };
 
   const handleForgotPassword = () => {
-    // Placeholder: Log action (full reset flow TBD)
     console.log('Forgot Password clicked for email:', email);
     setError('Password reset not implemented yet. Contact admin or use superadmin@example.com with password: temp123');
   };
