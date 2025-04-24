@@ -33,6 +33,8 @@ const Production: React.FC = () => {
     ingredients: [{ itemName: '', quantity: 0 }],
   });
   const [error, setError] = useState<string | null>(null);
+  const [showErrorPopup, setShowErrorPopup] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -116,8 +118,15 @@ const Production: React.FC = () => {
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
+          // Show pop-up for inventory errors
+          if (errorMessage.includes('Insufficient inventory')) {
+            setErrorMessage(errorMessage);
+            setShowErrorPopup(true);
+          } else {
+            setError(errorMessage);
+          }
         } catch {
-          // Non-JSON response
+          setError(errorMessage);
         }
         throw new Error(errorMessage);
       }
@@ -132,9 +141,13 @@ const Production: React.FC = () => {
       setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
       setRecipes([]);
       setError(null);
+      setErrorMessage(null);
+      setShowErrorPopup(false);
     } catch (err: any) {
       console.error('Add batch error:', err);
-      setError('Failed to add batch: ' + err.message);
+      if (!showErrorPopup) {
+        setError('Failed to add batch: ' + err.message);
+      }
     }
   };
 
@@ -428,6 +441,56 @@ const Production: React.FC = () => {
               </button>
             </div>
           </div>
+          {showErrorPopup && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 2100,
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: '#fff',
+                  padding: '20px',
+                  borderRadius: '8px',
+                  width: '300px',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                  textAlign: 'center',
+                }}
+              >
+                <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Inventory Error</h3>
+                <p style={{ color: '#555', marginBottom: '20px' }}>{errorMessage}</p>
+                <button
+                  onClick={() => {
+                    setShowErrorPopup(false);
+                    setErrorMessage(null);
+                  }}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    transition: 'background-color 0.3s',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {showAddRecipeModal && (
