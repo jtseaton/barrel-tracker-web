@@ -195,9 +195,11 @@ db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
+      name TEXT,
       productId INTEGER,
       ingredients TEXT,
+      quantity REAL,
+      unit TEXT,
       FOREIGN KEY (productId) REFERENCES products(id)
     )
   `, (err) => {
@@ -458,31 +460,35 @@ app.post('/api/batches', (req, res) => {
 
 // Update /api/recipes to handle ingredients (replace existing /api/recipes, ~line 600)
 app.get('/api/recipes', (req, res) => {
-  const { productId } = req.query;
-  let query = 'SELECT id, name, productId, ingredients FROM recipes';
-  let params = [];
-  if (productId) {
-    query += ' WHERE productId = ?';
-    params.push(parseInt(productId));
+  const productId = req.query.productId;
+  if (!productId) {
+    return res.status(400).json({ error: 'productId query parameter is required' });
   }
-  db.all(query, params, (err, rows) => {
+  db.all('SELECT id, name, productId, ingredients, quantity, unit FROM recipes WHERE productId = ?', [productId], (err, rows) => {
     if (err) {
       console.error('Fetch recipes error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log(`GET /api/recipes?productId=${productId || ''}, returning:`, rows);
-    res.json(rows.map(row => ({
+    const recipes = rows.map(row => ({
       ...row,
-      ingredients: JSON.parse(row.ingredients || '[]')
-    })));
+      ingredients: JSON.parse(row.ingredients || '[]'),
+    }));
+    console.log('GET /api/recipes, returning:', recipes);
+    res.json(recipes);
   });
 });
 
 app.post('/api/recipes', (req, res) => {
-  const { name, productId, ingredients } = req.body;
-  if (!name || !productId || !Array.isArray(ingredients) || ingredients.length === 0) {
+  const { name, productId, ingredients, quantity, unit } = req.body;
+  if (!name || !productId || !Array.isArray(ingredients) || ingredients.length === 0 || !quantity || !unit) {
     console.log('POST /api/recipes: Missing required fields', req.body);
-    return res.status(400).json({ error: 'Name, productId, and at least one ingredient are required' });
+    return res.status(400).json({ error: 'Name, productId, ingredients, quantity, and unit are required' });
+  }
+  if (isNaN(quantity) || quantity <= 0) {
+    return res.status(400).json({ error: 'Quantity must be a positive number' });
+  }
+  if (!['gallons', 'liters', 'barrels'].includes(unit.toLowerCase())) {
+    return res.status(400).json({ error: 'Unit must be gallons, liters, or barrels' });
   }
   db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -500,14 +506,14 @@ app.post('/api/recipes', (req, res) => {
     }));
     Promise.all(checks).then(() => {
       db.run(
-        'INSERT INTO recipes (name, productId, ingredients) VALUES (?, ?, ?)',
-        [name, productId, JSON.stringify(ingredients)],
+        'INSERT INTO recipes (name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?)',
+        [name, productId, JSON.stringify(ingredients), quantity, unit.toLowerCase()],
         function(err) {
           if (err) {
             console.error('Insert recipe error:', err);
             return res.status(500).json({ error: err.message });
           }
-          const newRecipe = { id: this.lastID, name, productId, ingredients };
+          const newRecipe = { id: this.lastID, name, productId, ingredients, quantity, unit: unit.toLowerCase() };
           console.log('POST /api/recipes, added:', newRecipe);
           res.json(newRecipe);
         }
