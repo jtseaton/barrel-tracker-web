@@ -101,7 +101,7 @@ const Sites: React.FC = () => {
             value={newSite.siteId}
             onChange={(e) => setNewSite({ ...newSite, siteId: e.target.value })}
             placeholder="Enter Site ID"
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
           />
         </div>
         <div style={{ marginBottom: '15px' }}>
@@ -111,7 +111,7 @@ const Sites: React.FC = () => {
             value={newSite.name}
             onChange={(e) => setNewSite({ ...newSite, name: e.target.value })}
             placeholder="e.g., Madison Distillery"
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
           />
         </div>
         <div style={{ marginBottom: '15px' }}>
@@ -121,7 +121,7 @@ const Sites: React.FC = () => {
             value={newSite.type}
             onChange={(e) => setNewSite({ ...newSite, type: e.target.value })}
             placeholder="e.g., DSP"
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
           />
         </div>
         <div style={{ marginBottom: '15px' }}>
@@ -131,7 +131,7 @@ const Sites: React.FC = () => {
             value={newSite.address}
             onChange={(e) => setNewSite({ ...newSite, address: e.target.value })}
             placeholder="e.g., 212 Main St, Madison, AL"
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
           />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>

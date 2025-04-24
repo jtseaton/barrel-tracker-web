@@ -285,7 +285,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               placeholder="Item-Lot (e.g., Grain-NGS123)"
               value={moveForm.identifier}
               onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <select
               value={moveForm.toAccount}
@@ -301,7 +301,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               placeholder="Proof Gallons"
               value={moveForm.proofGallons}
               onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <button
               onClick={handleMove}
@@ -328,34 +328,34 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               placeholder="Item-Lot (e.g., Grain-NGS123)"
               value={lossForm.identifier}
               onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <input
               type="number"
               placeholder="Quantity Lost"
               value={lossForm.quantityLost}
               onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <input
               type="number"
               placeholder="Proof Gallons Lost"
               value={lossForm.proofGallonsLost}
               onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <input
               type="text"
               placeholder="Reason for Loss"
               value={lossForm.reason}
               onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <input
               type="date"
               value={lossForm.date}
               onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
+              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
             />
             <button
               onClick={handleRecordLoss}

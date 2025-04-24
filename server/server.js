@@ -206,6 +206,22 @@ db.serialize(() => {
     if (err) console.error('Error creating recipes table:', err);
     else console.log('Created recipes table');
   });
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      email TEXT PRIMARY KEY,
+      passwordHash TEXT,
+      role TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      passkey TEXT
+    )
+  `, (err) => {
+    if (err) console.error('Error creating users table:', err);
+    else console.log('Created users table');
+  });
+  
+  // Insert default Super Admin (for testing)
+  db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
+    ['superadmin@example.com', null, 'SuperAdmin', 1]);
   db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding abbreviation column:', err);
@@ -283,6 +299,13 @@ db.serialize(() => {
       if (err) console.error('Update error:', err);
       else console.log('Updated: Spirits Storage, abbreviation=Spirits');
   });
+  // In db.serialize, replace the default Super Admin insert
+  db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
+  ['jtseaton@gmail.com', 'P@$$w0rd1234', 'SuperAdmin', 1], // Temporary password: temp123
+  (err) => {
+    if (err) console.error('Error inserting default user:', err);
+    else console.log('Inserted default Super Admin user');
+  });
   db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
     ['Athens Cooler', 'Athens Cold Storage', 'BR-AL-20088'], (err) => {
       if (err) console.error('Update error:', err);
@@ -298,6 +321,94 @@ db.serialize(() => {
   });
   db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
     ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+});
+
+// GET /api/users
+app.get('/api/users', (req, res) => {
+  db.all('SELECT email, role, enabled, passkey FROM users', (err, rows) => {
+    if (err) {
+      console.error('Fetch users error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/users, returning:', rows);
+    res.json(rows);
+  });
+});
+
+// POST /api/users
+app.post('/api/users', (req, res) => {
+  const { email, role } = req.body;
+  if (!email || !role || !['SuperAdmin', 'Admin', 'Sales', 'Production'].includes(role)) {
+    console.log('POST /api/users: Invalid fields', req.body);
+    return res.status(400).json({ error: 'Email and valid role are required' });
+  }
+  db.get('SELECT email FROM users WHERE email = ?', [email], (err, existing) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (existing) return res.status(400).json({ error: 'Email already exists' });
+    db.run(
+      'INSERT INTO users (email, role, enabled) VALUES (?, ?, ?)',
+      [email, role, 1],
+      function(err) {
+        if (err) {
+          console.error('Insert user error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('POST /api/users, added:', { email, role });
+        res.json({ email, role, enabled: 1, passkey: null });
+      }
+    );
+  });
+});
+
+// DELETE /api/users
+app.delete('/api/users', (req, res) => {
+  const { emails } = req.body;
+  if (!Array.isArray(emails) || emails.length === 0) {
+    return res.status(400).json({ error: 'Array of emails required' });
+  }
+  const placeholders = emails.map(() => '?').join(',');
+  db.run(`DELETE FROM users WHERE email IN (${placeholders})`, emails, (err) => {
+    if (err) {
+      console.error('Delete users error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('DELETE /api/users, deleted:', emails);
+    res.json({ message: 'Users deleted' });
+  });
+});
+
+// PATCH /api/users
+app.patch('/api/users', (req, res) => {
+  const { emails, enabled } = req.body;
+  if (!Array.isArray(emails) || emails.length === 0 || typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Array of emails and enabled boolean required' });
+  }
+  const placeholders = emails.map(() => '?').join(',');
+  db.run(`UPDATE users SET enabled = ? WHERE email IN (${placeholders})`, [enabled ? 1 : 0, ...emails], (err) => {
+    if (err) {
+      console.error('Update users error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('PATCH /api/users, updated:', emails, 'enabled:', enabled);
+    res.json({ message: 'Users updated' });
+  });
+});
+
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+  db.get('SELECT email, passwordHash, role, enabled FROM users WHERE email = ? AND enabled = 1', [email], (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.status(401).json({ error: 'Invalid email or disabled user' });
+    // Temporary: Accept plain-text password (replace with bcrypt in production)
+    if (user.passwordHash !== password) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+    console.log('POST /api/login, authenticated:', user);
+    res.json({ email: user.email, role: user.role });
+  });
 });
 
 app.get('/api/products', (req, res) => {
