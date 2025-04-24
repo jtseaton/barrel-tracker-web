@@ -23,7 +23,7 @@ const Login: React.FC = () => {
       }
       const user = await res.json();
       localStorage.setItem('user', JSON.stringify(user));
-      navigate('/users');
+      navigate('/');
     } catch (err: any) {
       setError(err.message);
     }
