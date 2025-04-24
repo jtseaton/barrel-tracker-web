@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Product, Recipe } from '../types/interfaces';
+import { Product, Recipe, Unit } from '../types/interfaces'; // Add Unit
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -16,14 +16,18 @@ const ProductDetails: React.FC = () => {
   const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [newRecipe, setNewRecipe] = useState<{
-    name: string;
-    productId: number;
-    ingredients: Ingredient[];
-  }>({
-    name: '',
-    productId: parseInt(id || '0', 10),
-    ingredients: [{ itemName: '', quantity: 0 }],
-  });
+  name: string;
+  productId: number;
+  ingredients: Ingredient[];
+  quantity: number;
+  unit: string;
+}>({
+  name: '',
+  productId: parseInt(id || '0', 10),
+  ingredients: [{ itemName: '', quantity: 0 }],
+  quantity: 0,
+  unit: 'gallons', // Default to gallons
+});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -72,8 +76,8 @@ const ProductDetails: React.FC = () => {
   }, [id]);
 
   const handleAddRecipe = async () => {
-    if (!newRecipe.name || !newRecipe.productId || newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0)) {
-      setError('Recipe name, product, and valid ingredients are required');
+    if (!newRecipe.name || !newRecipe.productId || newRecipe.quantity <= 0 || !newRecipe.unit || newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0)) {
+      setError('Recipe name, product, quantity, unit, and valid ingredients are required');
       return;
     }
     try {
@@ -94,7 +98,7 @@ const ProductDetails: React.FC = () => {
       const addedRecipe = await res.json();
       setRecipes([...recipes, addedRecipe]);
       setShowAddRecipeModal(false);
-      setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0 }] });
+      setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0 }], quantity: 0, unit: 'gallons' });
       setError(null);
     } catch (err: any) {
       console.error('Add recipe error:', err);
@@ -184,38 +188,39 @@ const ProductDetails: React.FC = () => {
               </span>
             </div>
           </div>
-
-          <h3 style={{ color: '#333', marginTop: '20px', marginBottom: '10px' }}>Recipes</h3>
-          {recipes.length > 0 ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f0f0f0' }}>
-                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Name</th>
-                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Ingredients</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recipes.map((recipe) => (
-                  <tr key={recipe.id} style={{ backgroundColor: '#fff' }}>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>{recipe.name}</td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      {recipe.ingredients && recipe.ingredients.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                          {recipe.ingredients.map((ing, idx) => (
-                            <li key={idx}>{ing.itemName}: {ing.quantity}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        'No ingredients specified'
-                      )}
-                    </td>
+            <h3 style={{ color: '#333', marginTop: '20px', marginBottom: '10px' }}>Recipes</h3>
+            {recipes.length > 0 ? (
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f0f0f0' }}>
+                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Name</th>
+                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Quantity</th>
+                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Ingredients</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p style={{ color: '#777', marginBottom: '20px' }}>No recipes available.</p>
-          )}
+                </thead>
+                <tbody>
+                  {recipes.map((recipe) => (
+                    <tr key={recipe.id} style={{ backgroundColor: '#fff' }}>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{recipe.name}</td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{recipe.quantity} {recipe.unit}</td>
+                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                        {recipe.ingredients && recipe.ingredients.length > 0 ? (
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {recipe.ingredients.map((ing, idx) => (
+                              <li key={idx}>{ing.itemName}: {ing.quantity}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          'No ingredients specified'
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p style={{ color: '#777', marginBottom: '20px' }}>No recipes available.</p>
+            )}
           <button
             onClick={() => setShowAddRecipeModal(true)}
             style={{
@@ -335,6 +340,56 @@ const ProductDetails: React.FC = () => {
                   )}
                 </select>
               </div>
+              {/* Quantity */}
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Quantity (required):
+                </label>
+                <input
+                  type="number"
+                  value={newRecipe.quantity || ''}
+                  onChange={(e) => setNewRecipe({ ...newRecipe, quantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="Enter quantity"
+                  step="0.01"
+                  min="0"
+                  style={{
+                    width: '100%',
+                    maxWidth: '450px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                />
+              </div>
+              {/* Unit */}
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Unit (required):
+                </label>
+                <select
+                  value={newRecipe.unit}
+                  onChange={(e) => setNewRecipe({ ...newRecipe, unit: e.target.value })}
+                  style={{
+                    width: '100%',
+                    maxWidth: '450px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="gallons">Gallons</option>
+                  <option value="liters">Liters</option>
+                  <option value="barrels">Barrels</option>
+                </select>
+              </div>
               {/* Ingredients */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
@@ -433,7 +488,7 @@ const ProductDetails: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddRecipeModal(false);
-                  setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0 }] });
+                  setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0 }], quantity: 0, unit: 'gallons' });
                   setError(null);
                 }}
                 style={{
