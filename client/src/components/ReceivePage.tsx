@@ -16,8 +16,7 @@ interface Item {
   enabled: number;
 }
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
-
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,7 +34,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     cost: '',
     description: '',
     siteId: 'DSP-AL-20010', // Default site, adjust or remove as needed
-    locationId: '',
+    locationId: '1', // Default to valid locationId
     account: Account.Storage,
     proof: '',
   });
@@ -91,6 +90,24 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [showNewItemModal, setShowNewItemModal] = useState(false);
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
+
+  useEffect(() => {
+    if (showAddItemModal) {
+      setFilteredSites(sites);
+    }
+  }, [showAddItemModal, sites]);
+
+  useEffect(() => {
+    console.log('Item Dropdown:', { activeItemDropdownIndex, itemDropdownPosition, filteredItems });
+  }, [activeItemDropdownIndex, itemDropdownPosition, filteredItems]);
+
+  useEffect(() => {
+    console.log('Site Dropdown:', { activeSiteDropdownIndex, siteDropdownPosition, filteredSites });
+  }, [activeSiteDropdownIndex, siteDropdownPosition, filteredSites]);
+
+  useEffect(() => {
+    console.log('Location Dropdown:', { activeLocationDropdownIndex, dropdownPosition, rowFilteredLocations });
+  }, [activeLocationDropdownIndex, dropdownPosition, rowFilteredLocations]);
 
   const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
     if (!siteId) {
@@ -185,6 +202,87 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       });
     }
   }, [API_BASE_URL]);
+
+  useEffect(() => {
+    // Initialize arrays for new rows
+    setRowLocations((prev) => {
+      const newLocations = [...prev];
+      receiveItems.forEach((item, index) => {
+        if (!newLocations[index]) {
+          newLocations[index] = [];
+        }
+      });
+      return newLocations;
+    });
+    setRowFilteredLocations((prev) => {
+      const newFiltered = [...prev];
+      receiveItems.forEach((item, index) => {
+        if (!newFiltered[index]) {
+          newFiltered[index] = [];
+        }
+      });
+      return newFiltered;
+    });
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      receiveItems.forEach((_, index) => {
+        if (newFetching[index] === undefined) {
+          newFetching[index] = false;
+        }
+      });
+      return newFetching;
+    });
+
+    // Fetch locations for each row with a siteId
+    receiveItems.forEach((item, index) => {
+      if (item.siteId && !rowLocations[index]?.length && !rowFetchingLocations[index]) {
+        fetchLocations(item.siteId, index);
+      }
+    });
+  }, [receiveItems, fetchLocations, rowLocations, rowFetchingLocations]);
+
+  useEffect(() => {
+    inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
+    locationInputRefs.current = locationInputRefs.current.slice(0, receiveItems.length);
+  }, [receiveItems]);
+
+  useEffect(() => {
+    // Initialize arrays for new rows
+    setRowLocations((prev) => {
+      const newLocations = [...prev];
+      receiveItems.forEach((item, index) => {
+        if (!newLocations[index]) {
+          newLocations[index] = [];
+        }
+      });
+      return newLocations;
+    });
+    setRowFilteredLocations((prev) => {
+      const newFiltered = [...prev];
+      receiveItems.forEach((item, index) => {
+        if (!newFiltered[index]) {
+          newFiltered[index] = [];
+        }
+      });
+      return newFiltered;
+    });
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      receiveItems.forEach((_, index) => {
+        if (newFetching[index] === undefined) {
+          newFetching[index] = false;
+        }
+      });
+      return newFetching;
+    });
+  
+    // Fetch locations for each row with a siteId
+    receiveItems.forEach((item, index) => {
+      if (item.siteId && !rowLocations[index]?.length && !rowFetchingLocations[index]) {
+        fetchLocations(item.siteId, index);
+      }
+    });
+  }, [receiveItems, fetchLocations]);
 
   useEffect(() => {
     if (locationState?.newSiteId) {
@@ -432,6 +530,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setPoItemToSplit(null);
     }
     setReceiveItems(nonSpiritsItems);
+    setRowLocations(nonSpiritsItems.map(() => []));
+    setRowFilteredLocations(nonSpiritsItems.map(() => []));
+    setRowFetchingLocations(nonSpiritsItems.map(() => false));
+    nonSpiritsItems.forEach((item, index) => {
+    if (item.siteId) {
+      fetchLocations(item.siteId, index);
+    }
+  });
     setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
   };
 
@@ -505,6 +611,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const addItemRow = () => {
     setShowAddItemModal(true);
     // Initialize modal location data
+    setNewReceiveItem({
+      ...newReceiveItem,
+      siteId: selectedSite || 'DSP-AL-20010', // Use selectedSite or default
+    });
+    // Initialize modal location data
     setRowLocations((prev) => {
       const newLocations = [...prev];
       newLocations[9999] = [];
@@ -520,10 +631,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       newFetching[9999] = false;
       return newFetching;
     });
-    // Fetch locations for the default site if set
-    if (newReceiveItem.siteId) {
-      console.log(`Fetching locations for default siteId: ${newReceiveItem.siteId}`);
-      fetchLocations(newReceiveItem.siteId, 9999);
+    // Fetch locations for the default site
+    if (selectedSite || newReceiveItem.siteId) {
+      console.log(`Fetching locations for siteId: ${selectedSite || newReceiveItem.siteId}`);
+      fetchLocations(selectedSite || newReceiveItem.siteId, 9999);
     }
   };
 
