@@ -562,24 +562,27 @@ app.post('/api/batches', (req, res) => {
       } else {
         let remaining = ingredients.length;
         ingredients.forEach((ing) => {
-          if (!ing.itemName || !ing.quantity || !ing.unit) {
-            errors.push(`Invalid ingredient: ${JSON.stringify(ing)}`);
+          if (!ing.itemName || !ing.quantity) {
+            errors.push(`Invalid ingredient missing itemName or quantity: ${JSON.stringify(ing)}`);
             remaining--;
             if (remaining === 0) finishValidation();
             return;
           }
+          // Default to 'lbs' if unit is missing
+          const unit = ing.unit || 'lbs';
+          console.log(`Validating ingredient: ${ing.itemName}, quantity: ${ing.quantity}, unit: ${unit}, siteId: ${siteId}`); // Debug log
           db.get(
             'SELECT SUM(quantity) as total FROM inventory WHERE LOWER(itemName) = LOWER(?) AND unit = ? AND location = ?',
-            [ing.itemName, ing.unit, siteId],
+            [ing.itemName, unit, siteId],
             (err, row) => {
               if (err) {
                 console.error(`Error querying inventory for ${ing.itemName} at site ${siteId}:`, err);
                 errors.push(`Database error for ${ing.itemName}`);
               } else {
                 const available = row && row.total ? parseFloat(row.total) : 0;
-                console.log(`Inventory check for ${ing.itemName} (${ing.unit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`); // Debug log
+                console.log(`Inventory check for ${ing.itemName} (${unit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`); // Debug log
                 if (available < ing.quantity) {
-                  errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${ing.unit} available, ${ing.quantity}${ing.unit} needed`);
+                  errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${unit} available, ${ing.quantity}${unit} needed`);
                 }
               }
               remaining--;
