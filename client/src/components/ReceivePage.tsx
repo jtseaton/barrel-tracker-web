@@ -91,328 +91,316 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
 
-  useEffect(() => {
-    if (showAddItemModal) {
-      setFilteredSites(sites);
-    }
-  }, [showAddItemModal, sites]);
-
-  useEffect(() => {
-    console.log('Item Dropdown:', { activeItemDropdownIndex, itemDropdownPosition, filteredItems });
-  }, [activeItemDropdownIndex, itemDropdownPosition, filteredItems]);
-
-  useEffect(() => {
-    console.log('Site Dropdown:', { activeSiteDropdownIndex, siteDropdownPosition, filteredSites });
-  }, [activeSiteDropdownIndex, siteDropdownPosition, filteredSites]);
-
-  useEffect(() => {
-    console.log('Location Dropdown:', { activeLocationDropdownIndex, dropdownPosition, rowFilteredLocations });
-  }, [activeLocationDropdownIndex, dropdownPosition, rowFilteredLocations]);
-
-  const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
-    if (!siteId) {
-      // Clear locations for both Single and Multiple Items mode
-      if (rowIndex === 9999) {
-        setLocations([]);
-        setFilteredLocations([]);
-        setIsFetchingLocations(false);
-      }
-      setRowLocations((prev) => {
-        const newLocations = [...prev];
-        newLocations[rowIndex] = [];
-        return newLocations;
-      });
-      setRowFilteredLocations((prev) => {
-        const newFiltered = [...prev];
-        newFiltered[rowIndex] = [];
-        return newFiltered;
-      });
-      setRowFetchingLocations((prev) => {
-        const newFetching = [...prev];
-        newFetching[rowIndex] = false;
-        return newFetching;
-      });
-      return;
-    }
-  
-    // Set fetching state
+  // Updated fetchLocations with enhanced logging to diagnose blank Location dropdowns
+const fetchLocations = useCallback(async (siteId: string, rowIndex: number = 9999): Promise<void> => {
+  if (!siteId) {
     if (rowIndex === 9999) {
-      setIsFetchingLocations(true);
-    }
-    setRowFetchingLocations((prev) => {
-      const newFetching = [...prev];
-      newFetching[rowIndex] = true;
-      return newFetching;
-    });
-  
-    try {
-      const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data: Location[] = await res.json();
-      console.log(`Fetched locations for site ${siteId} at index ${rowIndex}:`, data); // Debug log
-  
-      // Update locations for Single Item mode if rowIndex is 9999
-      if (rowIndex === 9999) {
-        setLocations(data);
-        setFilteredLocations(data);
-        setIsFetchingLocations(false);
-      }
-  
-      // Update rowLocations for Multiple Items mode
-      setRowLocations((prev) => {
-        const newLocations = [...prev];
-        newLocations[rowIndex] = data;
-        return newLocations;
-      });
-      setRowFilteredLocations((prev) => {
-        const newFiltered = [...prev];
-        newFiltered[rowIndex] = data;
-        return newFiltered;
-      });
-      setRowFetchingLocations((prev) => {
-        const newFetching = [...prev];
-        newFetching[rowIndex] = false;
-        return newFetching;
-      });
-    } catch (err: any) {
-      console.error('Fetch locations error:', err);
-      setProductionError(`Failed to fetch locations: ${err.message}`);
-  
-      // Clear locations on error
-      if (rowIndex === 9999) {
-        setLocations([]);
-        setFilteredLocations([]);
-        setIsFetchingLocations(false);
-      }
-      setRowLocations((prev) => {
-        const newLocations = [...prev];
-        newLocations[rowIndex] = [];
-        return newLocations;
-      });
-      setRowFilteredLocations((prev) => {
-        const newFiltered = [...prev];
-        newFiltered[rowIndex] = [];
-        return newFiltered;
-      });
-      setRowFetchingLocations((prev) => {
-        const newFetching = [...prev];
-        newFetching[rowIndex] = false;
-        return newFetching;
-      });
-    }
-  }, [API_BASE_URL]);
-
-  useEffect(() => {
-    // Initialize arrays for new rows
-    setRowLocations((prev) => {
-      const newLocations = [...prev];
-      receiveItems.forEach((item, index) => {
-        if (!newLocations[index]) {
-          newLocations[index] = [];
-        }
-      });
-      return newLocations;
-    });
-    setRowFilteredLocations((prev) => {
-      const newFiltered = [...prev];
-      receiveItems.forEach((item, index) => {
-        if (!newFiltered[index]) {
-          newFiltered[index] = [];
-        }
-      });
-      return newFiltered;
-    });
-    setRowFetchingLocations((prev) => {
-      const newFetching = [...prev];
-      receiveItems.forEach((_, index) => {
-        if (newFetching[index] === undefined) {
-          newFetching[index] = false;
-        }
-      });
-      return newFetching;
-    });
-
-    // Fetch locations for each row with a siteId
-    receiveItems.forEach((item, index) => {
-      if (item.siteId && !rowLocations[index]?.length && !rowFetchingLocations[index]) {
-        fetchLocations(item.siteId, index);
-      }
-    });
-  }, [receiveItems, fetchLocations, rowLocations, rowFetchingLocations]);
-
-  useEffect(() => {
-    inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
-    locationInputRefs.current = locationInputRefs.current.slice(0, receiveItems.length);
-  }, [receiveItems]);
-
-  useEffect(() => {
-    // Initialize arrays for new rows
-    setRowLocations((prev) => {
-      const newLocations = [...prev];
-      receiveItems.forEach((item, index) => {
-        if (!newLocations[index]) {
-          newLocations[index] = [];
-        }
-      });
-      return newLocations;
-    });
-    setRowFilteredLocations((prev) => {
-      const newFiltered = [...prev];
-      receiveItems.forEach((item, index) => {
-        if (!newFiltered[index]) {
-          newFiltered[index] = [];
-        }
-      });
-      return newFiltered;
-    });
-    setRowFetchingLocations((prev) => {
-      const newFetching = [...prev];
-      receiveItems.forEach((_, index) => {
-        if (newFetching[index] === undefined) {
-          newFetching[index] = false;
-        }
-      });
-      return newFetching;
-    });
-  
-    // Fetch locations for each row with a siteId
-    receiveItems.forEach((item, index) => {
-      if (item.siteId && !rowLocations[index]?.length && !rowFetchingLocations[index]) {
-        fetchLocations(item.siteId, index);
-      }
-    });
-  }, [receiveItems, fetchLocations]);
-
-  useEffect(() => {
-    if (locationState?.newSiteId) {
-      setSelectedSite(locationState.newSiteId);
-      setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
-    }
-    if (locationState?.newLocationId) {
-      setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId }));
-    }
-  
-    const fetchItems = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/items`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setItems(data);
-        setFilteredItems(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch items: ' + err.message);
-      }
-    };
-  
-    const fetchPOs = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(
-          `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
-          { signal: controller.signal }
-        );
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setPurchaseOrders(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch POs: ' + err.message);
-      }
-    };
-  
-    const fetchSites = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/sites`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        setSites(data);
-        setFilteredSites(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch sites: ' + err.message);
-      }
-    };
-  
-    fetchSites();
-    fetchItems();
-    if (singleForm.source) fetchPOs();
-    setFilteredVendors(vendors);
-  }, [locationState, singleForm.source, vendors]);
-
-  useEffect(() => {
-    if (activeSiteDropdownIndex !== null && siteInputRefs.current[activeSiteDropdownIndex]) {
-      const input = siteInputRefs.current[activeSiteDropdownIndex];
-      const rect = input!.getBoundingClientRect();
-      setSiteDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
-    } else {
-      setSiteDropdownPosition(null);
-    }
-  }, [activeSiteDropdownIndex]);
-
-  useEffect(() => {
-    setSingleForm((prev) => {
-      if (prev.siteId !== selectedSite) {
-        console.log('Syncing singleForm.siteId with selectedSite:', selectedSite);
-        return { ...prev, siteId: selectedSite, locationId: '' }; // Reset locationId when site changes
-      }
-      return prev;
-    });
-  }, [selectedSite]);
-
-  useEffect(() => {
-    if (
-      activeLocationDropdownIndex !== null &&
-      locationInputRefs.current[activeLocationDropdownIndex] &&
-      activeItemDropdownIndex === null // Ensure Item isn’t active
-    ) {
-      const input = locationInputRefs.current[activeLocationDropdownIndex];
-      const rect = input!.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
-    } else {
-      setDropdownPosition(null);
-    }
-  }, [activeLocationDropdownIndex, activeItemDropdownIndex]);
-
-  useEffect(() => {
-    console.log('selectedSite changed:', selectedSite);
-    if (selectedSite) {
-      fetchLocations(selectedSite);
-    } else {
       setLocations([]);
       setFilteredLocations([]);
       setIsFetchingLocations(false);
     }
-  }, [selectedSite, fetchLocations]);
+    setRowLocations((prev) => {
+      const newLocations = [...prev];
+      newLocations[rowIndex] = [];
+      return newLocations;
+    });
+    setRowFilteredLocations((prev) => {
+      const newFiltered = [...prev];
+      newFiltered[rowIndex] = [];
+      return newFiltered;
+    });
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      newFetching[rowIndex] = false;
+      return newFetching;
+    });
+    console.log(`No siteId provided for fetchLocations at index ${rowIndex}`);
+    return;
+  }
 
-  useEffect(() => {
-    if (
-      activeItemDropdownIndex !== null &&
-      inputRefs.current[activeItemDropdownIndex] &&
-      activeLocationDropdownIndex === null // Ensure Location isn’t active
-    ) {
-      const input = inputRefs.current[activeItemDropdownIndex];
-      const rect = input!.getBoundingClientRect();
-      setItemDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
-    } else {
-      setItemDropdownPosition(null);
+  if (rowIndex === 9999) {
+    setIsFetchingLocations(true);
+  }
+  setRowFetchingLocations((prev) => {
+    const newFetching = [...prev];
+    newFetching[rowIndex] = true;
+    return newFetching;
+  });
+
+  try {
+    const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
     }
-  }, [activeItemDropdownIndex, activeLocationDropdownIndex]);
+    const data: Location[] = await res.json();
+    console.log(`Fetched locations for site ${siteId} at index ${rowIndex}:`, data);
+    if (data.length === 0) {
+      console.warn(`No locations returned for siteId ${siteId} at index ${rowIndex}`);
+      setProductionError(`No locations found for site ${siteId}`);
+    }
+
+    if (rowIndex === 9999) {
+      setLocations(data);
+      setFilteredLocations(data);
+      setIsFetchingLocations(false);
+    }
+
+    setRowLocations((prev) => {
+      const newLocations = [...prev];
+      newLocations[rowIndex] = data;
+      return newLocations;
+    });
+    setRowFilteredLocations((prev) => {
+      const newFiltered = [...prev];
+      newFiltered[rowIndex] = data;
+      return newFiltered;
+    });
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      newFetching[rowIndex] = false;
+      return newFetching;
+    });
+  } catch (err: any) {
+    console.error(`Fetch locations error for siteId ${siteId} at index ${rowIndex}:`, err);
+    setProductionError(`Failed to fetch locations for site ${siteId}: ${err.message}`);
+    if (rowIndex === 9999) {
+      setLocations([]);
+      setFilteredLocations([]);
+      setIsFetchingLocations(false);
+    }
+    setRowLocations((prev) => {
+      const newLocations = [...prev];
+      newLocations[rowIndex] = [];
+      return newLocations;
+    });
+    setRowFilteredLocations((prev) => {
+      const newFiltered = [...prev];
+      newFiltered[rowIndex] = [];
+      return newFiltered;
+    });
+    setRowFetchingLocations((prev) => {
+      const newFetching = [...prev];
+      newFetching[rowIndex] = false;
+      return newFetching;
+    });
+  }
+}, [API_BASE_URL]);
+
+// FIX START: Fetch initial data (items, sites, POs) with logging
+// Ensures Item and Site dropdowns have data
+useEffect(() => {
+  if (locationState?.newSiteId) {
+    setSelectedSite(locationState.newSiteId);
+    setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
+  }
+  if (locationState?.newLocationId) {
+    setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId }));
+  }
+
+  const fetchItems = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${API_BASE_URL}/api/items`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      const data = await res.json();
+      console.log('Fetched items:', data);
+      setItems(data);
+      setFilteredItems(data);
+      if (data.length === 0) {
+        setProductionError('No items found in database');
+      }
+    } catch (err: any) {
+      console.error('Fetch items error:', err);
+      setProductionError('Failed to fetch items: ' + err.message);
+    }
+  };
+
+  const fetchPOs = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(
+        `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      const data = await res.json();
+      console.log('Fetched POs:', data);
+      setPurchaseOrders(data);
+    } catch (err: any) {
+      console.error('Fetch POs error:', err);
+      setProductionError('Failed to fetch POs: ' + err.message);
+    }
+  };
+
+  const fetchSites = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${API_BASE_URL}/api/sites`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      const data = await res.json();
+      console.log('Fetched sites:', data);
+      setSites(data);
+      setFilteredSites(data);
+      if (data.length === 0) {
+        setProductionError('No sites found in database');
+      }
+    } catch (err: any) {
+      console.error('Fetch sites error:', err);
+      setProductionError('Failed to fetch sites: ' + err.message);
+    }
+  };
+
+  fetchSites();
+  fetchItems();
+  if (singleForm.source) fetchPOs();
+  setFilteredVendors(vendors);
+}, [locationState, singleForm.source, vendors]);
+
+// FIX START: Synchronize rowLocations, rowFilteredLocations, and rowFetchingLocations
+// Ensures table Location dropdowns have data
+useEffect(() => {
+  setRowLocations((prev) => {
+    const newLocations = [...prev];
+    receiveItems.forEach((item, index) => {
+      if (!newLocations[index]) {
+        newLocations[index] = [];
+      }
+    });
+    return newLocations;
+  });
+  setRowFilteredLocations((prev) => {
+    const newFiltered = [...prev];
+    receiveItems.forEach((item, index) => {
+      if (!newFiltered[index]) {
+        newFiltered[index] = [];
+      }
+    });
+    return newFiltered;
+  });
+  setRowFetchingLocations((prev) => {
+    const newFetching = [...prev];
+    receiveItems.forEach((_, index) => {
+      if (newFetching[index] === undefined) {
+        newFetching[index] = false;
+      }
+    });
+    return newFetching;
+  });
+
+  receiveItems.forEach((item, index) => {
+    if (item.siteId && !rowLocations[index]?.length && !rowFetchingLocations[index]) {
+      console.log(`Fetching locations for table row ${index} with siteId: ${item.siteId}`);
+      fetchLocations(item.siteId, index);
+    }
+  });
+}, [receiveItems, fetchLocations]);
+
+// FIX START: Resize ref arrays to match receiveItems length
+// Ensures Item and Location dropdowns appear correctly
+useEffect(() => {
+  inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
+  locationInputRefs.current = locationInputRefs.current.slice(0, receiveItems.length);
+}, [receiveItems]);
+
+// FIX START: Reset filteredSites when modal opens
+// Populates modal Site dropdown
+useEffect(() => {
+  if (showAddItemModal) {
+    console.log('Modal opened, setting filteredSites:', sites);
+    setFilteredSites(sites);
+  }
+}, [showAddItemModal, sites]);
+
+// FIX START: Set siteDropdownPosition for modal Site dropdown
+useEffect(() => {
+  if (activeSiteDropdownIndex !== null && siteInputRefs.current[activeSiteDropdownIndex]) {
+    const input = siteInputRefs.current[activeSiteDropdownIndex];
+    const rect = input!.getBoundingClientRect();
+    setSiteDropdownPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+    });
+  } else {
+    setSiteDropdownPosition(null);
+  }
+}, [activeSiteDropdownIndex]);
+
+// FIX START: Sync singleForm.siteId with selectedSite
+// Ensures Single Item mode Site selection works
+useEffect(() => {
+  setSingleForm((prev) => {
+    if (prev.siteId !== selectedSite) {
+      console.log('Syncing singleForm.siteId with selectedSite:', selectedSite);
+      return { ...prev, siteId: selectedSite, locationId: '' };
+    }
+    return prev;
+  });
+}, [selectedSite]);
+
+// FIX START: Set dropdownPosition for Location dropdowns
+useEffect(() => {
+  if (
+    activeLocationDropdownIndex !== null &&
+    locationInputRefs.current[activeLocationDropdownIndex] &&
+    activeItemDropdownIndex === null
+  ) {
+    const input = locationInputRefs.current[activeLocationDropdownIndex];
+    const rect = input!.getBoundingClientRect();
+    setDropdownPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+    });
+  } else {
+    setDropdownPosition(null);
+  }
+}, [activeLocationDropdownIndex, activeItemDropdownIndex]);
+
+// FIX START: Fetch locations for Single Item mode when selectedSite changes
+useEffect(() => {
+  console.log('selectedSite changed:', selectedSite);
+  if (selectedSite) {
+    fetchLocations(selectedSite);
+  } else {
+    setLocations([]);
+    setFilteredLocations([]);
+    setIsFetchingLocations(false);
+  }
+}, [selectedSite, fetchLocations]);
+
+// FIX START: Set itemDropdownPosition for Item dropdowns
+useEffect(() => {
+  if (
+    activeItemDropdownIndex !== null &&
+    inputRefs.current[activeItemDropdownIndex] &&
+    activeLocationDropdownIndex === null
+  ) {
+    const input = inputRefs.current[activeItemDropdownIndex];
+    const rect = input!.getBoundingClientRect();
+    setDropdownPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+    });
+  } else {
+    setDropdownPosition(null);
+  }
+}, [activeItemDropdownIndex, activeLocationDropdownIndex]);
 
   const calculateTotal = useMemo(() => {
     let total = 0;
@@ -534,10 +522,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     setRowFilteredLocations(nonSpiritsItems.map(() => []));
     setRowFetchingLocations(nonSpiritsItems.map(() => false));
     nonSpiritsItems.forEach((item, index) => {
-    if (item.siteId) {
-      fetchLocations(item.siteId, index);
-    }
-  });
+      const siteId = item.siteId || selectedSite || 'DSP-AL-20010';
+      console.log(`Fetching locations for PO item at index ${index} with siteId: ${siteId}`);
+      fetchLocations(siteId, index);
+    });
     setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
   };
 
@@ -611,31 +599,28 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const addItemRow = () => {
     setShowAddItemModal(true);
     // Initialize modal location data
-    setNewReceiveItem({
-      ...newReceiveItem,
-      siteId: selectedSite || 'DSP-AL-20010', // Use selectedSite or default
-    });
-    // Initialize modal location data
-    setRowLocations((prev) => {
-      const newLocations = [...prev];
-      newLocations[9999] = [];
-      return newLocations;
-    });
-    setRowFilteredLocations((prev) => {
-      const newFiltered = [...prev];
-      newFiltered[9999] = [];
-      return newFiltered;
-    });
-    setRowFetchingLocations((prev) => {
-      const newFetching = [...prev];
-      newFetching[9999] = false;
-      return newFetching;
-    });
-    // Fetch locations for the default site
-    if (selectedSite || newReceiveItem.siteId) {
-      console.log(`Fetching locations for siteId: ${selectedSite || newReceiveItem.siteId}`);
-      fetchLocations(selectedSite || newReceiveItem.siteId, 9999);
-    }
+    const defaultSiteId = selectedSite || 'DSP-AL-20010';
+  setNewReceiveItem({
+    ...newReceiveItem,
+    siteId: defaultSiteId,
+  });
+  setRowLocations((prev) => {
+    const newLocations = [...prev];
+    newLocations[9999] = [];
+    return newLocations;
+  });
+  setRowFilteredLocations((prev) => {
+    const newFiltered = [...prev];
+    newFiltered[9999] = [];
+    return newFiltered;
+  });
+  setRowFetchingLocations((prev) => {
+    const newFetching = [...prev];
+    newFetching[9999] = false;
+    return newFetching;
+  });
+  console.log(`Fetching locations for modal with siteId: ${defaultSiteId}`);
+  fetchLocations(defaultSiteId, 9999);
   };
 
   const handleReceive = async () => {
