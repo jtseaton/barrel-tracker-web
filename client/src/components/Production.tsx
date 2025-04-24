@@ -116,7 +116,7 @@ const Production: React.FC = () => {
       setError('Invalid recipe selected');
       return;
     }
-    console.log('Selected recipe ingredients:', recipe.ingredients); // Debug log
+    console.log('Selected recipe ingredients for recipeId', newBatch.recipeId, ':', recipe.ingredients); // Debug log
 
     const batchData = {
       batchId: newBatch.batchId,

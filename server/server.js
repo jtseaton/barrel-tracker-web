@@ -568,16 +568,16 @@ app.post('/api/batches', (req, res) => {
             if (remaining === 0) finishValidation();
             return;
           }
-          // Default to 'lbs' if unit is missing
-          const unit = ing.unit || 'lbs';
+          // Default to 'lbs' if unit is missing, normalize to lowercase
+          const unit = (ing.unit || 'lbs').toLowerCase();
           console.log(`Validating ingredient: ${ing.itemName}, quantity: ${ing.quantity}, unit: ${unit}, siteId: ${siteId}`); // Debug log
           db.get(
-            'SELECT SUM(quantity) as total FROM inventory WHERE LOWER(itemName) = LOWER(?) AND unit = ? AND location = ?',
+            'SELECT SUM(quantity) as total FROM inventory WHERE LOWER(itemName) = LOWER(?) AND LOWER(unit) = ? AND location = ?',
             [ing.itemName, unit, siteId],
             (err, row) => {
               if (err) {
-                console.error(`Error querying inventory for ${ing.itemName} at site ${siteId}:`, err);
-                errors.push(`Database error for ${ing.itemName}`);
+                console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
+                errors.push(`Database error for ${ing.itemName}: ${err.message}`);
               } else {
                 const available = row && row.total ? parseFloat(row.total) : 0;
                 console.log(`Inventory check for ${ing.itemName} (${unit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`); // Debug log
