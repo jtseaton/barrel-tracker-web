@@ -6,6 +6,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 interface Ingredient {
   itemName: string;
   quantity: number;
+  unit: string; // Added unit
 }
 
 const Production: React.FC = () => {
@@ -30,7 +31,7 @@ const Production: React.FC = () => {
   }>({
     name: '',
     productId: 0,
-    ingredients: [{ itemName: '', quantity: 0 }],
+    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], // Added unit
   });
   const [error, setError] = useState<string | null>(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
@@ -86,6 +87,7 @@ const Production: React.FC = () => {
         throw new Error(`Invalid response for recipes: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
+      console.log('Fetched recipes for productId', productId, ':', data); // Debug log
       setRecipes(data);
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
@@ -99,18 +101,20 @@ const Production: React.FC = () => {
       setError('All fields are required');
       return;
     }
+    const batchData = {
+      batchId: newBatch.batchId,
+      productId: newBatch.productId,
+      recipeId: newBatch.recipeId,
+      siteId: newBatch.siteId,
+      status: 'In Progress',
+      date: new Date().toISOString().split('T')[0],
+    };
+    console.log('Sending batch data to /api/batches:', batchData); // Debug log
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          batchId: newBatch.batchId,
-          productId: newBatch.productId,
-          recipeId: newBatch.recipeId,
-          siteId: newBatch.siteId,
-          status: 'In Progress',
-          date: new Date().toISOString().split('T')[0],
-        }),
+        body: JSON.stringify(batchData),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -118,7 +122,7 @@ const Production: React.FC = () => {
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
-          // Show pop-up for inventory errors
+          console.log('Server error response:', errorMessage); // Debug log
           if (errorMessage.includes('Insufficient inventory')) {
             setErrorMessage(errorMessage);
             setShowErrorPopup(true);
@@ -136,6 +140,7 @@ const Production: React.FC = () => {
         throw new Error(`Invalid response for batch: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
       }
       const addedBatch = await res.json();
+      console.log('Batch created:', addedBatch); // Debug log
       setBatches([...batches, addedBatch]);
       setShowAddBatchModal(false);
       setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
@@ -152,8 +157,8 @@ const Production: React.FC = () => {
   };
 
   const handleAddRecipe = async () => {
-    if (!newRecipe.name || !newRecipe.productId || newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0)) {
-      setError('Recipe name, product, and valid ingredients are required');
+    if (!newRecipe.name || !newRecipe.productId || newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)) {
+      setError('Recipe name, product, and valid ingredients with units are required');
       return;
     }
     try {
@@ -174,7 +179,7 @@ const Production: React.FC = () => {
       const addedRecipe = await res.json();
       setRecipes([...recipes, addedRecipe]);
       setShowAddRecipeModal(false);
-      setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0 }] });
+      setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }] });
       setError(null);
     } catch (err: any) {
       console.error('Add recipe error:', err);
@@ -185,7 +190,7 @@ const Production: React.FC = () => {
   const addIngredient = () => {
     setNewRecipe({
       ...newRecipe,
-      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0 }],
+      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0, unit: 'lbs' }],
     });
   };
 
@@ -204,7 +209,7 @@ const Production: React.FC = () => {
 
   const filteredBatches = batches.filter(batch =>
     batch.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    batch.productName.toLowerCase().includes(searchQuery.toLowerCase())
+    (batch.productName && batch.productName.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -250,10 +255,10 @@ const Production: React.FC = () => {
               filteredBatches.map((batch) => (
                 <tr key={batch.batchId}>
                   <td>{batch.batchId}</td>
-                  <td>{batch.productName}</td>
+                  <td>{batch.productName || 'Unknown'}</td>
                   <td>{batch.status}</td>
                   <td>{batch.date}</td>
-                  <td>{batch.siteName}</td>
+                  <td>{batch.siteName || batch.siteId}</td>
                 </tr>
               ))
             ) : (
@@ -423,6 +428,8 @@ const Production: React.FC = () => {
                   setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
                   setRecipes([]);
                   setError(null);
+                  setErrorMessage(null);
+                  setShowErrorPopup(false);
                 }}
                 style={{
                   backgroundColor: '#F86752',
@@ -616,6 +623,26 @@ const Production: React.FC = () => {
                         backgroundColor: '#FFFFFF',
                       }}
                     />
+                    <select
+                      value={ingredient.unit}
+                      onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
+                      style={{
+                        width: '100px',
+                        padding: '10px',
+                        border: '1px solid #CCCCCC',
+                        borderRadius: '4px',
+                        fontSize: '16px',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#FFFFFF',
+                      }}
+                    >
+                      <option value="lbs">lbs</option>
+                      <option value="kg">kg</option>
+                      <option value="oz">oz</option>
+                      <option value="gal">gal</option>
+                      <option value="l">l</option>
+                    </select>
                     <button
                       onClick={() => removeIngredient(index)}
                       style={{
@@ -670,7 +697,7 @@ const Production: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddRecipeModal(false);
-                  setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0 }] });
+                  setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }] });
                   setError(null);
                 }}
                 style={{
