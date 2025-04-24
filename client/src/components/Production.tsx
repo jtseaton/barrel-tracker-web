@@ -6,7 +6,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 interface Ingredient {
   itemName: string;
   quantity: number;
-  unit: string; // Added unit
+  unit: string;
 }
 
 const Production: React.FC = () => {
@@ -31,7 +31,7 @@ const Production: React.FC = () => {
   }>({
     name: '',
     productId: 0,
-    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], // Added unit
+    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
   });
   const [error, setError] = useState<string | null>(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
@@ -73,6 +73,10 @@ const Production: React.FC = () => {
   }, []);
 
   const fetchRecipes = async (productId: number) => {
+    if (!productId) {
+      setRecipes([]);
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${productId}`, {
         headers: { Accept: 'application/json' },
@@ -101,6 +105,19 @@ const Production: React.FC = () => {
       setError('All fields are required');
       return;
     }
+    // Validate productId and recipeId
+    const product = products.find(p => p.id === newBatch.productId);
+    if (!product) {
+      setError('Invalid product selected');
+      return;
+    }
+    const recipe = recipes.find(r => r.id === newBatch.recipeId);
+    if (!recipe) {
+      setError('Invalid recipe selected');
+      return;
+    }
+    console.log('Selected recipe ingredients:', recipe.ingredients); // Debug log
+
     const batchData = {
       batchId: newBatch.batchId,
       productId: newBatch.productId,
