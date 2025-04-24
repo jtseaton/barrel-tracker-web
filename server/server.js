@@ -572,7 +572,7 @@ app.post('/api/batches', (req, res) => {
           const unit = (ing.unit || 'lbs').toLowerCase();
           console.log(`Validating ingredient: ${ing.itemName}, quantity: ${ing.quantity}, unit: ${unit}, siteId: ${siteId}`); // Debug log
           db.get(
-            'SELECT SUM(quantity) as total FROM inventory WHERE LOWER(itemName) = LOWER(?) AND LOWER(unit) = ? AND location = ?',
+            'SELECT SUM(quantity) as total FROM inventory WHERE LOWER(type) = LOWER(?) AND LOWER(unit) = ? AND siteId = ?',
             [ing.itemName, unit, siteId],
             (err, row) => {
               if (err) {
