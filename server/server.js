@@ -1728,6 +1728,17 @@ app.get('/api/report/daily', (req, res) => {
   );
 });
 
+app.get('/styles.xml', (req, res) => {
+  const filePath = path.join(__dirname, 'config/styles.xml');
+  console.log('Serving styles.xml from:', filePath);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Error serving styles.xml:', err);
+      res.status(404).json({ error: 'styles.xml not found' });
+    }
+  });
+});
+
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/build/index.html')));
 
 const PORT = process.env.PORT || 3000;

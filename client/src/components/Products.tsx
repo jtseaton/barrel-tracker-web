@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { createPortal } from 'react-dom';
 import { Product } from '../types/interfaces';
 import { ProductClass, ProductType } from '../types/enums';
 
@@ -40,31 +39,59 @@ const Products: React.FC = () => {
 
     const fetchStyles = async () => {
       try {
-        const res = await fetch('../../../config/styles.xml');
+        console.log('Fetching /styles.xml...');
+        const res = await fetch('/styles.xml', { headers: { Accept: 'application/xml' } });
+        console.log('Fetch response:', res.status, res.statusText);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const text = await res.text();
+        if (!text.trim()) throw new Error('Empty XML response');
+        console.log('Raw XML:', text.slice(0, 200));
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
         const parseError = xmlDoc.querySelector('parsererror');
-        if (parseError) throw new Error('Invalid XML format in styles.xml');
-        const types = Array.from(xmlDoc.getElementsByTagName('Type')).map(type => ({
-          type: type.getAttribute('name') || '',
-          styles: Array.from(type.getElementsByTagName('Style')).map(style => style.textContent || '').filter(Boolean),
-        }));
-        setStyles(types);
-        console.log('Fetched styles:', types);
+        if (parseError) throw new Error('Invalid XML format: ' + parseError.textContent);
+
+        // Group styles by comments
+        const stylesByType: { type: string; styles: string[] }[] = [];
+        let currentType = '';
+        Array.from(xmlDoc.documentElement.childNodes).forEach(node => {
+          if (node.nodeType === Node.COMMENT_NODE) {
+            const comment = node.textContent?.trim().toLowerCase() || '';
+            if (comment.includes('beer')) currentType = 'Malt';
+            else if (comment.includes('wine')) currentType = 'Wine';
+            else if (comment.includes('spirit')) currentType = 'Spirits';
+            else if (comment.includes('cider')) currentType = 'Cider';
+            else if (comment.includes('seltzer')) currentType = 'Seltzer';
+            else if (comment.includes('merchandise')) currentType = 'Merchandise';
+          } else if (node.nodeName === 'style' && currentType) {
+            const styleText = node.textContent?.trim();
+            if (styleText) {
+              const typeEntry = stylesByType.find(entry => entry.type === currentType);
+              if (typeEntry) {
+                typeEntry.styles.push(styleText);
+              } else {
+                stylesByType.push({ type: currentType, styles: [styleText] });
+              }
+            }
+          }
+        });
+
+        if (stylesByType.length === 0) throw new Error('No styles found in XML');
+        console.log('Parsed styles:', stylesByType);
+        setStyles(stylesByType);
       } catch (err: any) {
-        console.error('Fetch styles error:', err);
+        console.error('Fetch styles error:', err.message);
         setError('Failed to load styles: ' + err.message);
-        // Fallback to mock styles
-        setStyles([
-          { type: ProductType.Malt, styles: ['IPA', 'Stout', 'Porter', 'American Amber Ale'] },
-          { type: ProductType.Spirits, styles: ['Bourbon', 'Whiskey', 'Vodka', 'Gin'] },
-          { type: ProductType.Wine, styles: ['Red', 'White', 'Rosé'] },
-          { type: ProductType.Cider, styles: ['Dry', 'Sweet'] },
-          { type: ProductType.Seltzer, styles: ['Other'] },
-          { type: ProductType.Merchandise, styles: ['Other'] },
-        ]);
+        const mockStyles = [
+          { type: 'Malt', styles: ['IPA', 'Stout', 'Porter', 'American Amber Ale'] },
+          { type: 'Spirits', styles: ['Bourbon', 'Whiskey', 'Vodka', 'Gin'] },
+          { type: 'Wine', styles: ['Red', 'White', 'Rosé'] },
+          { type: 'Cider', styles: ['Dry', 'Sweet'] },
+          { type: 'Seltzer', styles: ['Other'] },
+          { type: 'Merchandise', styles: ['Other'] },
+        ];
+        setStyles(mockStyles);
+        console.log('Set mock styles:', mockStyles);
       }
     };
 
@@ -291,6 +318,7 @@ const Products: React.FC = () => {
                     });
                     const selectedStyles = styles.find(s => s.type.toLowerCase() === type.toLowerCase())?.styles || [];
                     setFilteredStyles(selectedStyles);
+                    console.log('Type selected:', type, 'Filtered styles:', selectedStyles);
                     setShowStyleSuggestions(true);
                   }}
                   style={{
