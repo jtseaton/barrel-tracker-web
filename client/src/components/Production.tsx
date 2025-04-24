@@ -112,7 +112,14 @@ const Production: React.FC = () => {
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Add batch error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        let errorMessage = `Add batch error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`;
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // Non-JSON response
+        }
+        throw new Error(errorMessage);
       }
       const contentType = res.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
