@@ -313,8 +313,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const handleItemSelect = (selectedItem: Item, index?: number) => {
     const normalizedType = selectedItem.type ? selectedItem.type.charAt(0).toUpperCase() + selectedItem.type.slice(1).toLowerCase() : 'Other';
     const materialType = Object.values(MaterialType).includes(normalizedType as MaterialType) ? normalizedType as MaterialType : MaterialType.Other;
-    if (useSingleItem) {
-      setSingleForm((prev: ReceiveForm) => ({ ...prev, item: selectedItem.name, materialType }));
+    console.log('handleItemSelect:', { selectedItem, materialType, index });
+    if (useSingleItem || showSingleItemCloneModal) {
+      setSingleForm((prev: ReceiveForm) => {
+        const updatedForm = { ...prev, item: selectedItem.name, materialType };
+        console.log('Updated singleForm.item:', updatedForm);
+        return updatedForm;
+      });
     } else if (index !== undefined) {
       const updatedItems = [...receiveItems];
       updatedItems[index] = { 
@@ -326,18 +331,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setReceiveItems(updatedItems);
     }
     setActiveItemDropdownIndex(null);
+    setFilteredItems(items);
   };
 
   const handleLocationSelect = (location: Location, index?: number) => {
-    if (useSingleItem) {
-      console.log('Selected location for Single Item:', {
-        locationId: location.locationId,
-        locationName: location.name,
+    console.log('handleLocationSelect:', { location, index });
+    if (useSingleItem || showSingleItemCloneModal) {
+      setSingleForm((prev: ReceiveForm) => {
+        const updatedForm = {
+          ...prev,
+          locationId: location.locationId.toString(),
+        };
+        console.log('Updated singleForm.locationId:', updatedForm);
+        return updatedForm;
       });
-      setSingleForm((prev: ReceiveForm) => ({
-        ...prev,
-        locationId: location.locationId.toString(),
-      }));
       setShowLocationSuggestions(false);
     } else if (index !== undefined) {
       const updatedItems = [...receiveItems];
@@ -629,7 +636,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                   setShowSiteSuggestions(true);
                   if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
                     setSelectedSite('');
-                    setSingleForm((prev) => ({ ...prev, locationId: '' }));
+                    setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
                     setFilteredLocations([]);
                   }
                 }}
@@ -782,25 +789,37 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 type="text"
                 value={singleForm.item}
                 onChange={(e) => {
-                  setSingleForm((prev: ReceiveForm) => ({ ...prev, item: e.target.value }));
-                  setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                  const value = e.target.value;
+                  console.log('Item input change:', { value });
+                  setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value }));
+                  setFilteredItems(items.filter(i => i.name.toLowerCase().includes(value.toLowerCase())));
                   setActiveItemDropdownIndex(0);
                 }}
-                onFocus={() => setActiveItemDropdownIndex(0)}
+                onFocus={() => {
+                  setActiveItemDropdownIndex(0);
+                  setFilteredItems(items);
+                }}
                 onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+                placeholder="Type to search items"
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
               />
               {activeItemDropdownIndex === 0 && (
                 <ul className="typeahead">
-                  {filteredItems.map(item => (
-                    <li
-                      key={item.name}
-                      onMouseDown={() => handleItemSelect(item)}
-                      className={singleForm.item === item.name ? 'selected' : ''}
-                    >
-                      {item.name}
+                  {filteredItems.length > 0 ? (
+                    filteredItems.map(item => (
+                      <li
+                        key={item.name}
+                        onMouseDown={() => handleItemSelect(item)}
+                        className={singleForm.item === item.name ? 'selected' : ''}
+                      >
+                        {item.name}
+                      </li>
+                    ))
+                  ) : (
+                    <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                      No items found
                     </li>
-                  ))}
+                  )}
                   <li
                     onMouseDown={() => setShowNewItemModal(true)}
                     className="add-new"
@@ -1435,25 +1454,37 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                     type="text"
                     value={singleForm.item}
                     onChange={(e) => {
-                      setSingleForm((prev: ReceiveForm) => ({ ...prev, item: e.target.value }));
-                      setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                      const value = e.target.value;
+                      console.log('Item input change:', { value });
+                      setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value }));
+                      setFilteredItems(items.filter(i => i.name.toLowerCase().includes(value.toLowerCase())));
                       setActiveItemDropdownIndex(0);
                     }}
-                    onFocus={() => setActiveItemDropdownIndex(0)}
+                    onFocus={() => {
+                      setActiveItemDropdownIndex(0);
+                      setFilteredItems(items);
+                    }}
                     onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+                    placeholder="Type to search items"
                     style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                   />
                   {activeItemDropdownIndex === 0 && (
                     <ul className="typeahead">
-                      {filteredItems.map(item => (
-                        <li
-                          key={item.name}
-                          onMouseDown={() => handleItemSelect(item)}
-                          className={singleForm.item === item.name ? 'selected' : ''}
-                        >
-                          {item.name}
+                      {filteredItems.length > 0 ? (
+                        filteredItems.map((item) => (
+                          <li
+                            key={item.name}
+                            onMouseDown={() => handleItemSelect(item)}
+                            className={singleForm.item === item.name ? 'selected' : ''}
+                          >
+                            {item.name}
+                          </li>
+                        ))
+                      ) : (
+                        <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                          No items found
                         </li>
-                      ))}
+                      )}
                       <li
                         onMouseDown={() => setShowNewItemModal(true)}
                         className="add-new"
