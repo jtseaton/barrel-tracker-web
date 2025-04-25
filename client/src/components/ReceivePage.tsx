@@ -17,7 +17,6 @@ interface Item {
 }
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
-
 const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, refreshVendors }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,21 +73,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const [otherCharges, setOtherCharges] = useState<{ description: string; cost: string }[]>([]);
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
   const [showMultipleItemsModal, setShowMultipleItemsModal] = useState(false);
-  const [showMultiAddItemModal, setShowMultiAddItemModal] = useState(false);
-  const [multiAddItemForm, setMultiAddItemForm] = useState<ReceiveItem>({
-    identifier: '',
-    item: '',
-    lotNumber: '',
-    materialType: MaterialType.Grain,
-    quantity: '',
-    unit: Unit.Pounds,
-    cost: '',
-    description: '',
-    siteId: selectedSite || 'DSP-AL-20010',
-    locationId: '',
-    account: Account.Storage,
-    proof: '',
-  });
+  const [showSingleItemCloneModal, setShowSingleItemCloneModal] = useState(false);
+
 
   // Updated fetchLocations with enhanced logging to diagnose blank Location dropdowns
   const fetchLocations = useCallback(async (siteId: string): Promise<void> => {
@@ -218,11 +204,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   }, [receiveItems]);
 
   useEffect(() => {
-    if (showMultiAddItemModal) {
-      console.log('Modal opened, setting filteredSites:', sites);
+    if (showSingleItemCloneModal) {
+      console.log('Cloned Single Item Modal opened, setting filteredSites:', sites);
       setFilteredSites(sites);
     }
-  }, [showMultiAddItemModal, sites]);
+  }, [showSingleItemCloneModal, sites]);
 
   useEffect(() => {
     if (activeSiteDropdownIndex !== null && siteInputRefs.current[activeSiteDropdownIndex]) {
@@ -1177,8 +1163,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                 <button
                   onClick={() => {
-                    setShowMultiAddItemModal(true);
-                    setMultiAddItemForm({
+                    setShowSingleItemCloneModal(true);
+                    setSingleForm({
                       identifier: '',
                       item: '',
                       lotNumber: '',
@@ -1191,6 +1177,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                       locationId: '',
                       account: Account.Storage,
                       proof: '',
+                      source: singleForm.source || '',
+                      dspNumber: '',
+                      receivedDate: singleForm.receivedDate,
+                      poNumber: singleForm.poNumber || '',
                     });
                     if (selectedSite || 'DSP-AL-20010') {
                       fetchLocations(selectedSite || 'DSP-AL-20010');
@@ -1247,7 +1237,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             </div>
           </div>
         )}
-        {showMultiAddItemModal && (
+        {showSingleItemCloneModal && (
           <div
             style={{
               position: 'fixed',
@@ -1267,7 +1257,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 backgroundColor: '#fff',
                 padding: '20px',
                 borderRadius: '8px',
-                width: '400px',
+                width: '600px',
                 maxHeight: '80vh',
                 overflowY: 'auto',
                 boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
@@ -1276,104 +1266,23 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
                 Add Item
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-                <div style={{ position: 'relative' }}>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Item (required):
-                  </label>
-                  <input
-                    type="text"
-                    value={multiAddItemForm.item}
-                    ref={(el) => { inputRefs.current[0] = el; }}
-                    onChange={(e) => {
-                      setMultiAddItemForm({ ...multiAddItemForm, item: e.target.value });
-                      setFilteredItems(
-                        items.filter((i) =>
-                          i.name.toLowerCase().includes(e.target.value.toLowerCase())
-                        )
-                      );
-                      setActiveItemDropdownIndex(0);
-                    }}
-                    onFocus={() => {
-                      setActiveItemDropdownIndex(0);
-                      setFilteredItems(items);
-                    }}
-                    onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
-                    placeholder="Type to search items"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '16px',
-                    }}
-                  />
-                  {activeItemDropdownIndex === 0 && itemDropdownPosition && createPortal(
-                    <ul className="typeahead">
-                      {filteredItems.length > 0 ? (
-                        filteredItems.map((item) => (
-                          <li
-                            key={item.name}
-                            onMouseDown={() => {
-                              const normalizedType = item.type
-                                ? item.type.charAt(0).toUpperCase() + item.type.slice(1).toLowerCase()
-                                : 'Other';
-                              const materialType = Object.values(MaterialType).includes(normalizedType as MaterialType)
-                                ? normalizedType as MaterialType
-                                : MaterialType.Other;
-                              setMultiAddItemForm({
-                                ...multiAddItemForm,
-                                item: item.name,
-                                materialType,
-                              });
-                              setActiveItemDropdownIndex(null);
-                            }}
-                            className={multiAddItemForm.item === item.name ? 'selected' : ''}
-                          >
-                            {item.name}
-                          </li>
-                        ))
-                      ) : (
-                        <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                          No items found
-                        </li>
-                      )}
-                      <li
-                        onMouseDown={() => {
-                          setNewItem(multiAddItemForm.item);
-                          setNewItemType(multiAddItemForm.materialType);
-                          setShowNewItemModal(true);
-                          setActiveItemDropdownIndex(null);
-                        }}
-                        className="add-new"
-                      >
-                        Add New Item
-                      </li>
-                    </ul>,
-                    document.getElementById('dropdown-portal') || document.body
-                  )}
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 <div style={{ position: 'relative' }}>
                   <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                     Site (required):
                   </label>
                   <input
                     type="text"
-                    value={
-                      sites.find((s) => s.siteId === multiAddItemForm.siteId)?.name || ''
-                    }
-                    ref={(el) => { siteInputRefs.current[0] = el; }}
+                    value={sites.find((s) => s.siteId === singleForm.siteId)?.name || ''}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setMultiAddItemForm({ ...multiAddItemForm, siteId: '', locationId: '' });
                       setFilteredSites(
-                        sites.filter((s) =>
-                          s.name.toLowerCase().includes(value.toLowerCase())
-                        )
+                        sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
                       );
                       setShowSiteSuggestions(true);
                       if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
                         setSelectedSite('');
+                        setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
                         setFilteredLocations([]);
                       }
                     }}
@@ -1385,35 +1294,26 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                       padding: '10px',
                       border: '1px solid #ddd',
                       borderRadius: '4px',
+                      boxSizing: 'border-box',
                       fontSize: '16px',
                     }}
                   />
-                  {showSiteSuggestions && createPortal(
+                  {showSiteSuggestions && (
                     <ul className="typeahead">
-                      {filteredSites.length > 0 ? (
-                        filteredSites.map((site) => (
-                          <li
-                            key={site.siteId}
-                            onMouseDown={() => {
-                              setSelectedSite(site.siteId);
-                              setMultiAddItemForm({
-                                ...multiAddItemForm,
-                                siteId: site.siteId,
-                                locationId: '',
-                              });
-                              fetchLocations(site.siteId);
-                              setShowSiteSuggestions(false);
-                            }}
-                            className={multiAddItemForm.siteId === site.siteId ? 'selected' : ''}
-                          >
-                            {site.name}
-                          </li>
-                        ))
-                      ) : (
-                        <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                          No sites found
+                      {filteredSites.map((site) => (
+                        <li
+                          key={site.siteId}
+                          onMouseDown={() => {
+                            console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+                            setSelectedSite(site.siteId);
+                            setSingleForm((prev) => ({ ...prev, siteId: site.siteId }));
+                            setShowSiteSuggestions(false);
+                          }}
+                          className={singleForm.siteId === site.siteId ? 'selected' : ''}
+                        >
+                          {site.name}
                         </li>
-                      )}
+                      ))}
                       <li
                         onMouseDown={() => {
                           navigate('/sites', { state: { fromReceive: true } });
@@ -1423,25 +1323,24 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                       >
                         Add New Site
                       </li>
-                    </ul>,
-                    document.getElementById('dropdown-portal') || document.body
+                    </ul>
                   )}
                 </div>
                 <div style={{ position: 'relative' }}>
                   <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Location (required):
+                    Physical Location (required):
                   </label>
                   <input
                     type="text"
                     value={
-                      multiAddItemForm.locationId
-                        ? locations.find((loc) => loc.locationId.toString() === multiAddItemForm.locationId)?.name || ''
+                      singleForm.locationId
+                        ? locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
                         : ''
                     }
-                    ref={(el) => { locationInputRefs.current[0] = el; }}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setMultiAddItemForm({ ...multiAddItemForm, locationId: '' });
+                      console.log('Location input change:', { value, locations, singleFormLocationId: singleForm.locationId });
+                      setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
                       setFilteredLocations(
                         locations.filter((loc) =>
                           loc.name.toLowerCase().includes(value.toLowerCase())
@@ -1450,39 +1349,37 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                       setShowLocationSuggestions(true);
                     }}
                     onFocus={() => {
+                      console.log('Location input focus:', { isFetchingLocations, locations, selectedSite, singleForm });
                       if (!isFetchingLocations && locations.length > 0) {
                         setShowLocationSuggestions(true);
                         setFilteredLocations(locations);
                       }
                     }}
-                    onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 300)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowLocationSuggestions(false);
+                      }, 300);
+                    }}
                     placeholder={isFetchingLocations ? 'Loading locations...' : 'Type to search locations'}
-                    disabled={isFetchingLocations || !multiAddItemForm.siteId}
+                    disabled={isFetchingLocations || !singleForm.siteId}
                     style={{
                       width: '100%',
                       padding: '10px',
                       border: '1px solid #ddd',
                       borderRadius: '4px',
+                      boxSizing: 'border-box',
                       fontSize: '16px',
-                      backgroundColor: isFetchingLocations || !multiAddItemForm.siteId ? '#f5f5f5' : '#fff',
+                      backgroundColor: isFetchingLocations || !singleForm.siteId ? '#f5f5f5' : '#fff',
                     }}
                   />
-                  {showLocationSuggestions && !isFetchingLocations && createPortal(
+                  {showLocationSuggestions && !isFetchingLocations && (
                     <ul className="typeahead">
                       {filteredLocations.length > 0 ? (
                         filteredLocations.map((location) => (
                           <li
                             key={location.locationId}
-                            onMouseDown={() => {
-                              setMultiAddItemForm({
-                                ...multiAddItemForm,
-                                locationId: location.locationId.toString(),
-                              });
-                              setShowLocationSuggestions(false);
-                            }}
-                            className={
-                              multiAddItemForm.locationId === location.locationId.toString() ? 'selected' : ''
-                            }
+                            onMouseDown={() => handleLocationSelect(location)}
+                            className={singleForm.locationId === location.locationId.toString() ? 'selected' : ''}
                           >
                             {location.name}
                           </li>
@@ -1493,330 +1390,354 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                         </li>
                       )}
                       <li
-                        onMouseDown={() => {
-                          navigate('/locations', {
-                            state: { fromReceive: true, siteId: multiAddItemForm.siteId },
-                          });
-                          setShowLocationSuggestions(false);
-                        }}
+                        onMouseDown={() => handleAddNewLocation()}
                         className="add-new"
                       >
                         Add New Location
                       </li>
-                    </ul>,
-                    document.getElementById('dropdown-portal') || document.body
+                    </ul>
+                  )}
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+                  <input
+                    type="text"
+                    value={singleForm.source}
+                    onChange={handleVendorInputChange}
+                    placeholder="Type to search vendors"
+                    onFocus={() => setShowVendorSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                  />
+                  {showVendorSuggestions && (
+                    <ul className="typeahead">
+                      {filteredVendors.map((vendor) => (
+                        <li
+                          key={vendor.name}
+                          onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
+                          className={singleForm.source === vendor.name ? 'selected' : ''}
+                        >
+                          {vendor.name}
+                        </li>
+                      ))}
+                      <li
+                        onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+                        className="add-new"
+                      >
+                        Add New Vendor
+                      </li>
+                    </ul>
+                  )}
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item:</label>
+                  <input
+                    type="text"
+                    value={singleForm.item}
+                    onChange={(e) => {
+                      setSingleForm((prev: ReceiveForm) => ({ ...prev, item: e.target.value }));
+                      setFilteredItems(items.filter(i => i.name.toLowerCase().includes(e.target.value.toLowerCase())));
+                      setActiveItemDropdownIndex(0);
+                    }}
+                    onFocus={() => setActiveItemDropdownIndex(0)}
+                    onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                  />
+                  {activeItemDropdownIndex === 0 && (
+                    <ul className="typeahead">
+                      {filteredItems.map(item => (
+                        <li
+                          key={item.name}
+                          onMouseDown={() => handleItemSelect(item)}
+                          className={singleForm.item === item.name ? 'selected' : ''}
+                        >
+                          {item.name}
+                        </li>
+                      ))}
+                      <li
+                        onMouseDown={() => setShowNewItemModal(true)}
+                        className="add-new"
+                      >
+                        Add New Item
+                      </li>
+                    </ul>
                   )}
                 </div>
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Material Type (required):
-                  </label>
-                  <select
-                    value={multiAddItemForm.materialType}
-                    onChange={(e) =>
-                      setMultiAddItemForm({
-                        ...multiAddItemForm,
-                        materialType: e.target.value as MaterialType,
-                        proof: '',
-                        account: Account.Storage,
-                      })
-                    }
-                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
-                  >
-                    {Object.values(MaterialType).map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Quantity (required):
-                  </label>
-                  <input
-                    type="number"
-                    value={multiAddItemForm.quantity}
-                    onChange={(e) =>
-                      setMultiAddItemForm({ ...multiAddItemForm, quantity: e.target.value })
-                    }
-                    step="0.01"
-                    min="0"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '16px',
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Unit (required):
-                  </label>
-                  <select
-                    value={multiAddItemForm.unit}
-                    onChange={(e) =>
-                      setMultiAddItemForm({
-                        ...multiAddItemForm,
-                        unit: e.target.value as Unit,
-                      })
-                    }
-                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
-                  >
-                    {Object.values(Unit).map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Lot Number:
-                  </label>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Lot Number:</label>
                   <input
                     type="text"
-                    value={multiAddItemForm.lotNumber}
-                    onChange={(e) =>
-                      setMultiAddItemForm({ ...multiAddItemForm, lotNumber: e.target.value })
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '16px',
-                    }}
+                    value={singleForm.lotNumber}
+                    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, lotNumber: e.target.value }))}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                   />
                 </div>
-                {multiAddItemForm.materialType === MaterialType.Spirits && (
-                  <div>
-                    <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                      Account:
-                    </label>
-                    <select
-                      value={multiAddItemForm.account || Account.Storage}
-                      onChange={(e) =>
-                        setMultiAddItemForm({
-                          ...multiAddItemForm,
-                          account: e.target.value as Account,
-                        })
-                      }
-                      style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
-                    >
-                      <option value={Account.Storage}>Storage</option>
-                      <option value={Account.Processing}>Processing</option>
-                      <option value={Account.Production}>Production</option>
-                    </select>
-                  </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Material Type:</label>
+                  <select
+                    value={singleForm.materialType}
+                    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, materialType: e.target.value as MaterialType }))}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                  >
+                    {Object.values(MaterialType).map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
+                  <input
+                    type="number"
+                    value={singleForm.quantity}
+                    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, quantity: e.target.value }))}
+                    step="0.01"
+                    min="0"
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Unit:</label>
+                  <select
+                    value={singleForm.unit}
+                    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, unit: e.target.value as Unit }))}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                  >
+                    {Object.values(Unit).map(unit => (
+                      <option key={unit} value={unit}>{unit}</option>
+                    ))}
+                  </select>
+                </div>
+                {singleForm.materialType === MaterialType.Spirits && (
+                  <>
+                    <div>
+                      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account:</label>
+                      <select
+                        value={singleForm.account}
+                        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, account: e.target.value as Account }))}
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                      >
+                        <option value={Account.Storage}>Storage</option>
+                        <option value={Account.Processing}>Processing</option>
+                        <option value={Account.Production}>Production</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Proof:</label>
+                      <input
+                        type="number"
+                        value={singleForm.proof || ''}
+                        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, proof: e.target.value }))}
+                        step="0.01"
+                        min="0"
+                        max="200"
+                        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                      />
+                    </div>
+                  </>
                 )}
-                {multiAddItemForm.materialType === MaterialType.Spirits && (
-                  <div>
-                    <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                      Proof:
-                    </label>
+                {singleForm.materialType === MaterialType.Other && (
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Description:</label>
                     <input
-                      type="number"
-                      value={multiAddItemForm.proof || ''}
-                      onChange={(e) =>
-                        setMultiAddItemForm({ ...multiAddItemForm, proof: e.target.value })
-                      }
-                      step="0.01"
-                      min="0"
-                      max="200"
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        fontSize: '16px',
-                      }}
+                      type="text"
+                      value={singleForm.description || ''}
+                      onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, description: e.target.value }))}
+                      style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                     />
                   </div>
                 )}
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Cost:
-                  </label>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
                   <input
-                    type="number"
-                    value={multiAddItemForm.cost || ''}
-                    onChange={(e) =>
-                      setMultiAddItemForm({ ...multiAddItemForm, cost: e.target.value })
-                    }
-                    step="0.01"
-                    min="0"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '16px',
-                    }}
+                    type="date"
+                    value={singleForm.receivedDate}
+                    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, receivedDate: e.target.value }))}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                    Description:
-                  </label>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Cost:</label>
                   <input
-                    type="text"
-                    value={multiAddItemForm.description || ''}
-                    onChange={(e) =>
-                      setMultiAddItemForm({
-                        ...multiAddItemForm,
-                        description: e.target.value,
-                      })
-                    }
-                    placeholder={
-                      multiAddItemForm.materialType === MaterialType.Other
-                        ? 'Required for Other'
-                        : 'Optional'
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '16px',
-                    }}
+                    type="number"
+                    value={singleForm.cost || ''}
+                    onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, cost: e.target.value }))}
+                    step="0.01"
+                    min="0"
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
                   />
                 </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-                <button
-                  onClick={() => {
-                    if (!multiAddItemForm.item) {
-                      setProductionError('Item is required');
-                      return;
-                    }
-                    if (!multiAddItemForm.siteId) {
-                      setProductionError('Site is required');
-                      return;
-                    }
-                    if (!multiAddItemForm.locationId) {
-                      setProductionError('Location is required');
-                      return;
-                    }
-                    if (
-                      multiAddItemForm.materialType === MaterialType.Spirits &&
-                      (!multiAddItemForm.lotNumber || !multiAddItemForm.proof)
-                    ) {
-                      setProductionError('Spirits require Lot Number and Proof');
-                      return;
-                    }
-                    if (
-                      multiAddItemForm.materialType === MaterialType.Other &&
-                      !multiAddItemForm.description
-                    ) {
-                      setProductionError('Other items require a Description');
-                      return;
-                    }
-                    if (
-                      !multiAddItemForm.quantity ||
-                      isNaN(parseFloat(multiAddItemForm.quantity)) ||
-                      parseFloat(multiAddItemForm.quantity) <= 0
-                    ) {
-                      setProductionError('Valid Quantity is required');
-                      return;
-                    }
-                    if (
-                      multiAddItemForm.proof &&
-                      (isNaN(parseFloat(multiAddItemForm.proof)) ||
-                        parseFloat(multiAddItemForm.proof) > 200 ||
-                        parseFloat(multiAddItemForm.proof) < 0)
-                    ) {
-                      setProductionError('Proof must be between 0 and 200');
-                      return;
-                    }
-                    if (
-                      multiAddItemForm.cost &&
-                      (isNaN(parseFloat(multiAddItemForm.cost)) ||
-                        parseFloat(multiAddItemForm.cost) < 0)
-                    ) {
-                      setProductionError('Cost must be non-negative');
-                      return;
-                    }
-                    const newItem = {
-                      ...multiAddItemForm,
-                      poNumber: singleForm.poNumber || undefined,
-                    };
-                    setReceiveItems((prev) => {
-                      const updatedItems = [...prev, newItem];
-                      console.log('Added item to receiveItems:', newItem);
-                      return updatedItems;
-                    });
-                    setMultiAddItemForm({
-                      identifier: '',
-                      item: '',
-                      lotNumber: '',
-                      materialType: MaterialType.Grain,
-                      quantity: '',
-                      unit: Unit.Pounds,
-                      cost: '',
-                      description: '',
-                      siteId: selectedSite || 'DSP-AL-20010',
-                      locationId: '',
-                      account: Account.Storage,
-                      proof: '',
-                    });
-                    setShowMultiAddItemModal(false);
-                    setProductionError(null);
-                    setActiveItemDropdownIndex(null);
-                    setShowSiteSuggestions(false);
-                    setShowLocationSuggestions(false);
-                  }}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-                >
-                  Add to List
-                </button>
-                <button
-                  onClick={() => {
-                    setShowMultiAddItemModal(false);
-                    setMultiAddItemForm({
-                      identifier: '',
-                      item: '',
-                      lotNumber: '',
-                      materialType: MaterialType.Grain,
-                      quantity: '',
-                      unit: Unit.Pounds,
-                      cost: '',
-                      description: '',
-                      siteId: selectedSite || 'DSP-AL-20010',
-                      locationId: '',
-                      account: Account.Storage,
-                      proof: '',
-                    });
-                    setActiveItemDropdownIndex(null);
-                    setShowSiteSuggestions(false);
-                    setShowLocationSuggestions(false);
-                  }}
-                  style={{
-                    backgroundColor: '#F86752',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                >
-                  Cancel
-                </button>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
+                  <select
+                    value={singleForm.poNumber || ''}
+                    onChange={(e) => {
+                      const poNumber = e.target.value;
+                      setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+                      if (poNumber) handlePOSelect(poNumber);
+                    }}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                  >
+                    <option value="">Select PO (optional)</option>
+                    {purchaseOrders.map(po => (
+                      <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ gridColumn: 'span 2', textAlign: 'center', display: 'flex', justifyContent: 'space-between' }}>
+                  <button
+                    onClick={() => {
+                      if (!singleForm.item) {
+                        setProductionError('Item is required');
+                        return;
+                      }
+                      if (!singleForm.siteId) {
+                        setProductionError('Site is required');
+                        return;
+                      }
+                      if (!singleForm.locationId) {
+                        setProductionError('Location is required');
+                        return;
+                      }
+                      if (
+                        singleForm.materialType === MaterialType.Spirits &&
+                        (!singleForm.lotNumber || !singleForm.proof)
+                      ) {
+                        setProductionError('Spirits require Lot Number and Proof');
+                        return;
+                      }
+                      if (
+                        singleForm.materialType === MaterialType.Other &&
+                        !singleForm.description
+                      ) {
+                        setProductionError('Other items require a Description');
+                        return;
+                      }
+                      if (
+                        !singleForm.quantity ||
+                        isNaN(parseFloat(singleForm.quantity)) ||
+                        parseFloat(singleForm.quantity) <= 0
+                      ) {
+                        setProductionError('Valid Quantity is required');
+                        return;
+                      }
+                      if (
+                        singleForm.proof &&
+                        (isNaN(parseFloat(singleForm.proof)) ||
+                          parseFloat(singleForm.proof) > 200 ||
+                          parseFloat(singleForm.proof) < 0)
+                      ) {
+                        setProductionError('Proof must be between 0 and 200');
+                        return;
+                      }
+                      if (
+                        singleForm.cost &&
+                        (isNaN(parseFloat(singleForm.cost)) ||
+                          parseFloat(singleForm.cost) < 0)
+                      ) {
+                        setProductionError('Cost must be non-negative');
+                        return;
+                      }
+                      const newItem: ReceiveItem = {
+                        identifier: singleForm.identifier || 'UNKNOWN_ITEM',
+                        item: singleForm.item,
+                        lotNumber: singleForm.lotNumber || '',
+                        materialType: singleForm.materialType,
+                        quantity: singleForm.quantity,
+                        unit: singleForm.unit,
+                        cost: singleForm.cost || '0',
+                        description: singleForm.description || '',
+                        siteId: singleForm.siteId,
+                        locationId: singleForm.locationId,
+                        account: singleForm.account || Account.Storage,
+                        proof: singleForm.proof || '',
+                      };
+                      setReceiveItems((prev) => {
+                        const updatedItems = [...prev, newItem];
+                        console.log('Added item to receiveItems:', newItem);
+                        return updatedItems;
+                      });
+                      setSingleForm({
+                        identifier: '',
+                        item: '',
+                        lotNumber: '',
+                        materialType: MaterialType.Grain,
+                        quantity: '',
+                        unit: Unit.Pounds,
+                        cost: '',
+                        description: '',
+                        siteId: selectedSite || 'DSP-AL-20010',
+                        locationId: '',
+                        account: Account.Storage,
+                        proof: '',
+                        source: singleForm.source || '',
+                        dspNumber: '',
+                        receivedDate: singleForm.receivedDate,
+                        poNumber: singleForm.poNumber || '',
+                      });
+                      setShowSingleItemCloneModal(false);
+                      setProductionError(null);
+                      setShowSiteSuggestions(false);
+                      setShowLocationSuggestions(false);
+                      setActiveItemDropdownIndex(null);
+                    }}
+                    style={{
+                      backgroundColor: '#2196F3',
+                      color: '#fff',
+                      padding: '12px 24px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      width: '45%',
+                      transition: 'background-color 0.3s',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSingleItemCloneModal(false);
+                      setSingleForm({
+                        identifier: '',
+                        item: '',
+                        lotNumber: '',
+                        materialType: MaterialType.Grain,
+                        quantity: '',
+                        unit: Unit.Pounds,
+                        cost: '',
+                        description: '',
+                        siteId: selectedSite || 'DSP-AL-20010',
+                        locationId: '',
+                        account: Account.Storage,
+                        proof: '',
+                        source: singleForm.source || '',
+                        dspNumber: '',
+                        receivedDate: singleForm.receivedDate,
+                        poNumber: singleForm.poNumber || '',
+                      });
+                      setShowSiteSuggestions(false);
+                      setShowLocationSuggestions(false);
+                      setActiveItemDropdownIndex(null);
+                    }}
+                    style={{
+                      backgroundColor: '#F86752',
+                      color: '#fff',
+                      padding: '12px 24px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      width: '45%',
+                      transition: 'background-color 0.3s',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>
