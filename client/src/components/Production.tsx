@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Batch, Product, Recipe, Site } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
@@ -36,6 +37,8 @@ const Production: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [showBatchActionsModal, setShowBatchActionsModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -91,7 +94,7 @@ const Production: React.FC = () => {
         throw new Error(`Invalid response for recipes: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      console.log('Fetched recipes for productId', productId, ':', data); // Debug log
+      console.log('Fetched recipes for productId', productId, ':', data);
       setRecipes(data);
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
@@ -105,7 +108,6 @@ const Production: React.FC = () => {
       setError('All fields are required');
       return;
     }
-    // Validate productId and recipeId
     const product = products.find(p => p.id === newBatch.productId);
     if (!product) {
       setError('Invalid product selected');
@@ -116,7 +118,7 @@ const Production: React.FC = () => {
       setError('Invalid recipe selected');
       return;
     }
-    console.log('Selected recipe ingredients for recipeId', newBatch.recipeId, ':', recipe.ingredients); // Debug log
+    console.log('Selected recipe ingredients for recipeId', newBatch.recipeId, ':', recipe.ingredients);
 
     const batchData = {
       batchId: newBatch.batchId,
@@ -126,7 +128,7 @@ const Production: React.FC = () => {
       status: 'In Progress',
       date: new Date().toISOString().split('T')[0],
     };
-    console.log('Sending batch data to /api/batches:', batchData); // Debug log
+    console.log('Sending batch data to /api/batches:', batchData);
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
         method: 'POST',
@@ -139,7 +141,7 @@ const Production: React.FC = () => {
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
-          console.log('Server error response:', errorMessage); // Debug log
+          console.log('Server error response:', errorMessage);
           if (errorMessage.includes('Insufficient inventory')) {
             setErrorMessage(errorMessage);
             setShowErrorPopup(true);
@@ -157,8 +159,8 @@ const Production: React.FC = () => {
         throw new Error(`Invalid response for batch: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
       }
       const addedBatch = await res.json();
-      console.log('Batch created:', addedBatch); // Debug log
-      setBatches([...batches, addedBatch]);
+      console.log('Batch created:', addedBatch);
+      setBatches([...batches, { ...addedBatch, productName: product.name, siteName: sites.find(s => s.siteId === batchData.siteId)?.name }]);
       setShowAddBatchModal(false);
       setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
       setRecipes([]);
@@ -224,6 +226,76 @@ const Production: React.FC = () => {
     setNewRecipe({ ...newRecipe, ingredients: updatedIngredients });
   };
 
+  const handleBatchSelection = (batchId: string) => {
+    setSelectedBatchIds((prev) =>
+      prev.includes(batchId)
+        ? prev.filter((id) => id !== batchId)
+        : [...prev, batchId]
+    );
+  };
+
+  const handleOpenBatchActions = () => {
+    if (selectedBatchIds.length > 0) {
+      setShowBatchActionsModal(true);
+    }
+  };
+
+  const handleCompleteBatches = async () => {
+    try {
+      const promises = selectedBatchIds.map((batchId) =>
+        fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ status: 'Completed' }),
+        }).then((res) => {
+          if (!res.ok) {
+            throw new Error(`Failed to complete batch ${batchId}: HTTP ${res.status}`);
+          }
+          return res.json();
+        })
+      );
+      await Promise.all(promises);
+      setBatches((prev) =>
+        prev.map((batch) =>
+          selectedBatchIds.includes(batch.batchId)
+            ? { ...batch, status: 'Completed' }
+            : batch
+        )
+      );
+      setSelectedBatchIds([]);
+      setShowBatchActionsModal(false);
+      setError(null);
+    } catch (err: any) {
+      console.error('Complete batches error:', err);
+      setError('Failed to complete batches: ' + err.message);
+    }
+  };
+
+  const handleDeleteBatches = async () => {
+    try {
+      const promises = selectedBatchIds.map((batchId) =>
+        fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+          method: 'DELETE',
+          headers: { Accept: 'application/json' },
+        }).then((res) => {
+          if (!res.ok) {
+            throw new Error(`Failed to delete batch ${batchId}: HTTP ${res.status}`);
+          }
+        })
+      );
+      await Promise.all(promises);
+      setBatches((prev) =>
+        prev.filter((batch) => !selectedBatchIds.includes(batch.batchId))
+      );
+      setSelectedBatchIds([]);
+      setShowBatchActionsModal(false);
+      setError(null);
+    } catch (err: any) {
+      console.error('Delete batches error:', err);
+      setError('Failed to delete batches: ' + err.message);
+    }
+  };
+
   const filteredBatches = batches.filter(batch =>
     batch.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (batch.productName && batch.productName.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -236,6 +308,20 @@ const Production: React.FC = () => {
       <div className="inventory-actions">
         <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
         <button onClick={() => setShowAddRecipeModal(true)}>Add Recipe</button>
+        <button
+          onClick={handleOpenBatchActions}
+          disabled={selectedBatchIds.length === 0}
+          style={{
+            backgroundColor: selectedBatchIds.length > 0 ? '#2196F3' : '#ccc',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: selectedBatchIds.length > 0 ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Batch Actions
+        </button>
       </div>
       <div style={{ marginBottom: '20px' }}>
         <input
@@ -260,6 +346,19 @@ const Production: React.FC = () => {
         <table className="inventory-table">
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={selectedBatchIds.length === filteredBatches.length && filteredBatches.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedBatchIds(filteredBatches.map((batch) => batch.batchId));
+                    } else {
+                      setSelectedBatchIds([]);
+                    }
+                  }}
+                />
+              </th>
               <th>Batch #</th>
               <th>Product</th>
               <th>Status</th>
@@ -271,7 +370,14 @@ const Production: React.FC = () => {
             {filteredBatches.length > 0 ? (
               filteredBatches.map((batch) => (
                 <tr key={batch.batchId}>
-                  <td>{batch.batchId}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedBatchIds.includes(batch.batchId)}
+                      onChange={() => handleBatchSelection(batch.batchId)}
+                    />
+                  </td>
+                  <td><Link to={`/production/${batch.batchId}`}>{batch.batchId}</Link></td>
                   <td>{batch.productName || 'Unknown'}</td>
                   <td>{batch.status}</td>
                   <td>{batch.date}</td>
@@ -280,7 +386,7 @@ const Production: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
                   No batches found
                 </td>
               </tr>
@@ -547,7 +653,6 @@ const Production: React.FC = () => {
               Create New Recipe
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-              {/* Recipe Name */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Recipe Name (required):
@@ -570,7 +675,6 @@ const Production: React.FC = () => {
                   }}
                 />
               </div>
-              {/* Product */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Product (required):
@@ -596,7 +700,6 @@ const Production: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* Ingredients */}
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Ingredients (required):
@@ -729,6 +832,91 @@ const Production: React.FC = () => {
                 }}
                 onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
                 onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBatchActionsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '300px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+            }}
+          >
+            <h3 style={{ color: '#555', marginBottom: '20px' }}>Batch Actions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={handleCompleteBatches}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+              >
+                Complete Selected
+              </button>
+              <button
+                onClick={handleDeleteBatches}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+              >
+                Delete Selected
+              </button>
+              <button
+                onClick={() => {
+                  setShowBatchActionsModal(false);
+                  setError(null);
+                }}
+                style={{
+                  backgroundColor: '#ccc',
+                  color: '#555',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#bbb')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ccc')}
               >
                 Cancel
               </button>

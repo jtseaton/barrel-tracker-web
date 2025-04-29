@@ -586,6 +586,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               padding: '10px 20px',
               border: 'none',
               borderRadius: '4px',
+              //Test
               cursor: 'pointer',
               fontSize: '16px',
               transition: 'background-color 0.3s',
@@ -1057,6 +1058,43 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </select>
               </div>
               <div style={{ marginBottom: '20px' }}>
+              <button
+                  onClick={() => {
+                    setShowSingleItemCloneModal(true);
+                    setSingleForm({
+                      identifier: '',
+                      item: '',
+                      lotNumber: '',
+                      materialType: MaterialType.Grain,
+                      quantity: '',
+                      unit: Unit.Pounds,
+                      cost: '',
+                      description: '',
+                      siteId: selectedSite || 'DSP-AL-20010',
+                      locationId: '',
+                      account: Account.Storage,
+                      proof: '',
+                      source: singleForm.source || '',
+                      dspNumber: '',
+                      receivedDate: singleForm.receivedDate,
+                      poNumber: singleForm.poNumber || '',
+                    });
+                    if (selectedSite || 'DSP-AL-20010') {
+                      fetchLocations(selectedSite || 'DSP-AL-20010');
+                    }
+                  }}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                  }}
+                >
+                  Add Item
+                </button>
                 <h4 style={{ color: '#555', marginBottom: '10px' }}>Items</h4>
                 {receiveItems.length === 0 ? (
                   <p style={{ color: '#888', textAlign: 'center' }}>No items added yet</p>
@@ -1180,43 +1218,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
                 </button>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <button
-                  onClick={() => {
-                    setShowSingleItemCloneModal(true);
-                    setSingleForm({
-                      identifier: '',
-                      item: '',
-                      lotNumber: '',
-                      materialType: MaterialType.Grain,
-                      quantity: '',
-                      unit: Unit.Pounds,
-                      cost: '',
-                      description: '',
-                      siteId: selectedSite || 'DSP-AL-20010',
-                      locationId: '',
-                      account: Account.Storage,
-                      proof: '',
-                      source: singleForm.source || '',
-                      dspNumber: '',
-                      receivedDate: singleForm.receivedDate,
-                      poNumber: singleForm.poNumber || '',
-                    });
-                    if (selectedSite || 'DSP-AL-20010') {
-                      fetchLocations(selectedSite || 'DSP-AL-20010');
-                    }
-                  }}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                  }}
-                >
-                  Add Item
-                </button>
                 <button
                   onClick={() => handleReceive(receiveItems)}
                   disabled={receiveItems.length === 0}
