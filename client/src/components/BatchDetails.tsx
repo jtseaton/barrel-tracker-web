@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Batch, Product, Recipe, Site } from '../types/interfaces';
+import { Batch, Product, Site } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -21,7 +21,6 @@ const BatchDetails: React.FC = () => {
   const navigate = useNavigate();
   const [batch, setBatch] = useState<Batch | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
   const [actions, setActions] = useState<BatchAction[]>([]);
@@ -37,7 +36,6 @@ const BatchDetails: React.FC = () => {
         const endpoints = [
           { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
           { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
-          { url: `${API_BASE_URL}/api/recipes`, setter: setRecipes, name: 'recipes' },
           { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
           { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
           { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
@@ -216,7 +214,6 @@ const BatchDetails: React.FC = () => {
   if (!batch) return <div>Loading...</div>;
 
   const product = products.find(p => p.id === batch.productId);
-  const recipe = recipes.find(r => r.id === batch.recipeId);
   const site = sites.find(s => s.siteId === batch.siteId);
 
   return (
@@ -224,9 +221,9 @@ const BatchDetails: React.FC = () => {
       <h2>Batch Details: {batch.batchId}</h2>
       {error && <div className="error">{error}</div>}
       {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
-      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+      <div style={{ backgroundColor: '#fff', color: '#555', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
         <p><strong>Product:</strong> {product?.name || 'Unknown'}</p>
-        <p><strong>Recipe:</strong> {recipe?.name || 'Unknown'}</p>
+        <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
         <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
         <p><strong>Status:</strong> {batch.status}</p>
         <p><strong>Date:</strong> {batch.date}</p>
