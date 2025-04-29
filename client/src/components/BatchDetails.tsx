@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site } from '../types/interfaces';
+import '../App.css'; // New CSS file
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -221,7 +222,7 @@ const BatchDetails: React.FC = () => {
       <h2>Batch Details: {batch.batchId}</h2>
       {error && <div className="error">{error}</div>}
       {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
-      <div style={{ backgroundColor: '#fff', color: '#555', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+      <div className="batch-details">
         <p><strong>Product:</strong> {product?.name || 'Unknown'}</p>
         <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
         <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
