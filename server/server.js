@@ -710,17 +710,17 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
       }
       const itemType = item.type;
       const normalizedUnit = unit.toLowerCase() === 'pounds' ? 'lbs' : unit.toLowerCase();
-      console.log(`Checking inventory for itemName: ${itemName}, type: ${itemType}, unit: ${normalizedUnit}, siteId: ${siteId}`);
+      console.log(`Checking inventory: itemName=${itemName}, type=${itemType}, unit=${normalizedUnit}, siteId=${siteId}`);
       db.get(
-        'SELECT SUM(quantity) as total FROM inventory WHERE type = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
-        [itemType, normalizedUnit, unit, siteId],
+        'SELECT SUM(CAST(quantity AS REAL)) as total FROM inventory WHERE type = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+        [itemType, normalizedUnit, 'pounds', siteId],
         (err, row) => {
           if (err) {
             console.error('Inventory check error:', err);
             return res.status(500).json({ error: err.message });
           }
           const available = row && row.total ? parseFloat(row.total) : 0;
-          console.log(`Inventory found: ${available}${normalizedUnit} for ${itemName} at site ${siteId}`);
+          console.log(`Inventory result: ${available}${normalizedUnit} available for ${itemName} at site ${siteId}`);
           if (available < quantity) {
             return res.status(400).json({ error: `Insufficient inventory for ${itemName}: ${available}${normalizedUnit} available, ${quantity}${normalizedUnit} needed` });
           }
@@ -740,8 +740,8 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
                   return res.status(500).json({ error: err.message });
                 }
                 db.run(
-                  'UPDATE inventory SET quantity = quantity - ? WHERE type = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
-                  [quantity, itemType, normalizedUnit, unit, siteId],
+                  'UPDATE inventory SET quantity = quantity - ? WHERE type = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+                  [quantity, itemType, normalizedUnit, 'pounds', siteId],
                   (err) => {
                     if (err) {
                       console.error('Update inventory error:', err);
@@ -809,7 +809,7 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
         return res.status(400).json({ error: `Item not found: ${itemName}` });
       }
       const itemType = item.type;
-      console.log(`Restoring inventory for itemName: ${itemName}, type: ${itemType}, unit: ${normalizedUnit}, siteId: ${batch.siteId}`);
+      console.log(`Restoring inventory: itemName=${itemName}, type=${itemType}, unit=${normalizedUnit}, siteId=${batch.siteId}`);
       db.run(
         'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
         [JSON.stringify(additionalIngredients), batchId],
@@ -819,8 +819,8 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           db.run(
-            'UPDATE inventory SET quantity = quantity + ? WHERE type = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
-            [quantity, itemType, normalizedUnit, unit, batch.siteId],
+            'UPDATE inventory SET quantity = quantity + ? WHERE type = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+            [quantity, itemType, normalizedUnit, 'pounds', batch.siteId],
             (err) => {
               if (err) {
                 console.error('Update inventory error:', err);
