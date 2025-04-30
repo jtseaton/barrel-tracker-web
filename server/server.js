@@ -712,13 +712,17 @@ app.get('/api/batches/:batchId', (req, res) => {
         (override) => override.itemName === ing.itemName && 
                       (override.unit || 'lbs').toLowerCase() === (ing.unit || 'lbs').toLowerCase() && 
                       override.excluded === true &&
-                      override.quantity === ing.quantity
+                      (override.quantity === ing.quantity || override.quantity === undefined)
       )
+    );
+    // Filter valid additional ingredients
+    const filteredAdditionalIngredients = additionalIngredients.filter(
+      ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)
     );
     // Combine active ingredients
     const combinedIngredients = [
       ...activeRecipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
-      ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: false }))
+      ...filteredAdditionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
     ];
     const batch = {
       ...row,
@@ -728,6 +732,7 @@ app.get('/api/batches/:batchId', (req, res) => {
     console.log(`GET /api/batches/${batchId}, recipeIngredients:`, recipeIngredients);
     console.log(`GET /api/batches/${batchId}, additionalIngredients:`, additionalIngredients);
     console.log(`GET /api/batches/${batchId}, activeRecipeIngredients:`, activeRecipeIngredients);
+    console.log(`GET /api/batches/${batchId}, filteredAdditionalIngredients:`, filteredAdditionalIngredients);
     console.log(`GET /api/batches/${batchId}, combinedIngredients:`, combinedIngredients);
     console.log(`GET /api/batches/${batchId}, returning:`, batch);
     res.json(batch);
@@ -881,11 +886,10 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
         return res.status(500).json({ error: err.message });
       }
       if (!item) {
-        console.error(`Item not found in items table: ${itemName}`);
         return res.status(400).json({ error: `Item not found: ${itemName}` });
       }
       const normalizedUnit = unit.toLowerCase() === 'pounds' ? 'lbs' : unit.toLowerCase();
-      console.log(`Checking inventory: identifier=${itemName}, unit=${normalizedUnit}, siteId=${siteId}`);
+      console.log(`Checking inventory: itemName=${itemName}, unit=${normalizedUnit}, siteId=${siteId}`);
       db.get(
         'SELECT SUM(CAST(quantity AS REAL)) as total FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
         [itemName, normalizedUnit, 'pounds', siteId],
@@ -905,7 +909,13 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
               return res.status(500).json({ error: err.message });
             }
             let additionalIngredients = batchRow.additionalIngredients ? JSON.parse(batchRow.additionalIngredients) : [];
+            console.log(`Current additionalIngredients before adding:`, additionalIngredients);
+            // Clean up stale overrides (e.g., zero-quantity or invalid entries)
+            additionalIngredients = additionalIngredients.filter(
+              ing => !ing.excluded || (ing.excluded && ing.itemName !== itemName) || (ing.quantity && ing.quantity > 0)
+            );
             additionalIngredients.push({ itemName, quantity, unit: normalizedUnit });
+            console.log(`New additionalIngredients after adding:`, additionalIngredients);
             db.run(
               'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
               [JSON.stringify(additionalIngredients), batchId],
@@ -938,12 +948,21 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
                       }
                       const recipeIngredients = JSON.parse(updatedBatch.ingredients || '[]');
                       const additionalIngredients = JSON.parse(updatedBatch.additionalIngredients || '[]');
+                      const activeRecipeIngredients = recipeIngredients.filter(
+                        (ing) => !additionalIngredients.some(
+                          (override) => override.itemName === ing.itemName && 
+                                        (override.unit || 'lbs').toLowerCase() === (ing.unit || 'lbs').toLowerCase() && 
+                                        override.excluded === true &&
+                                        (override.quantity === ing.quantity || override.quantity === undefined)
+                        )
+                      );
                       updatedBatch.ingredients = [
-                        ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
-                        ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+                        ...activeRecipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+                        ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: false }))
                       ];
                       updatedBatch.additionalIngredients = additionalIngredients;
                       console.log(`POST /api/batches/${batchId}/ingredients, added:`, { itemName, quantity, unit: normalizedUnit });
+                      console.log(`Returning updated batch:`, updatedBatch);
                       res.json(updatedBatch);
                     });
                   }
