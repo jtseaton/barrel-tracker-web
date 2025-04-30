@@ -31,6 +31,7 @@ const BatchDetails: React.FC = () => {
   const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set()); // Track pending deletions
 
   useEffect(() => {
     const fetchData = async () => {
@@ -179,7 +180,7 @@ const BatchDetails: React.FC = () => {
         throw new Error(`Failed to add ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      setBatch({ ...updatedBatch }); // Deep copy to ensure state update
+      setBatch({ ...updatedBatch });
       setNewIngredient({ itemName: '', quantity: 0, unit: 'lbs' });
       setError(null);
       setSuccessMessage('Ingredient added successfully');
@@ -191,8 +192,19 @@ const BatchDetails: React.FC = () => {
   };
 
   const handleRemoveIngredient = async (ingredient: Ingredient) => {
-    if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit || 'lbs'} of ${ingredient.itemName}?`)) return;
+    const deletionKey = `${ingredient.itemName}-${ingredient.quantity}-${ingredient.unit || 'lbs'}`;
+    if (pendingDeletions.has(deletionKey)) return; // Prevent re-deletion
+    setPendingDeletions(prev => new Set(prev).add(deletionKey));
+    console.log('Attempting to delete ingredient:', ingredient);
     try {
+      if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit || 'lbs'} of ${ingredient.itemName}?`)) {
+        setPendingDeletions(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(deletionKey);
+          return newSet;
+        });
+        return;
+      }
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -203,26 +215,32 @@ const BatchDetails: React.FC = () => {
         throw new Error(`Failed to remove ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      console.log('Delete response:', updatedBatch); // Debug log
-      setBatch({ ...updatedBatch }); // Deep copy to ensure state update
+      console.log('Delete response:', updatedBatch);
+      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] }); // Deep copy to force re-render
       setError(null);
       setSuccessMessage('Ingredient removed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: any) {
-      console.error('Remove ingredient error:', err);
-      setError('Failed to remove ingredient: ' + err.message);
-      // Fallback: Refetch batch to ensure UI consistency
+      // Refetch batch to ensure consistency
       try {
-        const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        const refetchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           headers: { Accept: 'application/json' },
         });
-        if (res.ok) {
-          const refetchedBatch = await res.json();
-          setBatch({ ...refetchedBatch });
+        if (refetchRes.ok) {
+          const refetchedBatch = await refetchRes.json();
+          setBatch({ ...refetchedBatch, ingredients: [...refetchedBatch.ingredients] });
         }
       } catch (refetchErr: any) {
         console.error('Refetch batch error:', refetchErr);
       }
+    } catch (err: any) {
+      console.error('Remove ingredient error:', err);
+      setError('Failed to remove ingredient: ' + err.message);
+    } finally {
+      setPendingDeletions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(deletionKey);
+        return newSet;
+      });
     }
   };
 
@@ -258,29 +276,34 @@ const BatchDetails: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {batch.ingredients.map((ing: Ingredient, index: number) => (
-                <tr key={index}>
-                  <td>{ing.itemName}</td>
-                  <td>{ing.quantity}</td>
-                  <td>{ing.unit || 'lbs'}</td>
-                  <td>{ing.isRecipe ? 'Recipe' : 'Added'}</td>
-                  <td>
-                    <button
-                      onClick={() => handleRemoveIngredient(ing)}
-                      style={{
-                        backgroundColor: '#F86752',
-                        color: '#fff',
-                        padding: '8px 12px',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {batch.ingredients.map((ing: Ingredient, index: number) => {
+                const deletionKey = `${ing.itemName}-${ing.quantity}-${ing.unit || 'lbs'}`;
+                return (
+                  <tr key={index}>
+                    <td>{ing.itemName}</td>
+                    <td>{ing.quantity}</td>
+                    <td>{ing.unit || 'lbs'}</td>
+                    <td>{ing.isRecipe ? 'Recipe' : 'Added'}</td>
+                    <td>
+                      <button
+                        onClick={() => handleRemoveIngredient(ing)}
+                        disabled={pendingDeletions.has(deletionKey)}
+                        style={{
+                          backgroundColor: '#F86752',
+                          color: '#fff',
+                          padding: '8px 12px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: pendingDeletions.has(deletionKey) ? 'not-allowed' : 'pointer',
+                          opacity: pendingDeletions.has(deletionKey) ? 0.6 : 1,
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ) : (
