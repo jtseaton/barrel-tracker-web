@@ -180,7 +180,8 @@ const BatchDetails: React.FC = () => {
         throw new Error(`Failed to add ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      setBatch({ ...updatedBatch });
+      console.log('Add ingredient response:', updatedBatch);
+      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
       setNewIngredient({ itemName: '', quantity: 0, unit: 'lbs' });
       setError(null);
       setSuccessMessage('Ingredient added successfully');
@@ -233,6 +234,58 @@ const BatchDetails: React.FC = () => {
         newSet.delete(deletionKey);
         return newSet;
       });
+    }
+  };
+
+  const handlePrintBatchSheet = async () => {
+    try {
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to fetch batch details');
+      }
+      const batchData = await batchRes.json();
+      const brewLogRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/brewlog`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!brewLogRes.ok) {
+        throw new Error('Failed to fetch brew log');
+      }
+      const brewLog = await brewLogRes.json();
+      const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
+      const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
+      const content = `
+Batch Details
+=============
+Batch ID: ${batchData.batchId}
+Product: ${product}
+Recipe: ${batchData.recipeName || 'Unknown'}
+Site: ${site}
+Status: ${batchData.status}
+Date: ${batchData.date}
+Ingredients:
+${batchData.ingredients.map((ing: Ingredient) => `- ${ing.itemName}: ${ing.quantity} ${ing.unit || 'lbs'} (${ing.isRecipe ? 'Recipe' : 'Added'})`).join('\n') || 'None'}
+
+Brew Day Log
+============
+${brewLog.date ? `
+Date: ${brewLog.date}
+Notes: ${brewLog.notes}
+Temperature: ${brewLog.temperature || 'N/A'} °C
+Gravity: ${brewLog.gravity || 'N/A'}
+` : 'No brew log available'}
+      `.trim();
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `batch_${batchId}_sheet.txt`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Print batch sheet error:', err);
+      setError('Failed to generate batch sheet: ' + err.message);
     }
   };
 
@@ -427,8 +480,22 @@ const BatchDetails: React.FC = () => {
         </button>
         <button
           onClick={handleDeleteBatch}
+          disabled={batch.status === 'Completed'}
           style={{
-            backgroundColor: '#F86752',
+            backgroundColor: batch.status === 'Completed' ? '#ccc' : '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: batch.status === 'Completed' ? 'not-allowed' : 'pointer',
+          }}
+        >
+          Delete Batch
+        </button>
+        <button
+          onClick={() => navigate(`/production/${batchId}/brewlog`)}
+          style={{
+            backgroundColor: '#2196F3',
             color: '#fff',
             padding: '10px 20px',
             border: 'none',
@@ -436,7 +503,20 @@ const BatchDetails: React.FC = () => {
             cursor: 'pointer',
           }}
         >
-          Delete Batch
+          Add Brew Day Log
+        </button>
+        <button
+          onClick={handlePrintBatchSheet}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Print Batch Sheet
         </button>
       </div>
     </div>
