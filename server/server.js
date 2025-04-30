@@ -706,16 +706,26 @@ app.get('/api/batches/:batchId', (req, res) => {
     }
     const recipeIngredients = JSON.parse(row.ingredients || '[]');
     const additionalIngredients = JSON.parse(row.additionalIngredients || '[]');
-    // Combine recipe and additional ingredients
+    // Filter out excluded recipe ingredients
+    const activeRecipeIngredients = recipeIngredients.filter(
+      (ing) => !additionalIngredients.some(
+        (override) => override.itemName === ing.itemName && 
+                      (override.unit || 'lbs').toLowerCase() === (ing.unit || 'lbs').toLowerCase() && 
+                      override.excluded === true
+      )
+    );
+    // Combine active ingredients
     const combinedIngredients = [
-      ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })), // Mark recipe ingredients
-      ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+      ...activeRecipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+      ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: false }))
     ];
     const batch = {
       ...row,
       ingredients: combinedIngredients,
-      additionalIngredients: additionalIngredients // Keep for backward compatibility
+      additionalIngredients
     };
+    console.log(`GET /api/batches/${batchId}, recipeIngredients:`, recipeIngredients);
+    console.log(`GET /api/batches/${batchId}, additionalIngredients:`, additionalIngredients);
     console.log(`GET /api/batches/${batchId}, returning:`, batch);
     res.json(batch);
   });
