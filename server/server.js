@@ -826,7 +826,12 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
   if (!itemName || !quantity || quantity <= 0 || !unit) {
     return res.status(400).json({ error: 'Valid itemName, quantity, and unit required' });
   }
-  db.get('SELECT siteId, additionalIngredients FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+  db.get(`
+    SELECT b.siteId, b.additionalIngredients, r.ingredients AS recipeIngredients
+    FROM batches b
+    JOIN recipes r ON b.recipeId = r.id
+    WHERE b.batchId = ?
+  `, [batchId], (err, batch) => {
     if (err) {
       console.error('Fetch batch error:', err);
       return res.status(500).json({ error: err.message });
@@ -834,19 +839,33 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
-    let additionalIngredients = batch.additionalIngredients ? JSON.parse(batchRow.additionalIngredients) : [];
+    const siteId = batch.siteId;
+    let additionalIngredients = batch.additionalIngredients ? JSON.parse(batch.additionalIngredients) : [];
+    let recipeIngredients = batch.recipeIngredients ? JSON.parse(batch.recipeIngredients) : [];
     const normalizedUnit = unit.toLowerCase() === 'pounds' ? 'lbs' : unit.toLowerCase();
-    const ingredientIndex = additionalIngredients.findIndex(
-      ing => ing.itemName === itemName && ing.quantity === quantity && ing.unit.toLowerCase() === normalizedUnit
+    // Combine ingredients for matching
+    const allIngredients = [
+      ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+      ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+    ];
+    const ingredientIndex = allIngredients.findIndex(
+      ing => ing.itemName === itemName && ing.quantity === quantity && (ing.unit || 'lbs').toLowerCase() === normalizedUnit
     );
     if (ingredientIndex === -1) {
+      console.error(`Ingredient not found in batch ${batchId}:`, { itemName, quantity, unit: normalizedUnit });
       return res.status(400).json({ error: 'Ingredient not found in batch' });
     }
-    additionalIngredients.splice(ingredientIndex, 1);
-    console.log(`Restoring inventory: identifier=${itemName}, unit=${normalizedUnit}, siteId=${batch.siteId}`);
+    // Remove from additionalIngredients if not a recipe ingredient
+    let newAdditionalIngredients = additionalIngredients;
+    if (!allIngredients[ingredientIndex].isRecipe) {
+      newAdditionalIngredients = additionalIngredients.filter(
+        ing => !(ing.itemName === itemName && ing.quantity === quantity && (ing.unit || 'lbs').toLowerCase() === normalizedUnit)
+      );
+    }
+    console.log(`Removing ingredient from batch ${batchId}:`, { itemName, quantity, unit: normalizedUnit, isRecipe: allIngredients[ingredientIndex].isRecipe });
     db.run(
       'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
-      [JSON.stringify(additionalIngredients), batchId],
+      [JSON.stringify(newAdditionalIngredients), batchId],
       (err) => {
         if (err) {
           console.error('Update batch ingredients error:', err);
@@ -854,13 +873,13 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
         }
         db.run(
           'UPDATE inventory SET quantity = quantity + ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
-          [quantity, itemName, normalizedUnit, 'pounds', batch.siteId],
+          [quantity, itemName, normalizedUnit, 'pounds', siteId],
           (err) => {
             if (err) {
               console.error('Update inventory error:', err);
               return res.status(500).json({ error: err.message });
             }
-            console.log(`Inventory restored: ${quantity}${normalizedUnit} for ${itemName} at site ${batch.siteId}`);
+            console.log(`Inventory restored: ${quantity}${normalizedUnit} for ${itemName} at site ${siteId}`);
             db.get(`
               SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
                      b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients

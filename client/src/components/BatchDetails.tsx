@@ -9,7 +9,7 @@ interface Ingredient {
   itemName: string;
   quantity: number;
   unit: string;
-  isRecipe?: boolean; // Added to distinguish recipe ingredients
+  isRecipe?: boolean;
 }
 
 interface BatchAction {
@@ -191,12 +191,12 @@ const BatchDetails: React.FC = () => {
   };
 
   const handleRemoveIngredient = async (ingredient: Ingredient) => {
-    if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit} of ${ingredient.itemName}?`)) return;
+    if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit || 'lbs'} of ${ingredient.itemName}?`)) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(ingredient),
+        body: JSON.stringify({ ...ingredient, unit: ingredient.unit || 'lbs' }), // Ensure unit is included
       });
       if (!res.ok) {
         const text = await res.text();
