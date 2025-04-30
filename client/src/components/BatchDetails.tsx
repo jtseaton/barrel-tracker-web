@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site } from '../types/interfaces';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import '../App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+    lastAutoTable: { finalY: number };
+  }
+}
 
 interface Ingredient {
   itemName: string;
@@ -255,34 +264,110 @@ const BatchDetails: React.FC = () => {
       const brewLog = await brewLogRes.json();
       const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
       const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
-      const content = `
-Batch Details
-=============
-Batch ID: ${batchData.batchId}
-Product: ${product}
-Recipe: ${batchData.recipeName || 'Unknown'}
-Site: ${site}
-Status: ${batchData.status}
-Date: ${batchData.date}
-Ingredients:
-${batchData.ingredients.map((ing: Ingredient) => `- ${ing.itemName}: ${ing.quantity} ${ing.unit || 'lbs'} (${ing.isRecipe ? 'Recipe' : 'Added'})`).join('\n') || 'None'}
 
-Brew Day Log
-============
-${brewLog.date ? `
-Date: ${brewLog.date}
-Notes: ${brewLog.notes}
-Temperature: ${brewLog.temperature || 'N/A'} °C
-Gravity: ${brewLog.gravity || 'N/A'}
-` : 'No brew log available'}
-      `.trim();
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `batch_${batchId}_sheet.txt`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      // Create PDF
+      const doc = new jsPDF();
+      const margin = 10;
+      let y = margin;
+
+      // Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
+      y += 10;
+
+      // Batch Details Section
+      doc.setFontSize(12);
+      doc.text('Batch Details', margin, y);
+      y += 5;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 200 - margin, y);
+      y += 10;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const batchDetails = [
+        { label: 'Batch ID', value: batchData.batchId },
+        { label: 'Product', value: product },
+        { label: 'Recipe', value: batchData.recipeName || 'Unknown' },
+        { label: 'Site', value: site },
+        { label: 'Status', value: batchData.status },
+        { label: 'Date', value: batchData.date },
+      ];
+      batchDetails.forEach(({ label, value }) => {
+        doc.text(`${label}: ${value}`, margin, y);
+        y += 7;
+      });
+
+      // Ingredients Section
+      y += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Ingredients', margin, y);
+      y += 5;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 200 - margin, y);
+      y += 10;
+
+      if (batchData.ingredients.length > 0) {
+        doc.autoTable({
+          startY: y,
+          head: [['Item', 'Quantity', 'Unit', 'Source']],
+          body: batchData.ingredients.map((ing: Ingredient) => [
+            ing.itemName,
+            ing.quantity,
+            ing.unit || 'lbs',
+            ing.isRecipe ? 'Recipe' : 'Added',
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [33, 150, 243], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 10, cellPadding: 3 },
+          margin: { left: margin, right: margin },
+        });
+        y = doc.lastAutoTable.finalY + 10;
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('None', margin, y);
+        y += 10;
+      }
+
+      // Brew Day Log Section
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Brew Day Log', margin, y);
+      y += 5;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 200 - margin, y);
+      y += 10;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (brewLog.date) {
+        const logDetails = [
+          { label: 'Date', value: brewLog.date },
+          { label: 'Notes', value: brewLog.notes },
+          { label: 'Temperature', value: brewLog.temperature ? `${brewLog.temperature} °C` : 'N/A' },
+          { label: 'Gravity', value: brewLog.gravity || 'N/A' },
+        ];
+        logDetails.forEach(({ label, value }) => {
+          if (label === 'Notes') {
+            const splitNotes = doc.splitTextToSize(value, 180);
+            doc.text(`${label}:`, margin, y);
+            doc.text(splitNotes, margin + 20, y);
+            y += splitNotes.length * 7;
+          } else {
+            doc.text(`${label}: ${value}`, margin, y);
+            y += 7;
+          }
+        });
+      } else {
+        doc.text('No brew log available', margin, y);
+        y += 10;
+      }
+
+      // Save PDF
+      doc.save(`batch_${batchData.batchId}_sheet.pdf`);
     } catch (err: any) {
       console.error('Print batch sheet error:', err);
       setError('Failed to generate batch sheet: ' + err.message);
