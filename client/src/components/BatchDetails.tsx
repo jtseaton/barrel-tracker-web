@@ -179,7 +179,7 @@ const BatchDetails: React.FC = () => {
         throw new Error(`Failed to add ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      setBatch(updatedBatch);
+      setBatch({ ...updatedBatch }); // Deep copy to ensure state update
       setNewIngredient({ itemName: '', quantity: 0, unit: 'lbs' });
       setError(null);
       setSuccessMessage('Ingredient added successfully');
@@ -196,20 +196,33 @@ const BatchDetails: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ...ingredient, unit: ingredient.unit || 'lbs' }), // Ensure unit is included
+        body: JSON.stringify({ ...ingredient, unit: ingredient.unit || 'lbs' }),
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Failed to remove ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      setBatch(updatedBatch);
+      console.log('Delete response:', updatedBatch); // Debug log
+      setBatch({ ...updatedBatch }); // Deep copy to ensure state update
       setError(null);
       setSuccessMessage('Ingredient removed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: any) {
       console.error('Remove ingredient error:', err);
       setError('Failed to remove ingredient: ' + err.message);
+      // Fallback: Refetch batch to ensure UI consistency
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (res.ok) {
+          const refetchedBatch = await res.json();
+          setBatch({ ...refetchedBatch });
+        }
+      } catch (refetchErr: any) {
+        console.error('Refetch batch error:', refetchErr);
+      }
     }
   };
 
