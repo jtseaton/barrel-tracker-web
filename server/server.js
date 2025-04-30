@@ -578,14 +578,15 @@ app.post('/api/batches', (req, res) => {
       const errors = [];
       if (ingredients.length === 0) {
         console.log('No ingredients to validate for recipeId', recipeId);
-        createBatch();
+        createBatch([]);
       } else {
         let remaining = ingredients.length;
+        const inventoryUpdates = [];
         ingredients.forEach((ing) => {
           if (!ing.itemName || !ing.quantity) {
             errors.push(`Invalid ingredient missing itemName or quantity: ${JSON.stringify(ing)}`);
             remaining--;
-            if (remaining === 0) finishValidation();
+            if (remaining === 0) finishValidation(inventoryUpdates);
             return;
           }
           const unit = (ing.unit || 'lbs').toLowerCase();
@@ -596,14 +597,14 @@ app.post('/api/batches', (req, res) => {
               console.error(`Error fetching item ${ing.itemName}:`, err);
               errors.push(`Database error for ${ing.itemName}: ${err.message}`);
               remaining--;
-              if (remaining === 0) finishValidation();
+              if (remaining === 0) finishValidation(inventoryUpdates);
               return;
             }
             if (!item) {
               console.error(`Item not found: ${ing.itemName}`);
               errors.push(`Item not found: ${ing.itemName}`);
               remaining--;
-              if (remaining === 0) finishValidation();
+              if (remaining === 0) finishValidation(inventoryUpdates);
               return;
             }
             db.get(
@@ -618,25 +619,27 @@ app.post('/api/batches', (req, res) => {
                   console.log(`Inventory check for ${ing.itemName} (${normalizedUnit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`);
                   if (available < ing.quantity) {
                     errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${normalizedUnit} available, ${ing.quantity}${normalizedUnit} needed`);
+                  } else {
+                    inventoryUpdates.push({ itemName: ing.itemName, quantity: ing.quantity, unit: normalizedUnit });
                   }
                 }
                 remaining--;
-                if (remaining === 0) finishValidation();
+                if (remaining === 0) finishValidation(inventoryUpdates);
               }
             );
           });
         });
       }
 
-      function finishValidation() {
+      function finishValidation(inventoryUpdates) {
         if (errors.length > 0) {
           console.log('Inventory errors:', errors);
           return res.status(400).json({ error: errors.join('; ') });
         }
-        createBatch();
+        createBatch(inventoryUpdates);
       }
 
-      function createBatch() {
+      function createBatch(inventoryUpdates) {
         db.run(
           'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date, additionalIngredients) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [batchId, productId, recipeId, siteId, status, date, JSON.stringify([])],
@@ -646,7 +649,34 @@ app.post('/api/batches', (req, res) => {
               return res.status(500).json({ error: err.message });
             }
             console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date });
-            res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [] });
+
+            // Deduct inventory for recipe ingredients
+            let remainingUpdates = inventoryUpdates.length;
+            if (remainingUpdates === 0) {
+              res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [] });
+              return;
+            }
+            inventoryUpdates.forEach(({ itemName, quantity, unit }) => {
+              db.run(
+                'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+                [quantity, itemName, unit, 'pounds', siteId],
+                (err) => {
+                  if (err) {
+                    console.error(`Error updating inventory for ${itemName}:`, err);
+                    // Roll back batch creation on error
+                    db.run('DELETE FROM batches WHERE batchId = ?', [batchId], () => {
+                      res.status(500).json({ error: `Failed to update inventory for ${itemName}: ${err.message}` });
+                    });
+                    return;
+                  }
+                  console.log(`Inventory deducted: ${quantity}${unit} for ${itemName} at site ${siteId}`);
+                  remainingUpdates--;
+                  if (remainingUpdates === 0) {
+                    res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [] });
+                  }
+                }
+              );
+            });
           }
         );
       }
