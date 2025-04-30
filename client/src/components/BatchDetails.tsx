@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site } from '../types/interfaces';
-import '../App.css'; // New CSS file
+import '../App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -230,7 +230,33 @@ const BatchDetails: React.FC = () => {
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
 
-      <h3>Ingredients</h3>
+      <h3>Recipe Ingredients</h3>
+      <div className="batch-details">
+        {batch && batch.ingredients && batch.ingredients.length > 0 ? (
+          <table className="inventory-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Unit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batch.ingredients.map((ing: Ingredient, index: number) => (
+                <tr key={index}>
+                  <td>{ing.itemName}</td>
+                  <td>{ing.quantity}</td>
+                  <td>{ing.unit || 'lbs'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>No recipe ingredients</p>
+        )}
+      </div>
+
+      <h3>Additional Ingredients</h3>
       <div style={{ marginBottom: '20px' }}>
         {batch && batch.additionalIngredients && batch.additionalIngredients.length > 0 ? (
           <table className="inventory-table">
