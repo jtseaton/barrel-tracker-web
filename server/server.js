@@ -228,6 +228,14 @@ db.serialize(() => {
       FOREIGN KEY (batchId) REFERENCES batches(batchId)
     )
   `);
+
+  db.run(`
+    ALTER TABLE batches ADD COLUMN brewLog TEXT
+  `, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding brewLog column:', err);
+    }
+  });
   
   // Insert default Super Admin (for testing)
   db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
@@ -1134,22 +1142,27 @@ app.patch('/api/batches/:batchId', (req, res) => {
   );
 });
 
-// DELETE /api/batches/:batchId
+// Replace DELETE /api/batches/:batchId (~line 600)
 app.delete('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
-  db.run('DELETE FROM batches WHERE batchId = ?', [batchId], function(err) {
+  db.get('SELECT status FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
     if (err) {
-      console.error('Delete batch error:', err);
+      console.error('Fetch batch error:', err);
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0) {
+    if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
-    db.run('DELETE FROM batch_actions WHERE batchId = ?', [batchId], (err) => {
+    if (batch.status === 'Completed') {
+      console.log(`DELETE /api/batches/${batchId}: Cannot delete completed batch`);
+      return res.status(403).json({ error: 'Cannot delete a completed batch' });
+    }
+    db.run('DELETE FROM batches WHERE batchId = ?', [batchId], (err) => {
       if (err) {
-        console.error('Delete batch actions error:', err);
+        console.error('Delete batch error:', err);
+        return res.status(500).json({ error: err.message });
       }
-      console.log(`DELETE /api/batches/${batchId}, deleted`);
+      console.log(`DELETE /api/batches/${batchId}: Batch deleted`);
       res.json({ message: 'Batch deleted' });
     });
   });
@@ -1189,6 +1202,53 @@ app.get('/api/batches/:batchId/actions', (req, res) => {
   });
 });
 
+// Add POST /api/batches/:batchId/brewlog (~line 650)
+app.post('/api/batches/:batchId/brewlog', (req, res) => {
+  const { batchId } = req.params;
+  const { date, notes, temperature, gravity } = req.body;
+  if (!date || !notes) {
+    return res.status(400).json({ error: 'Date and notes are required' });
+  }
+  db.get('SELECT brewLog FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+    if (err) {
+      console.error('Fetch batch error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!batch) {
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+    const brewLog = { date, notes, temperature, gravity };
+    db.run(
+      'UPDATE batches SET brewLog = ? WHERE batchId = ?',
+      [JSON.stringify(brewLog), batchId],
+      (err) => {
+        if (err) {
+          console.error('Update brew log error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log(`POST /api/batches/${batchId}/brewlog, saved:`, brewLog);
+        res.json(brewLog);
+      }
+    );
+  });
+});
+
+// Add GET /api/batches/:batchId/brewlog (~line 650)
+app.get('/api/batches/:batchId/brewlog', (req, res) => {
+  const { batchId } = req.params;
+  db.get('SELECT brewLog FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+    if (err) {
+      console.error('Fetch brew log error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!batch) {
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+    const brewLog = batch.brewLog ? JSON.parse(batch.brewLog) : null;
+    console.log(`GET /api/batches/${batchId}/brewlog, returning:`, brewLog);
+    res.json(brewLog || {});
+  });
+});
 
 // Update /api/recipes to handle ingredients (replace existing /api/recipes, ~line 600)
 app.get('/api/recipes', (req, res) => {
