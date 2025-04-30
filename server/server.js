@@ -276,11 +276,13 @@ db.serialize(() => {
       ['Corn', 'Grain', 1]);
     db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
       ['Hops', 'Hops', 1]);
-    // Insert mock inventory
-    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['CORN-001', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
-    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['HOPS-001', 'Storage', 'Hops', '200', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+      // Insert mock inventory with identifier as itemName for non-Spirits
+  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ['Flaked Corn', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ['Hops (Cascade)', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ['Hops (Cascade)', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
     // Insert mock recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
       [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100 }])]);
@@ -586,11 +588,10 @@ app.post('/api/batches', (req, res) => {
             if (remaining === 0) finishValidation();
             return;
           }
-          // Default to 'lbs' if unit is missing, normalize to lowercase
           const unit = (ing.unit || 'lbs').toLowerCase();
           const normalizedUnit = unit === 'pounds' ? 'lbs' : unit;
-          console.log(`Validating ingredient: ${ing.itemName}, quantity: ${ing.quantity}, unit: ${normalizedUnit}, siteId: ${siteId}`);
-          db.get('SELECT type FROM items WHERE name = ?', [ing.itemName], (err, item) => {
+          console.log(`Validating ingredient: identifier=${ing.itemName}, quantity=${ing.quantity}, unit=${normalizedUnit}, siteId=${siteId}`);
+          db.get('SELECT name FROM items WHERE name = ?', [ing.itemName], (err, item) => {
             if (err) {
               console.error(`Error fetching item ${ing.itemName}:`, err);
               errors.push(`Database error for ${ing.itemName}: ${err.message}`);
@@ -605,10 +606,9 @@ app.post('/api/batches', (req, res) => {
               if (remaining === 0) finishValidation();
               return;
             }
-            const itemType = item.type;
             db.get(
-              'SELECT SUM(quantity) as total FROM inventory WHERE type = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
-              [itemType, normalizedUnit, ing.unit || 'Pounds', siteId],
+              'SELECT SUM(CAST(quantity AS REAL)) as total FROM inventory WHERE identifier = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
+              [ing.itemName, normalizedUnit, ing.unit || 'Pounds', siteId],
               (err, row) => {
                 if (err) {
                   console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
@@ -707,20 +707,20 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
       return res.status(404).json({ error: 'Batch not found' });
     }
     const siteId = batch.siteId;
-    db.get('SELECT type FROM items WHERE name = ?', [itemName], (err, item) => {
+    db.get('SELECT name FROM items WHERE name = ?', [itemName], (err, item) => {
       if (err) {
         console.error('Fetch item error:', err);
         return res.status(500).json({ error: err.message });
       }
       if (!item) {
+        console.error(`Item not found in items table: ${itemName}`);
         return res.status(400).json({ error: `Item not found: ${itemName}` });
       }
-      const itemType = item.type;
       const normalizedUnit = unit.toLowerCase() === 'pounds' ? 'lbs' : unit.toLowerCase();
-      console.log(`Checking inventory: itemName=${itemName}, type=${itemType}, unit=${normalizedUnit}, siteId=${siteId}`);
+      console.log(`Checking inventory: identifier=${itemName}, unit=${normalizedUnit}, siteId=${siteId}`);
       db.get(
-        'SELECT SUM(CAST(quantity AS REAL)) as total FROM inventory WHERE type = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
-        [itemType, normalizedUnit, 'pounds', siteId],
+        'SELECT SUM(CAST(quantity AS REAL)) as total FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+        [itemName, normalizedUnit, 'pounds', siteId],
         (err, row) => {
           if (err) {
             console.error('Inventory check error:', err);
@@ -747,13 +747,14 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
                   return res.status(500).json({ error: err.message });
                 }
                 db.run(
-                  'UPDATE inventory SET quantity = quantity - ? WHERE type = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
-                  [quantity, itemType, normalizedUnit, 'pounds', siteId],
+                  'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+                  [quantity, itemName, normalizedUnit, 'pounds', siteId],
                   (err) => {
                     if (err) {
                       console.error('Update inventory error:', err);
                       return res.status(500).json({ error: err.message });
                     }
+                    console.log(`Inventory updated: deducted ${quantity}${normalizedUnit} for ${itemName} at site ${siteId}`);
                     db.get(`
                       SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
                              b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
@@ -767,7 +768,12 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
                         console.error('Fetch updated batch error:', err);
                         return res.status(500).json({ error: err.message });
                       }
-                      updatedBatch.ingredients = JSON.parse(updatedBatch.ingredients || '[]');
+                      const recipeIngredients = JSON.parse(updatedBatch.ingredients || '[]');
+                      const additionalIngredients = JSON.parse(updatedBatch.additionalIngredients || '[]');
+                      updatedBatch.ingredients = [
+                        ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+                        ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+                      ];
                       updatedBatch.additionalIngredients = additionalIngredients;
                       console.log(`POST /api/batches/${batchId}/ingredients, added:`, { itemName, quantity, unit: normalizedUnit });
                       res.json(updatedBatch);
@@ -798,7 +804,7 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
-    let additionalIngredients = batch.additionalIngredients ? JSON.parse(batch.additionalIngredients) : [];
+    let additionalIngredients = batch.additionalIngredients ? JSON.parse(batchRow.additionalIngredients) : [];
     const normalizedUnit = unit.toLowerCase() === 'pounds' ? 'lbs' : unit.toLowerCase();
     const ingredientIndex = additionalIngredients.findIndex(
       ing => ing.itemName === itemName && ing.quantity === quantity && ing.unit.toLowerCase() === normalizedUnit
@@ -807,56 +813,51 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
       return res.status(400).json({ error: 'Ingredient not found in batch' });
     }
     additionalIngredients.splice(ingredientIndex, 1);
-    db.get('SELECT type FROM items WHERE name = ?', [itemName], (err, item) => {
-      if (err) {
-        console.error('Fetch item error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (!item) {
-        return res.status(400).json({ error: `Item not found: ${itemName}` });
-      }
-      const itemType = item.type;
-      console.log(`Restoring inventory: itemName=${itemName}, type=${itemType}, unit=${normalizedUnit}, siteId=${batch.siteId}`);
-      db.run(
-        'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
-        [JSON.stringify(additionalIngredients), batchId],
-        (err) => {
-          if (err) {
-            console.error('Update batch ingredients error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          db.run(
-            'UPDATE inventory SET quantity = quantity + ? WHERE type = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
-            [quantity, itemType, normalizedUnit, 'pounds', batch.siteId],
-            (err) => {
+    console.log(`Restoring inventory: identifier=${itemName}, unit=${normalizedUnit}, siteId=${batch.siteId}`);
+    db.run(
+      'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
+      [JSON.stringify(additionalIngredients), batchId],
+      (err) => {
+        if (err) {
+          console.error('Update batch ingredients error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        db.run(
+          'UPDATE inventory SET quantity = quantity + ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+          [quantity, itemName, normalizedUnit, 'pounds', batch.siteId],
+          (err) => {
+            if (err) {
+              console.error('Update inventory error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log(`Inventory restored: ${quantity}${normalizedUnit} for ${itemName} at site ${batch.siteId}`);
+            db.get(`
+              SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+                     b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
+              FROM batches b
+              JOIN products p ON b.productId = p.id
+              JOIN recipes r ON b.recipeId = r.id
+              JOIN sites s ON b.siteId = s.siteId
+              WHERE b.batchId = ?
+            `, [batchId], (err, updatedBatch) => {
               if (err) {
-                console.error('Update inventory error:', err);
+                console.error('Fetch updated batch error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              console.log(`Inventory restored: ${quantity}${normalizedUnit} for ${itemName} at site ${batch.siteId}`);
-              db.get(`
-                SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-                       b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
-                FROM batches b
-                JOIN products p ON b.productId = p.id
-                JOIN recipes r ON b.recipeId = r.id
-                JOIN sites s ON b.siteId = s.siteId
-                WHERE b.batchId = ?
-              `, [batchId], (err, updatedBatch) => {
-                if (err) {
-                  console.error('Fetch updated batch error:', err);
-                  return res.status(500).json({ error: err.message });
-                }
-                updatedBatch.ingredients = JSON.parse(updatedBatch.ingredients || '[]');
-                updatedBatch.additionalIngredients = additionalIngredients;
-                console.log(`DELETE /api/batches/${batchId}/ingredients, removed:`, { itemName, quantity, unit: normalizedUnit });
-                res.json(updatedBatch);
-              });
-            }
-          );
-        }
-      );
-    });
+              const recipeIngredients = JSON.parse(updatedBatch.ingredients || '[]');
+              const additionalIngredients = JSON.parse(updatedBatch.additionalIngredients || '[]');
+              updatedBatch.ingredients = [
+                ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+                ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+              ];
+              updatedBatch.additionalIngredients = additionalIngredients;
+              console.log(`DELETE /api/batches/${batchId}/ingredients, removed:`, { itemName, quantity, unit: normalizedUnit });
+              res.json(updatedBatch);
+            });
+          }
+        );
+      }
+    );
   });
 });
 
