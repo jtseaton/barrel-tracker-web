@@ -845,19 +845,21 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
     const normalizedUnit = unit.toLowerCase() === 'pounds' ? 'lbs' : unit.toLowerCase();
     console.log(`Attempting to delete ingredient from batch ${batchId}:`, { itemName, quantity, unit: normalizedUnit });
 
-    // Check if ingredient is already overridden (e.g., quantity set to 0)
-    const overrideIndex = additionalIngredients.findIndex(
-      ing => ing.itemName === itemName && (ing.unit || 'lbs').toLowerCase() === normalizedUnit && ing.quantity === 0
+    // Check if ingredient is already excluded
+    const isExcluded = additionalIngredients.some(
+      ing => ing.itemName === itemName && 
+             (ing.unit || 'lbs').toLowerCase() === normalizedUnit && 
+             ing.excluded === true
     );
-    if (overrideIndex !== -1) {
-      console.error(`Ingredient already deleted from batch ${batchId}:`, { itemName, unit: normalizedUnit });
+    if (isExcluded) {
+      console.error(`Ingredient already excluded from batch ${batchId}:`, { itemName, unit: normalizedUnit });
       return res.status(400).json({ error: 'Ingredient already removed from batch' });
     }
 
     // Combine ingredients for matching
     const allIngredients = [
       ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
-      ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+      ...additionalIngredients.filter(ing => !ing.excluded).map(ing => ({ ...ing, isRecipe: false }))
     ];
     console.log(`All ingredients in batch ${batchId}:`, allIngredients);
     const ingredientIndex = allIngredients.findIndex(
@@ -871,10 +873,10 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
     // Update additionalIngredients
     let newAdditionalIngredients = additionalIngredients;
     if (allIngredients[ingredientIndex].isRecipe) {
-      // Override recipe ingredient with zero quantity
+      // Mark recipe ingredient as excluded
       newAdditionalIngredients = [
         ...additionalIngredients,
-        { itemName, quantity: 0, unit: normalizedUnit }
+        { itemName, unit: normalizedUnit, excluded: true }
       ];
     } else {
       // Remove non-recipe ingredient
@@ -916,17 +918,17 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
               }
               const recipeIngredients = JSON.parse(updatedBatch.ingredients || '[]');
               const additionalIngredients = JSON.parse(updatedBatch.additionalIngredients || '[]');
-              // Filter out ingredients overridden with quantity 0
+              // Filter out excluded recipe ingredients
               const activeRecipeIngredients = recipeIngredients.filter(
                 (ing) => !additionalIngredients.some(
                   (override) => override.itemName === ing.itemName && 
                                 (override.unit || 'lbs').toLowerCase() === (ing.unit || 'lbs').toLowerCase() && 
-                                override.quantity === 0
+                                override.excluded === true
                 )
               );
               updatedBatch.ingredients = [
                 ...activeRecipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
-                ...additionalIngredients.filter(ing => ing.quantity > 0).map(ing => ({ ...ing, isRecipe: false }))
+                ...additionalIngredients.filter(ing => !ing.excluded && ing.quantity > 0).map(ing => ({ ...ing, isRecipe: false }))
               ];
               updatedBatch.additionalIngredients = additionalIngredients;
               console.log(`DELETE /api/batches/${batchId}/ingredients, removed:`, { itemName, quantity, unit: normalizedUnit });
