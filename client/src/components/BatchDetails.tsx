@@ -193,9 +193,9 @@ const BatchDetails: React.FC = () => {
 
   const handleRemoveIngredient = async (ingredient: Ingredient) => {
     const deletionKey = `${ingredient.itemName}-${ingredient.quantity}-${ingredient.unit || 'lbs'}`;
-    if (pendingDeletions.has(deletionKey)) return; // Prevent re-deletion
+    if (pendingDeletions.has(deletionKey)) return;
     setPendingDeletions(prev => new Set(prev).add(deletionKey));
-    console.log('Attempting to delete ingredient:', ingredient);
+    console.log('Attempting to delete ingredient:', { ...ingredient, unit: ingredient.unit || 'lbs' });
     try {
       if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit || 'lbs'} of ${ingredient.itemName}?`)) {
         setPendingDeletions(prev => {
@@ -216,22 +216,10 @@ const BatchDetails: React.FC = () => {
       }
       const updatedBatch = await res.json();
       console.log('Delete response:', updatedBatch);
-      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] }); // Deep copy to force re-render
+      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
       setError(null);
       setSuccessMessage('Ingredient removed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-      // Refetch batch to ensure consistency
-      try {
-        const refetchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
-          headers: { Accept: 'application/json' },
-        });
-        if (refetchRes.ok) {
-          const refetchedBatch = await refetchRes.json();
-          setBatch({ ...refetchedBatch, ingredients: [...refetchedBatch.ingredients] });
-        }
-      } catch (refetchErr: any) {
-        console.error('Refetch batch error:', refetchErr);
-      }
     } catch (err: any) {
       console.error('Remove ingredient error:', err);
       setError('Failed to remove ingredient: ' + err.message);
