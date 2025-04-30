@@ -216,6 +216,10 @@ const BatchDetails: React.FC = () => {
       }
       const updatedBatch = await res.json();
       console.log('Delete response:', updatedBatch);
+      if (!Array.isArray(updatedBatch.ingredients)) {
+        console.error('Invalid ingredients array in response:', updatedBatch.ingredients);
+        throw new Error('Invalid server response: ingredients array missing');
+      }
       setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
       setError(null);
       setSuccessMessage('Ingredient removed successfully');
