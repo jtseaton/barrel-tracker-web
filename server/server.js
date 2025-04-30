@@ -674,10 +674,17 @@ app.get('/api/batches/:batchId', (req, res) => {
       console.log(`GET /api/batches/${batchId}: Batch not found`);
       return res.status(404).json({ error: 'Batch not found' });
     }
+    const recipeIngredients = JSON.parse(row.ingredients || '[]');
+    const additionalIngredients = JSON.parse(row.additionalIngredients || '[]');
+    // Combine recipe and additional ingredients
+    const combinedIngredients = [
+      ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })), // Mark recipe ingredients
+      ...additionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
+    ];
     const batch = {
       ...row,
-      ingredients: JSON.parse(row.ingredients || '[]'),
-      additionalIngredients: JSON.parse(row.additionalIngredients || '[]'),
+      ingredients: combinedIngredients,
+      additionalIngredients: additionalIngredients // Keep for backward compatibility
     };
     console.log(`GET /api/batches/${batchId}, returning:`, batch);
     res.json(batch);

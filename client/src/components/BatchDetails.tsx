@@ -9,6 +9,7 @@ interface Ingredient {
   itemName: string;
   quantity: number;
   unit: string;
+  isRecipe?: boolean; // Added to distinguish recipe ingredients
 }
 
 interface BatchAction {
@@ -230,7 +231,7 @@ const BatchDetails: React.FC = () => {
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
 
-      <h3>Recipe Ingredients</h3>
+      <h3>Ingredients</h3>
       <div className="batch-details">
         {batch && batch.ingredients && batch.ingredients.length > 0 ? (
           <table className="inventory-table">
@@ -239,6 +240,8 @@ const BatchDetails: React.FC = () => {
                 <th>Item</th>
                 <th>Quantity</th>
                 <th>Unit</th>
+                <th>Source</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -247,33 +250,7 @@ const BatchDetails: React.FC = () => {
                   <td>{ing.itemName}</td>
                   <td>{ing.quantity}</td>
                   <td>{ing.unit || 'lbs'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p>No recipe ingredients</p>
-        )}
-      </div>
-
-      <h3>Additional Ingredients</h3>
-      <div style={{ marginBottom: '20px' }}>
-        {batch && batch.additionalIngredients && batch.additionalIngredients.length > 0 ? (
-          <table className="inventory-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Unit</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {batch.additionalIngredients.map((ing: Ingredient, index: number) => (
-                <tr key={index}>
-                  <td>{ing.itemName}</td>
-                  <td>{ing.quantity}</td>
-                  <td>{ing.unit}</td>
+                  <td>{ing.isRecipe ? 'Recipe' : 'Added'}</td>
                   <td>
                     <button
                       onClick={() => handleRemoveIngredient(ing)}
@@ -294,7 +271,7 @@ const BatchDetails: React.FC = () => {
             </tbody>
           </table>
         ) : (
-          <p>No additional ingredients</p>
+          <p>No ingredients</p>
         )}
         <div style={{ marginTop: '20px' }}>
           <h4>Add Ingredient</h4>
