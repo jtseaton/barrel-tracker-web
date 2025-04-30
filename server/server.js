@@ -809,6 +809,7 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
         return res.status(400).json({ error: `Item not found: ${itemName}` });
       }
       const itemType = item.type;
+      console.log(`Restoring inventory for itemName: ${itemName}, type: ${itemType}, unit: ${normalizedUnit}, siteId: ${batch.siteId}`);
       db.run(
         'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
         [JSON.stringify(additionalIngredients), batchId],
@@ -825,6 +826,7 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
                 console.error('Update inventory error:', err);
                 return res.status(500).json({ error: err.message });
               }
+              console.log(`Inventory restored: ${quantity}${normalizedUnit} for ${itemName} at site ${batch.siteId}`);
               db.get(`
                 SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
                        b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
