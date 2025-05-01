@@ -1,19 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Batch, Product, Recipe, Site } from '../types/interfaces';
+import { Batch, Product, Recipe, Site, Ingredient, Equipment } from '../types/interfaces'; // Import Ingredient and Equipment
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
-
-interface Ingredient {
-  itemName: string;
-  quantity: number;
-  unit: string;
-}
-
-interface Equipment {
-  equipmentId: number;
-  name: string;
-}
 
 const Production: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -36,10 +25,14 @@ const Production: React.FC = () => {
     name: string;
     productId: number;
     ingredients: Ingredient[];
+    quantity: number;
+    unit: string;
   }>({
     name: '',
     productId: 0,
     ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
+    quantity: 0,
+    unit: 'barrels',
   });
   const [error, setError] = useState<string | null>(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
@@ -178,15 +171,24 @@ const Production: React.FC = () => {
   };
 
   const handleAddRecipe = async () => {
-    if (!newRecipe.name || !newRecipe.productId || newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)) {
-      setError('Recipe name, product, and valid ingredients with units are required');
+    if (
+      !newRecipe.name ||
+      !newRecipe.productId ||
+      newRecipe.quantity <= 0 ||
+      !newRecipe.unit ||
+      newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
+    ) {
+      setError('Recipe name, product, valid quantity, unit, and ingredients with units are required');
       return;
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(newRecipe),
+        body: JSON.stringify({
+          ...newRecipe,
+          ingredients: newRecipe.ingredients.map(ing => ({ itemName: ing.itemName, quantity: ing.quantity, unit: ing.unit })), // Ensure ingredients match Recipe interface
+        }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -200,7 +202,7 @@ const Production: React.FC = () => {
       const addedRecipe = await res.json();
       setRecipes([...recipes, addedRecipe]);
       setShowAddRecipeModal(false);
-      setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }] });
+      setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'barrels' });
       setError(null);
     } catch (err: any) {
       console.error('Add recipe error:', err);
@@ -731,6 +733,54 @@ const Production: React.FC = () => {
               </div>
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Recipe Quantity (required):
+                </label>
+                <input
+                  type="number"
+                  value={newRecipe.quantity || ''}
+                  onChange={(e) => setNewRecipe({ ...newRecipe, quantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="Enter quantity (e.g., 10)"
+                  step="0.01"
+                  min="0"
+                  style={{
+                    width: '100%',
+                    maxWidth: '450px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Unit (required):
+                </label>
+                <select
+                  value={newRecipe.unit}
+                  onChange={(e) => setNewRecipe({ ...newRecipe, unit: e.target.value })}
+                  style={{
+                    width: '100%',
+                    maxWidth: '450px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="barrels">Barrels</option>
+                  <option value="gallons">Gallons</option>
+                  <option value="liters">Liters</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Ingredients (required):
                 </label>
                 {newRecipe.ingredients.map((ingredient, index) => (
@@ -846,7 +896,7 @@ const Production: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddRecipeModal(false);
-                  setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }] });
+                  setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'barrels' });
                   setError(null);
                 }}
                 style={{

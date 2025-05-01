@@ -8,7 +8,16 @@ export enum Status {
 export enum Unit {
   Pounds = 'lbs',
   Gallons = 'gallons',
+  Liters = 'liters',
+  Barrels = 'barrels',
   Count = 'count',
+}
+
+export enum Role {
+  SuperAdmin = 'SuperAdmin',
+  Admin = 'Admin',
+  Sales = 'Sales',
+  Production = 'Production',
 }
 
 export const TEST_VALUE = 'test';

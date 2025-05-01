@@ -45,10 +45,11 @@ export interface DesignObject {
   width?: number;
   height?: number;
   radius?: number;
-  locationId?: number; // Optional
-  equipmentId?: number; // New: Optional equipment assignment
+  locationId?: number;
+  equipmentId?: number;
   name: string;
   abbreviation: string;
+  batches?: Batch[];
 }
 
 export interface DailySummaryItem {
@@ -96,24 +97,45 @@ export interface Product {
   ibu: number;
 }
 
+export interface User {
+  email: string;
+  passwordHash: string | null; // Null until set on first login
+  role: string; // SuperAdmin, Admin, Sales, Production
+  enabled: boolean;
+  passkey: string | null; // JSON string for WebAuthn credentials
+}
 
 export interface Recipe {
   id: number;
   name: string;
   productId: number;
   ingredients: { itemName: string; quantity: number }[];
+  quantity: number;
+  unit: string; // Gallons, Liters, Barrels
+}
+
+export interface Ingredient {
+  itemName: string;
+  quantity: number;
+  unit: string;
+  isRecipe?: boolean;
 }
 
 export interface Batch {
   batchId: string;
   productId: number;
-  productName: string;
+  productName?: string;
   recipeId: number;
-  recipeName: string;
+  recipeName?: string;
   siteId: string;
-  siteName: string;
+  siteName?: string;
   status: string;
   date: string;
+  ingredients?: Ingredient[];
+  additionalIngredients?: Ingredient[];
+  equipmentId?: number | null;
+  stage?: 'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed';
+  volume?: number; // New: Added volume as optional number
 }
 
 export interface ReceiveForm {
