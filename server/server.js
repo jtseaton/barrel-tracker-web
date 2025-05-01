@@ -308,7 +308,9 @@ db.serialize(() => {
     ['Hops Cascade', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
-    // Insert mock recipes
+  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
+      // Insert mock recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
       [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100 }])]);
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
@@ -784,7 +786,7 @@ app.get('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
   db.get(`
     SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-           b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
+       b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId
     FROM batches b
     JOIN products p ON b.productId = p.id
     JOIN recipes r ON b.recipeId = r.id
@@ -2496,6 +2498,8 @@ app.get('/api/facility-design', (req, res) => {
                b.batchId, b.status, b.date
         FROM locations l
         FULL JOIN equipment e ON e.siteId = ?
+        LEFT JOIN locations l ON l.siteId = ?
+        LEFT JOIN equipment e ON e.siteId = ?
         LEFT JOIN batches b ON e.equipmentId = b.equipmentId
         WHERE l.siteId = ? OR e.siteId = ?
       `, [siteId, siteId, siteId], (err, rows) => {
