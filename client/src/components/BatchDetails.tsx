@@ -246,6 +246,27 @@ const BatchDetails: React.FC = () => {
     }
   };
 
+  const handleUnCompleteBatch = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ status: 'In Progress' }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to un-complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, status: 'In Progress' } : null);
+      setError(null);
+      setSuccessMessage('Batch un-completed successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: any) {
+      console.error('Un-complete batch error:', err);
+      setError('Failed to un-complete batch: ' + err.message);
+    }
+  };
+
   const handlePrintBatchSheet = async () => {
     try {
       const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
@@ -267,22 +288,26 @@ const BatchDetails: React.FC = () => {
 
       // Create PDF
       const doc = new jsPDF();
-      const margin = 10;
+      const margin = 8;
       let y = margin;
 
       // Title
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
+      doc.setFont('times', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(33, 150, 243); // Blue #2196F3
       doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
-      y += 10;
+      y += 8;
 
       // Batch Details Section
+      doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
+      doc.setTextColor(0);
       doc.text('Batch Details', margin, y);
-      y += 5;
+      y += 4;
       doc.setLineWidth(0.5);
-      doc.line(margin, y, 200 - margin, y);
-      y += 10;
+      doc.setDrawColor(33, 150, 243);
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
@@ -296,18 +321,18 @@ const BatchDetails: React.FC = () => {
       ];
       batchDetails.forEach(({ label, value }) => {
         doc.text(`${label}: ${value}`, margin, y);
-        y += 7;
+        y += 6;
       });
 
       // Ingredients Section
-      y += 5;
+      y += 4;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.text('Ingredients', margin, y);
-      y += 5;
+      y += 4;
       doc.setLineWidth(0.5);
-      doc.line(margin, y, 200 - margin, y);
-      y += 10;
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
 
       if (batchData.ingredients.length > 0) {
         doc.autoTable({
@@ -319,27 +344,33 @@ const BatchDetails: React.FC = () => {
             ing.unit || 'lbs',
             ing.isRecipe ? 'Recipe' : 'Added',
           ]),
-          theme: 'striped',
-          headStyles: { fillColor: [33, 150, 243], textColor: 255, fontStyle: 'bold' },
-          styles: { fontSize: 10, cellPadding: 3 },
+          theme: 'grid',
+          headStyles: { fillColor: [33, 150, 243], textColor: 255, fontStyle: 'bold', font: 'helvetica' },
+          styles: { fontSize: 9, cellPadding: 2, font: 'helvetica' },
+          columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 40 },
+          },
           margin: { left: margin, right: margin },
         });
-        y = doc.lastAutoTable.finalY + 10;
+        y = doc.lastAutoTable.finalY + 8;
       } else {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.text('None', margin, y);
-        y += 10;
+        y += 8;
       }
 
       // Brew Day Log Section
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.text('Brew Day Log', margin, y);
-      y += 5;
+      y += 4;
       doc.setLineWidth(0.5);
-      doc.line(margin, y, 200 - margin, y);
-      y += 10;
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
@@ -352,18 +383,18 @@ const BatchDetails: React.FC = () => {
         ];
         logDetails.forEach(({ label, value }) => {
           if (label === 'Notes') {
-            const splitNotes = doc.splitTextToSize(value, 180);
+            const splitNotes = doc.splitTextToSize(value, 184);
             doc.text(`${label}:`, margin, y);
             doc.text(splitNotes, margin + 20, y);
-            y += splitNotes.length * 7;
+            y += splitNotes.length * 6;
           } else {
             doc.text(`${label}: ${value}`, margin, y);
-            y += 7;
+            y += 6;
           }
         });
       } else {
         doc.text('No brew log available', margin, y);
-        y += 10;
+        y += 8;
       }
 
       // Save PDF
@@ -373,7 +404,6 @@ const BatchDetails: React.FC = () => {
       setError('Failed to generate batch sheet: ' + err.message);
     }
   };
-
   if (!batch) return <div>Loading...</div>;
 
   const product = products.find(p => p.id === batch.productId);
@@ -562,6 +592,20 @@ const BatchDetails: React.FC = () => {
           }}
         >
           Complete Batch
+        </button>
+        <button
+          onClick={handleUnCompleteBatch}
+          disabled={batch.status !== 'Completed'}
+          style={{
+            backgroundColor: batch.status !== 'Completed' ? '#ccc' : '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: batch.status !== 'Completed' ? 'not-allowed' : 'pointer',
+          }}
+        >
+          Un-Complete Batch
         </button>
         <button
           onClick={handleDeleteBatch}
