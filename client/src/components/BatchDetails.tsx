@@ -46,13 +46,24 @@ const BatchDetails: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const endpoints = [
+        const baseEndpoints = [
           { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
           { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
           { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
           { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
           { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
         ];
+        const endpoints = batch?.siteId
+          ? [
+              ...baseEndpoints,
+              {
+                url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`,
+                setter: setEquipment,
+                name: 'equipment',
+                single: false,
+              },
+            ]
+          : baseEndpoints;
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
         );
@@ -72,7 +83,7 @@ const BatchDetails: React.FC = () => {
       }
     };
     fetchData();
-  }, [batchId]);
+  }, [batchId, batch?.siteId]);
 
   const handleAddAction = async () => {
     if (!newAction) {
