@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Batch, Product, Site, Equipment, Ingredient } from '../types/interfaces';
+import { Batch, Product, Site, Equipment, Ingredient, Location } from '../types/interfaces'; // Updated to include Location
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
@@ -29,12 +29,16 @@ const BatchDetails: React.FC = () => {
   const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
   const [actions, setActions] = useState<BatchAction[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]); // New: For location dropdown
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [newAction, setNewAction] = useState('');
   const [newBatchId, setNewBatchId] = useState('');
   const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
   const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
   const [stage, setStage] = useState<'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed'>('Mashing');
+  const [packageType, setPackageType] = useState<string>(''); // New: For packaging form
+  const [packageQuantity, setPackageQuantity] = useState<number>(0); // New: For packaging form
+  const [packageLocation, setPackageLocation] = useState<string>(''); // New: For packaging form
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
@@ -49,6 +53,7 @@ const BatchDetails: React.FC = () => {
           { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
           { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
           { url: batch?.siteId ? `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}` : null, setter: setEquipment, name: 'equipment', single: false },
+          { url: batch?.siteId ? `${API_BASE_URL}/api/locations?siteId=${batch.siteId}` : null, setter: setLocations, name: 'locations', single: false }, // New: Fetch locations
         ].filter(endpoint => endpoint.url !== null);
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url!, { headers: { Accept: 'application/json' } }))
@@ -300,6 +305,48 @@ const BatchDetails: React.FC = () => {
     }
   };
 
+  // New: Handle packaging submission
+  const handlePackage = async () => {
+    if (!packageType || packageQuantity <= 0 || !packageLocation) {
+      setError('Please select package type, quantity (> 0), and location');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          packageType,
+          quantity: packageQuantity,
+          locationId: packageLocation,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      // Refresh batch to get updated volume
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to refresh batch');
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
+      setSuccessMessage(data.message || 'Packaged successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      console.error('Package error:', err);
+      setError('Failed to package: ' + err.message);
+    }
+  };
+
   const handlePrintBatchSheet = async () => {
     try {
       const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
@@ -351,6 +398,7 @@ const BatchDetails: React.FC = () => {
         { label: 'Site', value: site },
         { label: 'Status', value: batchData.status },
         { label: 'Stage', value: batchData.stage || 'Mashing' },
+        { label: 'Volume', value: batchData.volume ? `${batchData.volume.toFixed(2)} barrels` : 'N/A' }, // New: Show volume
         { label: 'Date', value: batchData.date },
       ];
       batchDetails.forEach(({ label, value }) => {
@@ -589,7 +637,7 @@ const BatchDetails: React.FC = () => {
             value={selectedEquipmentId || ''}
             onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
             style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-            disabled={stage === 'Completed'}
+            disabled={stage === 'Completed' || stage === 'Packaging'} // New: Disable for Packaging
           >
             <option value="">Select Equipment</option>
             {equipment.map((equip) => (
@@ -631,6 +679,56 @@ const BatchDetails: React.FC = () => {
               </select>
             </div>
           )}
+          {/* New: Packaging Form */}
+          {stage === 'Packaging' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h4 style={{ margin: '0', fontSize: '16px' }}>Package Batch</h4>
+              <select
+                value={packageType}
+                onChange={(e) => setPackageType(e.target.value)}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+              >
+                <option value="">Select Package Type</option>
+                <option value="1/2 BBL Keg">1/2 BBL Keg (15.5 gal)</option>
+                <option value="1/6 BBL Keg">1/6 BBL Keg (5.16 gal)</option>
+                <option value="750ml Bottle">750ml Bottle</option>
+              </select>
+              <input
+                type="number"
+                value={packageQuantity || ''}
+                onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
+                placeholder="Quantity"
+                min="1"
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+              />
+              <select
+                value={packageLocation}
+                onChange={(e) => setPackageLocation(e.target.value)}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+              >
+                <option value="">Select Location</option>
+                {locations.map((loc) => (
+                  <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={handlePackage}
+                disabled={!packageType || packageQuantity <= 0 || !packageLocation}
+                style={{
+                  backgroundColor: !packageType || packageQuantity <= 0 || !packageLocation ? '#ccc' : '#28A745',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: !packageType || packageQuantity <= 0 || !packageLocation ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  width: '100%',
+                }}
+              >
+                Package
+              </button>
+            </div>
+          )}
           <button
             onClick={handleProgressBatch}
             style={{
@@ -655,6 +753,7 @@ const BatchDetails: React.FC = () => {
         <p><strong>Status:</strong> {batch.status}</p>
         <p><strong>Current Equipment:</strong> {currentEquipment?.name || (batch?.equipmentId ? `Equipment ID: ${batch.equipmentId}` : 'None')}</p>
         <p><strong>Stage:</strong> {batch.stage || 'Mashing'}</p>
+        <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p> {/* New: Show volume */}
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
 
