@@ -2503,7 +2503,7 @@ app.get('/api/facility-design', (req, res) => {
           console.error('GET /api/facility-design enrichment error:', err);
           return res.status(500).json({ error: err.message });
         }
-        const enrichedObjects = objects.map((obj: DesignObject) => {
+        const enrichedObjects = objects.map((obj) => {
           const location = rows.find(row => row.locationId === obj.locationId);
           const equipment = rows.find(row => row.equipmentId === obj.equipmentId);
           const batches = rows
