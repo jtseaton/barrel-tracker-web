@@ -2493,7 +2493,7 @@ app.get('/api/facility-design', (req, res) => {
       }
       // Enrich objects with location, equipment, and batch data
       db.all(`
-        SELECT l.locationId, l.name AS locationName,
+        SELECT DISTINCT l.locationId, l.name AS locationName,
                e.equipmentId, e.name AS equipmentName,
                b.batchId, b.status, b.date
         FROM equipment e
