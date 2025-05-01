@@ -309,7 +309,7 @@ db.serialize(() => {
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
+    ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
       // Insert mock recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
       [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100 }])]);
@@ -2497,9 +2497,7 @@ app.get('/api/facility-design', (req, res) => {
                e.equipmentId, e.name AS equipmentName,
                b.batchId, b.status, b.date
         FROM locations l
-        FULL JOIN equipment e ON e.siteId = ?
-        LEFT JOIN locations l ON l.siteId = ?
-        LEFT JOIN equipment e ON e.siteId = ?
+        FULL JOIN equipment e ON e.siteId = l.siteId
         LEFT JOIN batches b ON e.equipmentId = b.equipmentId
         WHERE l.siteId = ? OR e.siteId = ?
       `, [siteId, siteId, siteId], (err, rows) => {
