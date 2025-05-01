@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Batch, Product, Site } from '../types/interfaces';
+import { Batch, Product, Site, Equipment } from '../types/interfaces'; // Add Equipment to import
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
@@ -41,6 +41,7 @@ const BatchDetails: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set()); // Track pending deletions
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -431,11 +432,12 @@ const BatchDetails: React.FC = () => {
       setError('Failed to generate batch sheet: ' + err.message);
     }
   };
-  
+
   if (!batch) return <div>Loading...</div>;
 
   const product = products.find(p => p.id === batch.productId);
   const site = sites.find(s => s.siteId === batch.siteId);
+  const currentEquipment = equipment.find((e: Equipment) => e.equipmentId === batch.equipmentId);
 
   return (
     <div className="page-container">
@@ -447,6 +449,7 @@ const BatchDetails: React.FC = () => {
         <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
         <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
         <p><strong>Status:</strong> {batch.status}</p>
+        <p><strong>Current Equipment:</strong> {currentEquipment?.name || (batch?.equipmentId ? `Equipment ID: ${batch.equipmentId}` : 'None')}</p>
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
 
