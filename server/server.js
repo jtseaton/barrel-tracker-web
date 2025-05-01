@@ -2464,64 +2464,70 @@ app.put('/api/equipment/:equipmentId', (req, res) => {
   });
 });
 
-// Update GET /api/facility-design?siteId (~line 1600)
 app.get('/api/facility-design', (req, res) => {
   const { siteId } = req.query;
   if (!siteId) {
+    console.error('GET /api/facility-design: Missing siteId');
     return res.status(400).json({ error: 'siteId parameter is required' });
   }
-  db.all(`
-    SELECT o.id, o.siteId, o.locationId, o.equipmentId, o.shape, o.x, o.y, o.width, o.height, o.radius, o.abbreviation,
-           l.name AS locationName, e.name AS equipmentName,
-           b.batchId, b.status, b.date
-    FROM facilityDesignObjects o
-    LEFT JOIN locations l ON o.locationId = l.locationId
-    LEFT JOIN equipment e ON o.equipmentId = e.equipmentId
-    LEFT JOIN batches b ON e.equipmentId = b.equipmentId
-    WHERE o.siteId = ?
-  `, [siteId], (err, rows) => {
-    if (err) {
-      console.error('Fetch facility design error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    const objectsById = {};
-    rows.forEach(row => {
-      if (!objectsById[row.id]) {
-        objectsById[row.id] = {
-          id: row.id,
-          siteId: row.siteId,
-          locationId: row.locationId,
-          equipmentId: row.equipmentId,
-          shape: row.shape,
-          x: row.x,
-          y: row.y,
-          width: row.width,
-          height: row.height,
-          radius: row.radius,
-          abbreviation: row.abbreviation,
-          locationName: row.locationName,
-          equipmentName: row.equipmentName,
-          batches: []
-        };
+  db.get(
+    `SELECT objects FROM facility_designs WHERE siteId = ?`,
+    [siteId],
+    (err, row) => {
+      if (err) {
+        console.error('GET /api/facility-design error:', err);
+        return res.status(500).json({ error: err.message });
       }
-      if (row.batchId) {
-        objectsById[row.id].batches.push({
-          batchId: row.batchId,
-          status: row.status,
-          date: row.date
+      if (!row) {
+        console.log(`GET /api/facility-design: No design found for siteId=${siteId}`);
+        return res.json({ objects: [] });
+      }
+      let objects;
+      try {
+        objects = JSON.parse(row.objects || '[]');
+      } catch (e) {
+        console.error('GET /api/facility-design: Error parsing objects JSON', e);
+        return res.status(500).json({ error: 'Invalid design data format' });
+      }
+      // Enrich objects with location, equipment, and batch data
+      db.all(`
+        SELECT l.locationId, l.name AS locationName,
+               e.equipmentId, e.name AS equipmentName,
+               b.batchId, b.status, b.date
+        FROM locations l
+        FULL JOIN equipment e ON e.siteId = ?
+        LEFT JOIN batches b ON e.equipmentId = b.equipmentId
+        WHERE l.siteId = ? OR e.siteId = ?
+      `, [siteId, siteId, siteId], (err, rows) => {
+        if (err) {
+          console.error('GET /api/facility-design enrichment error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        const enrichedObjects = objects.map((obj: DesignObject) => {
+          const location = rows.find(row => row.locationId === obj.locationId);
+          const equipment = rows.find(row => row.equipmentId === obj.equipmentId);
+          const batches = rows
+            .filter(row => row.equipmentId === obj.equipmentId && row.batchId)
+            .map(row => ({ batchId: row.batchId, status: row.status, date: row.date }));
+          return {
+            ...obj,
+            locationName: location?.locationName,
+            equipmentName: equipment?.equipmentName,
+            batches: batches.length > 0 ? batches : [],
+          };
         });
-      }
-    });
-    const objects = Object.values(objectsById);
-    console.log(`GET /api/facility-design?siteId=${siteId}, returning:`, { objects });
-    res.json({ objects });
-  });
+        console.log(`GET /api/facility-design: Returning for siteId=${siteId}`, { objects: enrichedObjects });
+        res.json({ objects: enrichedObjects });
+      });
+    }
+  );
 });
 
 app.put('/api/facility-design', (req, res) => {
   const { siteId, objects } = req.body;
-  if (!siteId || !objects) {
-    return res.status(400).json({ error: 'siteId and objects are required' });
+  if (!siteId || !Array.isArray(objects)) {
+    console.error('PUT /api/facility-design: Missing or invalid siteId/objects', { siteId, objects });
+    return res.status(400).json({ error: 'siteId and objects array are required' });
   }
   const objectsJson = JSON.stringify(objects);
   const timestamp = new Date().toISOString();
@@ -2532,11 +2538,11 @@ app.put('/api/facility-design', (req, res) => {
     [siteId, objectsJson, timestamp, timestamp, objectsJson, timestamp],
     (err) => {
       if (err) {
-        console.error('Update facility design error:', err);
+        console.error('PUT /api/facility-design error:', err);
         return res.status(500).json({ error: err.message });
       }
-      console.log(`Updated/Inserted design for siteId: ${siteId}`);
-      res.json({ message: 'Design updated successfully' });
+      console.log(`PUT /api/facility-design: Saved design for siteId=${siteId}, objects=`, objects);
+      res.json({ message: 'Design saved successfully' });
     }
   );
 });
