@@ -319,14 +319,14 @@ db.serialize(() => {
     ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 8, 'Stored']);
-      // Insert mock recipes
-    db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
-      [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }])]);
-      db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
-        [2, 'IPA Recipe', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50, unit: 'lbs' }]), '10', 'barrels']);
-    // Insert mock batches
-    db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
-      ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
+  // Insert mock recipes
+  db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
+    [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }]), '100', 'gallons']);
+  db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
+    [2, 'IPA Recipe', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50, unit: 'lbs' }]), '10', 'barrels']);
+  // Insert mock batches
+  db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
+    ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
   db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`, 
     ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
       if (err) console.error('Insert error:', err);
@@ -682,15 +682,20 @@ app.post('/api/batches', (req, res) => {
                   if (remaining === 0) finishValidation(inventoryUpdates);
                   return;
                 }
-                db.get(
-                  'SELECT SUM(CAST(quantity AS REAL)) as total FROM inventory WHERE identifier = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
-                  [ing.itemName, normalizedUnit, ing.unit || 'Pounds', siteId],
-                  (err, row) => {
+                // Debug inventory rows
+                db.all(
+                  'SELECT identifier, quantity, unit FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+                  [ing.itemName, normalizedUnit, 'pounds', siteId],
+                  (err, rows) => {
                     if (err) {
                       console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
                       errors.push(`Database error for ${ing.itemName}: ${err.message}`);
                     } else {
-                      const available = row && row.total ? parseFloat(row.total) : 0;
+                      console.log(`Inventory rows for ${ing.itemName} (${normalizedUnit}) at site ${siteId}:`, rows);
+                      const available = rows.reduce((sum, row) => {
+                        const qty = parseFloat(row.quantity);
+                        return sum + (isNaN(qty) ? 0 : qty);
+                      }, 0);
                       console.log(`Inventory check for ${ing.itemName} (${normalizedUnit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`);
                       if (available < ing.quantity) {
                         errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${normalizedUnit} available, ${ing.quantity}${normalizedUnit} needed`);
@@ -730,8 +735,8 @@ app.post('/api/batches', (req, res) => {
                 }
                 inventoryUpdates.forEach(({ itemName, quantity, unit }, index) => {
                   db.run(
-                    'UPDATE inventory SET quantity = CAST(quantity AS REAL) - ? WHERE identifier = ? AND (LOWER(unit) = ? OR unit = ?) AND siteId = ?',
-                    [quantity, itemName, unit, 'Pounds', siteId],
+                    'UPDATE inventory SET quantity = CAST(quantity AS REAL) - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+                    [quantity, itemName, unit, 'pounds', siteId],
                     (err) => {
                       if (err) {
                         console.error(`Error updating inventory for ${itemName} at index ${index}:`, err);
@@ -1940,6 +1945,36 @@ app.get('/api/inventory', (req, res) => {
 app.get('/api/debug/inventory', (req, res) => {
   db.all('SELECT * FROM inventory', (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.get('/api/debug/inventory-rows', (req, res) => {
+  const { identifier, siteId, unit } = req.query;
+  let query = 'SELECT * FROM inventory';
+  let params = [];
+  let conditions = [];
+  if (identifier) {
+    conditions.push('identifier = ?');
+    params.push(identifier);
+  }
+  if (siteId) {
+    conditions.push('siteId = ?');
+    params.push(siteId);
+  }
+  if (unit) {
+    conditions.push('LOWER(unit) IN (?, ?)');
+    params.push(unit.toLowerCase(), 'pounds');
+  }
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('Debug inventory rows error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Debug inventory rows:', rows);
     res.json(rows);
   });
 });
