@@ -132,7 +132,7 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
                   <h4 style={{ color: '#555', marginBottom: '10px' }}>Batches</h4>
                   {selectedObject?.batches && selectedObject.batches.length > 0 ? (
                     <ul style={{ listStyle: 'none', padding: 0 }}>
-                      {selectedObject.batches.map((batch: Batch) => (
+                      {Array.from(new Map(selectedObject.batches.map(batch => [batch.batchId, batch])).values()).map((batch: Batch) => (
                         <li
                           key={batch.batchId}
                           style={{ padding: '10px', borderBottom: '1px solid #eee', color: '#333' }}
@@ -202,7 +202,7 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
                           x={obj.x - (obj.radius || 30) / 2}
                           y={obj.y + (obj.radius || 30) + 10}
                           width={obj.radius || 30}
-                          text={obj.batches.map((b: Batch) => b.batchId).join(', ')}
+                          text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
                           fontSize={10}
                           fontFamily="Arial"
                           fill="black"
@@ -240,7 +240,7 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
                           x={obj.x}
                           y={obj.y + (obj.height || 60) + 10}
                           width={obj.width || 100}
-                          text={obj.batches.map((b: Batch) => b.batchId).join(', ')}
+                          text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
                           fontSize={10}
                           fontFamily="Arial"
                           fill="black"
