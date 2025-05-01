@@ -2497,10 +2497,10 @@ app.get('/api/facility-design', (req, res) => {
                e.equipmentId, e.name AS equipmentName,
                b.batchId, b.status, b.date
         FROM locations l
-        FULL JOIN equipment e ON e.siteId = l.siteId
+        LEFT JOIN equipment e ON e.siteId = ?
         LEFT JOIN batches b ON e.equipmentId = b.equipmentId
-        WHERE l.siteId = ? OR e.siteId = ?
-      `, [siteId, siteId, siteId], (err, rows) => {
+        WHERE l.siteId = ?
+      `, [siteId, siteId], (err, rows) => {
         if (err) {
           console.error('GET /api/facility-design enrichment error:', err);
           return res.status(500).json({ error: err.message });
