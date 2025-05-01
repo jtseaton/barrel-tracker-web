@@ -2499,7 +2499,7 @@ app.get('/api/facility-design', (req, res) => {
         FROM equipment e
         LEFT JOIN locations l ON l.siteId = e.siteId
         LEFT JOIN batches b ON e.equipmentId = b.equipmentId
-        WHERE e.siteId = ?
+        WHERE e.siteId = ? OR l.siteId = ?
       `, [siteId, siteId], (err, rows) => {
         if (err) {
           console.error('GET /api/facility-design enrichment error:', err);
