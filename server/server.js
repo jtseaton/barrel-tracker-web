@@ -1122,8 +1122,8 @@ app.patch('/api/batches/:batchId', (req, res) => {
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
-    const updates: string[] = [];
-    const values: any[] = [];
+    const updates = [];
+    const values = [];
     if (status && ['In Progress', 'Completed'].includes(status)) {
       updates.push('status = ?');
       values.push(status);
