@@ -158,102 +158,105 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           }}
         >
-          <Stage width={800} height={600}>
-            <Layer>
-              {objects.length === 0 && (
+<Stage width={800} height={600}>
+  <Layer>
+    {objects.length === 0 && (
+      <Text
+        x={400}
+        y={300}
+        width={200}
+        text="No design objects found"
+        fontSize={16}
+        fontFamily="Arial"
+        fill="gray"
+        align="center"
+      />
+    )}
+    {objects.map((obj: DesignObject) => {
+      console.log('Rendering object:', { id: obj.id, abbreviation: obj.abbreviation, locationId: obj.locationId, equipmentId: obj.equipmentId });
+      return (
+        <React.Fragment key={obj.id}>
+          {obj.shape === 'circle' ? (
+            <>
+              <Circle
+                x={obj.x}
+                y={obj.y}
+                radius={obj.radius}
+                fill="#90CAF9"
+                stroke="black"
+                onClick={() => handleShapeClick(obj)}
+              />
+              <Text
+                x={obj.x - (obj.radius || 30) / 2}
+                y={obj.y - (obj.radius || 30) / 2}
+                width={obj.radius || 30}
+                height={obj.radius || 30}
+                text={obj.abbreviation}
+                fontSize={12}
+                fontFamily="Arial"
+                fill="black"
+                align="center"
+                verticalAlign="middle"
+                listening={false}
+              />
+              {obj.batches && obj.batches.length > 0 && (
                 <Text
-                  x={400}
-                  y={300}
-                  width={200}
-                  text="No design objects found"
-                  fontSize={16}
+                  x={obj.x - (obj.radius || 30) / 2}
+                  y={obj.y + (obj.radius || 30) + 10}
+                  width={obj.radius || 30}
+                  text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
+                  fontSize={10}
                   fontFamily="Arial"
-                  fill="gray"
+                  fill="black"
                   align="center"
+                  listening={false}
                 />
               )}
-              {objects.map((obj: DesignObject) => (
-                <React.Fragment key={obj.id}>
-                  {obj.shape === 'circle' ? (
-                    <>
-                      <Circle
-                        x={obj.x}
-                        y={obj.y}
-                        radius={obj.radius}
-                        fill="#90CAF9"
-                        stroke="black"
-                        onClick={() => handleShapeClick(obj)}
-                      />
-                      <Text
-                        x={obj.x - (obj.radius || 30) / 2}
-                        y={obj.y - (obj.radius || 30) / 2}
-                        width={obj.radius || 30}
-                        height={obj.radius || 30}
-                        text={obj.abbreviation}
-                        fontSize={12}
-                        fontFamily="Arial"
-                        fill="black"
-                        align="center"
-                        verticalAlign="middle"
-                        listening={false}
-                      />
-                      {obj.batches && obj.batches.length > 0 && (
-                        <Text
-                          x={obj.x - (obj.radius || 30) / 2}
-                          y={obj.y + (obj.radius || 30) + 10}
-                          width={obj.radius || 30}
-                          text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
-                          fontSize={10}
-                          fontFamily="Arial"
-                          fill="black"
-                          align="center"
-                          listening={false}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Rect
-                        x={obj.x}
-                        y={obj.y}
-                        width={obj.width}
-                        height={obj.height}
-                        fill="#A5D6A7"
-                        stroke="black"
-                        onClick={() => handleShapeClick(obj)}
-                      />
-                      <Text
-                        x={obj.x}
-                        y={obj.y + ((obj.height || 60) / 2) - 6}
-                        width={obj.width || 100}
-                        height={12}
-                        text={obj.abbreviation}
-                        fontSize={12}
-                        fontFamily="Arial"
-                        fill="black"
-                        align="center"
-                        verticalAlign="middle"
-                        listening={false}
-                      />
-                      {obj.batches && obj.batches.length > 0 && (
-                        <Text
-                          x={obj.x}
-                          y={obj.y + (obj.height || 60) + 10}
-                          width={obj.width || 100}
-                          text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
-                          fontSize={10}
-                          fontFamily="Arial"
-                          fill="black"
-                          align="center"
-                          listening={false}
-                        />
-                      )}
-                    </>
-                  )}
-                </React.Fragment>
-              ))}
-            </Layer>
-          </Stage>
+            </>
+          ) : (
+            <>
+              <Rect
+                x={obj.x}
+                y={obj.y}
+                width={obj.width}
+                height={obj.height}
+                fill="#A5D6A7"
+                stroke="black"
+                onClick={() => handleShapeClick(obj)}
+              />
+              <Text
+                x={obj.x}
+                y={obj.y + ((obj.height || 60) / 2) - 6}
+                width={obj.width || 100}
+                height={12}
+                text={obj.abbreviation}
+                fontSize={12}
+                fontFamily="Arial"
+                fill="black"
+                align="center"
+                verticalAlign="middle"
+                listening={false}
+              />
+              {obj.batches && obj.batches.length > 0 && (
+                <Text
+                  x={obj.x}
+                  y={obj.y + (obj.height || 60) + 10}
+                  width={obj.width || 100}
+                  text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
+                  fontSize={10}
+                  fontFamily="Arial"
+                  fill="black"
+                  align="center"
+                  listening={false}
+                />
+              )}
+            </>
+          )}
+        </React.Fragment>
+      );
+    })}
+  </Layer>
+</Stage>
         </div>
       </div>
     </div>

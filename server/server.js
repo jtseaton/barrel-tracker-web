@@ -305,11 +305,11 @@ db.serialize(() => {
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Flaked Corn', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops Cascade', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+    ['Hops Cascade', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 8, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
+    ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+    ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 8, 'Stored']);
       // Insert mock recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
       [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100 }])]);
@@ -2477,7 +2477,7 @@ app.get('/api/facility-design', (req, res) => {
     [siteId],
     (err, row) => {
       if (err) {
-        console.error('GET /api/facility-design error:', err);
+        console.error('GET /api/facility-design fetch error:', err);
         return res.status(500).json({ error: err.message });
       }
       if (!row) {
@@ -2487,14 +2487,14 @@ app.get('/api/facility-design', (req, res) => {
       let objects;
       try {
         objects = JSON.parse(row.objects || '[]');
+        console.log('Parsed objects from facility_designs:', objects);
       } catch (e) {
         console.error('GET /api/facility-design: Error parsing objects JSON', e);
         return res.status(500).json({ error: 'Invalid design data format' });
       }
-      // Enrich objects with location, equipment, and batch data
       db.all(`
-        SELECT DISTINCT l.locationId, l.name AS locationName,
-               e.equipmentId, e.name AS equipmentName,
+        SELECT DISTINCT l.locationId, l.name AS locationName, l.abbreviation AS locationAbbreviation,
+               e.equipmentId, e.name AS equipmentName, e.abbreviation AS equipmentAbbreviation,
                b.batchId, b.status, b.date
         FROM equipment e
         LEFT JOIN locations l ON l.siteId = e.siteId
@@ -2505,17 +2505,21 @@ app.get('/api/facility-design', (req, res) => {
           console.error('GET /api/facility-design enrichment error:', err);
           return res.status(500).json({ error: err.message });
         }
+        console.log('Enrichment query rows:', rows);
         const enrichedObjects = objects.map((obj) => {
           const location = rows.find(row => row.locationId === obj.locationId);
           const equipment = rows.find(row => row.equipmentId === obj.equipmentId);
           const batches = rows
             .filter(row => row.equipmentId === obj.equipmentId && row.batchId)
             .map(row => ({ batchId: row.batchId, status: row.status, date: row.date }));
+          // Deduplicate batches by batchId
+          const uniqueBatches = Array.from(new Map(batches.map(b => [b.batchId, b])).values());
           return {
             ...obj,
-            locationName: location?.locationName,
-            equipmentName: equipment?.equipmentName,
-            batches: batches.length > 0 ? batches : [],
+            locationName: location?.locationName || obj.locationName,
+            equipmentName: equipment?.equipmentName || obj.equipmentName,
+            abbreviation: location?.locationAbbreviation || equipment?.equipmentAbbreviation || obj.abbreviation,
+            batches: uniqueBatches.length > 0 ? uniqueBatches : obj.batches || [],
           };
         });
         console.log(`GET /api/facility-design: Returning for siteId=${siteId}`, { objects: enrichedObjects });
