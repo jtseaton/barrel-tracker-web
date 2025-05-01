@@ -285,19 +285,19 @@ const BatchDetails: React.FC = () => {
       const brewLog = await brewLogRes.json();
       const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
       const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
-
+  
       // Create PDF
       const doc = new jsPDF();
       const margin = 8;
       let y = margin;
-
+  
       // Title
       doc.setFont('times', 'bold');
       doc.setFontSize(18);
       doc.setTextColor(33, 150, 243); // Blue #2196F3
       doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
       y += 8;
-
+  
       // Batch Details Section
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -308,7 +308,7 @@ const BatchDetails: React.FC = () => {
       doc.setDrawColor(33, 150, 243);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       const batchDetails = [
@@ -323,7 +323,7 @@ const BatchDetails: React.FC = () => {
         doc.text(`${label}: ${value}`, margin, y);
         y += 6;
       });
-
+  
       // Ingredients Section
       y += 4;
       doc.setFont('helvetica', 'bold');
@@ -333,7 +333,7 @@ const BatchDetails: React.FC = () => {
       doc.setLineWidth(0.5);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       if (batchData.ingredients.length > 0) {
         doc.autoTable({
           startY: y,
@@ -362,7 +362,7 @@ const BatchDetails: React.FC = () => {
         doc.text('None', margin, y);
         y += 8;
       }
-
+  
       // Brew Day Log Section
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -371,7 +371,7 @@ const BatchDetails: React.FC = () => {
       doc.setLineWidth(0.5);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       if (brewLog.date) {
@@ -396,7 +396,34 @@ const BatchDetails: React.FC = () => {
         doc.text('No brew log available', margin, y);
         y += 8;
       }
-
+  
+      // Batch Actions Section
+      y += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Batch Actions', margin, y);
+      y += 4;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
+  
+      if (actions.length > 0) {
+        actions.forEach((action) => {
+          const timestamp = new Date(action.timestamp).toLocaleString();
+          const actionText = `- ${action.action} (${timestamp})`;
+          const splitAction = doc.splitTextToSize(actionText, 184);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.text(splitAction, margin, y);
+          y += splitAction.length * 6;
+        });
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('No actions recorded', margin, y);
+        y += 8;
+      }
+  
       // Save PDF
       doc.save(`batch_${batchData.batchId}_sheet.pdf`);
     } catch (err: any) {
@@ -404,6 +431,7 @@ const BatchDetails: React.FC = () => {
       setError('Failed to generate batch sheet: ' + err.message);
     }
   };
+  
   if (!batch) return <div>Loading...</div>;
 
   const product = products.find(p => p.id === batch.productId);
