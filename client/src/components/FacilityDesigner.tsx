@@ -46,7 +46,7 @@ const FacilityDesigner: React.FC = () => {
           console.log(`Fetched data for siteId=${siteId}:`, { locationsData, equipmentData, designData });
           setLocations(locationsData);
           setEquipment(equipmentData);
-          setObjects(designData?.objects || []);
+          setObjects(designData?.objects && Array.isArray(designData.objects) ? designData.objects : []);
         })
         .catch((err) => setError('Failed to load data: ' + err.message));
     } else {
