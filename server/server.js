@@ -288,9 +288,9 @@ db.serialize(() => {
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Flaked Corn', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops (Cascade)', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+    ['Hops Cascade', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops (Cascade)', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
+    ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 1, 'Stored']);
     // Insert mock recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients) VALUES (?, ?, ?, ?)',
       [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100 }])]);
@@ -1110,36 +1110,66 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
 // PATCH /api/batches/:batchId
 app.patch('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
-  const { batchId: newBatchId, status } = req.body;
-  if (!newBatchId && !status) {
-    return res.status(400).json({ error: 'batchId or status required' });
+  const { status, batchId: newBatchId } = req.body;
+  if (!status && !newBatchId) {
+    return res.status(400).json({ error: 'Status or new batchId required' });
   }
-  const updates = [];
-  const params = [];
-  if (newBatchId) {
-    updates.push('batchId = ?');
-    params.push(newBatchId);
-  }
-  if (status) {
-    updates.push('status = ?');
-    params.push(status);
-  }
-  params.push(batchId);
-  db.run(
-    `UPDATE batches SET ${updates.join(', ')} WHERE batchId = ?`,
-    params,
-    function(err) {
-      if (err) {
-        console.error('Update batch error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Batch not found' });
-      }
-      console.log(`PATCH /api/batches/${batchId}, updated:`, { newBatchId, status });
-      res.json({ message: 'Batch updated' });
+  db.get('SELECT status FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+    if (err) {
+      console.error('Fetch batch error:', err);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (!batch) {
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+    const updates: string[] = [];
+    const values: any[] = [];
+    if (status && ['In Progress', 'Completed'].includes(status)) {
+      updates.push('status = ?');
+      values.push(status);
+    }
+    if (newBatchId) {
+      updates.push('batchId = ?');
+      values.push(newBatchId);
+    }
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid updates provided' });
+    }
+    values.push(batchId);
+    db.run(
+      `UPDATE batches SET ${updates.join(', ')} WHERE batchId = ?`,
+      values,
+      (err) => {
+        if (err) {
+          console.error('Update batch error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        db.get(`
+          SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+                 b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
+          FROM batches b
+          JOIN products p ON b.productId = p.id
+          JOIN recipes r ON b.recipeId = r.id
+          JOIN sites s ON b.siteId = s.siteId
+          WHERE b.batchId = ?
+        `, [newBatchId || batchId], (err, updatedBatch) => {
+          if (err) {
+            console.error('Fetch updated batch error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          const recipeIngredients = JSON.parse(updatedBatch.ingredients || '[]');
+          const additionalIngredients = JSON.parse(updatedBatch.additionalIngredients || '[]');
+          updatedBatch.ingredients = [
+            ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+            ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: false }))
+          ];
+          updatedBatch.additionalIngredients = additionalIngredients;
+          console.log(`PATCH /api/batches/${batchId}, updated:`, updatedBatch);
+          res.json(updatedBatch);
+        });
+      }
+    );
+  });
 });
 
 // Replace DELETE /api/batches/:batchId (~line 600)
