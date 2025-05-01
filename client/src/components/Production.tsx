@@ -10,11 +10,17 @@ interface Ingredient {
   unit: string;
 }
 
+interface Equipment {
+  equipmentId: number;
+  name: string;
+}
+
 const Production: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
@@ -24,6 +30,7 @@ const Production: React.FC = () => {
     productId: 0,
     recipeId: 0,
     siteId: '',
+    equipmentId: null,
   });
   const [newRecipe, setNewRecipe] = useState<{
     name: string;
@@ -59,11 +66,6 @@ const Production: React.FC = () => {
             const text = await res.text();
             throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
-          const contentType = res.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            const text = await res.text();
-            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
-          }
           const data = await res.json();
           setter(data);
         }
@@ -74,6 +76,20 @@ const Production: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (newBatch.siteId) {
+      fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}`)
+        .then((res) => res.json())
+        .then((data) => setEquipment(data))
+        .catch((err) => {
+          console.error('Fetch equipment error:', err);
+          setError('Failed to load equipment: ' + err.message);
+        });
+    } else {
+      setEquipment([]);
+    }
+  }, [newBatch.siteId]);
 
   const fetchRecipes = async (productId: number) => {
     if (!productId) {
@@ -88,13 +104,7 @@ const Production: React.FC = () => {
         const text = await res.text();
         throw new Error(`Failed to fetch recipes: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        throw new Error(`Invalid response for recipes: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
-      }
       const data = await res.json();
-      console.log('Fetched recipes for productId', productId, ':', data);
       setRecipes(data);
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
@@ -118,8 +128,6 @@ const Production: React.FC = () => {
       setError('Invalid recipe selected');
       return;
     }
-    console.log('Selected recipe ingredients for recipeId', newBatch.recipeId, ':', recipe.ingredients);
-
     const batchData = {
       batchId: newBatch.batchId,
       productId: newBatch.productId,
@@ -127,8 +135,8 @@ const Production: React.FC = () => {
       siteId: newBatch.siteId,
       status: 'In Progress',
       date: new Date().toISOString().split('T')[0],
+      equipmentId: newBatch.equipmentId || null,
     };
-    console.log('Sending batch data to /api/batches:', batchData);
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
         method: 'POST',
@@ -141,7 +149,6 @@ const Production: React.FC = () => {
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
-          console.log('Server error response:', errorMessage);
           if (errorMessage.includes('Insufficient inventory')) {
             setErrorMessage(errorMessage);
             setShowErrorPopup(true);
@@ -153,17 +160,12 @@ const Production: React.FC = () => {
         }
         throw new Error(errorMessage);
       }
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        throw new Error(`Invalid response for batch: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
-      }
       const addedBatch = await res.json();
-      console.log('Batch created:', addedBatch);
       setBatches([...batches, { ...addedBatch, productName: product.name, siteName: sites.find(s => s.siteId === batchData.siteId)?.name }]);
       setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
+      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null });
       setRecipes([]);
+      setEquipment([]);
       setError(null);
       setErrorMessage(null);
       setShowErrorPopup(false);
@@ -432,7 +434,7 @@ const Production: React.FC = () => {
                   type="text"
                   value={newBatch.batchId || ''}
                   onChange={(e) => setNewBatch({ ...newBatch, batchId: e.target.value })}
-                  placeholder="Enter batch ID (e.g., BATCH-001)"
+                  placeholder="Enter batch ID (e.g., HT245251)"
                   style={{
                     width: '100%',
                     maxWidth: '350px',
@@ -507,7 +509,7 @@ const Production: React.FC = () => {
                 </label>
                 <select
                   value={newBatch.siteId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value })}
+                  onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value, equipmentId: null })}
                   style={{
                     width: '100%',
                     maxWidth: '350px',
@@ -523,6 +525,32 @@ const Production: React.FC = () => {
                   <option value="">Select Site</option>
                   {sites.map((site) => (
                     <option key={site.siteId} value={site.siteId}>{site.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Equipment (optional):
+                </label>
+                <select
+                  value={newBatch.equipmentId || ''}
+                  onChange={(e) => setNewBatch({ ...newBatch, equipmentId: parseInt(e.target.value) || null })}
+                  disabled={!newBatch.siteId}
+                  style={{
+                    width: '100%',
+                    maxWidth: '350px',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: newBatch.siteId ? '#FFFFFF' : '#f0f0f0',
+                  }}
+                >
+                  <option value="">Select Equipment</option>
+                  {equipment.map((equip) => (
+                    <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
                   ))}
                 </select>
               </div>
@@ -548,8 +576,9 @@ const Production: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddBatchModal(false);
-                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
+                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null });
                   setRecipes([]);
+                  setEquipment([]);
                   setError(null);
                   setErrorMessage(null);
                   setShowErrorPopup(false);
