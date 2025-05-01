@@ -746,6 +746,7 @@ const BatchDetails: React.FC = () => {
           </button>
         </div>
       </div>
+      <div/>
       <div className="batch-details">
         <p><strong>Product:</strong> {product?.name || 'Unknown'}</p>
         <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>

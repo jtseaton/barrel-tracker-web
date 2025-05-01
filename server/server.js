@@ -272,6 +272,8 @@ db.serialize(() => {
   db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
     ['Fermentation FV1', 'FV1', 'BR-AL-20019', 1]);
   db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
+    ['Fermentation FV2', 'FV2', 'BR-AL-20019', 1]);
+  db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
     ['Brite Tank', 'BT', 'BR-AL-20019', 1]);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
     ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
