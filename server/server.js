@@ -721,6 +721,43 @@ app.post('/api/batches', (req, res) => {
   });
 });
 
+// New endpoint for updating equipment and ingredients
+app.post('/api/batches/:batchId/equipment', (req, res) => {
+  const { batchId } = req.params;
+  const { equipmentId, ingredients, stage } = req.body;
+  if (!equipmentId || !stage) {
+    console.error('POST /api/batches/:batchId/equipment: Missing equipmentId or stage', { batchId, equipmentId, stage });
+    return res.status(400).json({ error: 'equipmentId and stage are required' });
+  }
+  db.run(
+    `UPDATE batches SET equipmentId = ?, stage = ? WHERE batchId = ?`,
+    [equipmentId, stage, batchId],
+    (err) => {
+      if (err) {
+        console.error('POST /api/batches/:batchId/equipment error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (ingredients && Array.isArray(ingredients)) {
+        db.run(
+          `UPDATE batches SET additionalIngredients = ? WHERE batchId = ?`,
+          [JSON.stringify(ingredients), batchId],
+          (err) => {
+            if (err) {
+              console.error('POST /api/batches/:batchId/equipment ingredients error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log(`POST /api/batches/:batchId/equipment: Updated batch ${batchId} to equipmentId=${equipmentId}, stage=${stage}, ingredients=`, ingredients);
+            res.json({ message: 'Batch equipment updated successfully' });
+          }
+        );
+      } else {
+        console.log(`POST /api/batches/:batchId/equipment: Updated batch ${batchId} to equipmentId=${equipmentId}, stage=${stage}`);
+        res.json({ message: 'Batch equipment updated successfully' });
+      }
+    }
+  );
+});
+
 // Add PATCH /api/batches/:batchId/equipment (~line 1100)
 app.patch('/api/batches/:batchId/equipment', (req, res) => {
   const { batchId } = req.params;

@@ -20,29 +20,30 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [selectedObject, setSelectedObject] = useState<DesignObject | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [sitesData, locationsData, equipmentData, designData] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/sites`).then((res) => res.json()),
-          siteId ? fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
-          siteId ? fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
-          siteId ? fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve({ objects: [] }),
-        ]);
-        console.log('FacilityView fetched data:', { sitesData, locationsData, equipmentData, designData });
-        setSites(sitesData);
-        setLocations(locationsData);
-        setEquipment(equipmentData);
-        setObjects(designData?.objects && Array.isArray(designData.objects) ? designData.objects : []);
-        setError(designData?.error || (designData?.objects && !Array.isArray(designData.objects) ? 'Invalid design data' : null));
-      } catch (err: any) {
-        console.error('Fetch error:', err);
-        setError('Failed to load facility design: ' + err.message);
-      }
-    };
-    fetchData();
-  }, [siteId]);
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      const [sitesData, locationsData, equipmentData, designData] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/sites`).then((res) => res.json()),
+        siteId ? fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
+        siteId ? fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
+        siteId ? fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve({ objects: [] }),
+      ]);
+      console.log('FacilityView fetched data:', { sitesData, locationsData, equipmentData, designData });
+      setSites(sitesData);
+      setLocations(locationsData);
+      setEquipment(equipmentData);
+      setObjects(designData?.objects && Array.isArray(designData.objects) ? designData.objects : []);
+      setError(designData?.error || (designData?.objects && !Array.isArray(designData.objects) ? 'Invalid design data' : null));
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      setError('Failed to load facility design: ' + err.message);
+    }
+  };
+  fetchData();
+}, [siteId, refreshTrigger]);
 
   useEffect(() => {
     if (selectedLocationId) {
