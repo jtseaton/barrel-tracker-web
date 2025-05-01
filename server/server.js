@@ -382,6 +382,15 @@ db.serialize(() => {
         console.error('Error adding additionalIngredients column:', err);
       }
     });
+    db.run(`
+      ALTER TABLE batches ADD COLUMN volume REAL
+    `, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error('Error adding volume column to batches:', err);
+      } else {
+        console.log('Added volume column to batches table');
+      }
+    });
 });
 
 // GET /api/users
@@ -567,7 +576,6 @@ app.get('/api/batches', (req, res) => {
   });
 });
 
-// Update POST /api/batches (~line 900)
 app.post('/api/batches', (req, res) => {
   const { batchId, productId, recipeId, siteId, status, date, equipmentId } = req.body;
   console.log('Received /api/batches request:', req.body);
@@ -591,7 +599,7 @@ app.post('/api/batches', (req, res) => {
       console.log('Product not found:', productId);
       return res.status(400).json({ error: `Invalid productId: ${productId}` });
     }
-    db.get('SELECT ingredients FROM recipes WHERE id = ?', [recipeId], (err, recipe) => {
+    db.get('SELECT ingredients, quantity, unit FROM recipes WHERE id = ?', [recipeId], (err, recipe) => {
       if (err) {
         console.error('Error fetching recipe:', err);
         return res.status(500).json({ error: 'Database error fetching recipe' });
@@ -607,7 +615,14 @@ app.post('/api/batches', (req, res) => {
         console.error('Error parsing recipe ingredients:', e);
         return res.status(500).json({ error: 'Invalid recipe ingredients format' });
       }
-      console.log('Recipe ingredients for recipeId', recipeId, ':', ingredients);
+      // Convert recipe quantity to barrels
+      let volume = parseFloat(recipe.quantity) || 0;
+      if (recipe.unit.toLowerCase() === 'gallons') {
+        volume /= 31; // 1 barrel = 31 gallons
+      } else if (recipe.unit.toLowerCase() === 'liters') {
+        volume /= 117.348; // 1 barrel = 117.348 liters
+      } // Else assume barrels
+      console.log('Recipe ingredients for recipeId', recipeId, ':', ingredients, 'volume:', volume);
       const validateEquipment = (callback) => {
         if (!equipmentId) return callback();
         db.get('SELECT equipmentId FROM equipment WHERE equipmentId = ? AND siteId = ?', [equipmentId, siteId], (err, equipment) => {
@@ -689,17 +704,17 @@ app.post('/api/batches', (req, res) => {
 
         function createBatch(inventoryUpdates) {
           db.run(
-            'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date, additionalIngredients, equipmentId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [batchId, productId, recipeId, siteId, status, date, JSON.stringify([]), equipmentId || null],
+            'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date, additionalIngredients, equipmentId, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [batchId, productId, recipeId, siteId, status, date, JSON.stringify([]), equipmentId || null, volume],
             function(err) {
               if (err) {
                 console.error('Error inserting batch:', err);
                 return res.status(500).json({ error: err.message });
               }
-              console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date, equipmentId });
+              console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date, equipmentId, volume });
               let remainingUpdates = inventoryUpdates.length;
               if (remainingUpdates === 0) {
-                res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], equipmentId });
+                res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], equipmentId, volume });
                 return;
               }
               inventoryUpdates.forEach(({ itemName, quantity, unit }) => {
@@ -717,7 +732,7 @@ app.post('/api/batches', (req, res) => {
                     console.log(`Inventory deducted: ${quantity}${unit} for ${itemName} at site ${siteId}`);
                     remainingUpdates--;
                     if (remainingUpdates === 0) {
-                      res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], equipmentId });
+                      res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], equipmentId, volume });
                     }
                   }
                 );
@@ -798,6 +813,119 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
           }
         }
       );
+    });
+  });
+});
+
+app.post('/api/batches/:batchId/package', (req, res) => {
+  const { batchId } = req.params;
+  const { packageType, quantity, locationId } = req.body;
+  if (!packageType || !quantity || quantity <= 0 || !locationId) {
+    console.error('POST /api/batches/:batchId/package: Missing required fields', { batchId, packageType, quantity, locationId });
+    return res.status(400).json({ error: 'packageType, quantity (> 0), and locationId are required' });
+  }
+  const packageVolumes = {
+    '1/2 BBL Keg': 0.5, // 15.5 gallons
+    '1/6 BBL Keg': 0.167, // 5.16 gallons
+    '750ml Bottle': 0.006 // ~0.198 gallons
+  };
+  if (!packageVolumes[packageType]) {
+    console.error('POST /api/batches/:batchId/package: Invalid packageType', { packageType });
+    return res.status(400).json({ error: `Invalid packageType. Must be one of: ${Object.keys(packageVolumes).join(', ')}` });
+  }
+  db.get(`
+    SELECT b.volume, b.siteId, p.name AS productName, p.type AS productType
+    FROM batches b
+    JOIN products p ON b.productId = p.id
+    WHERE b.batchId = ?
+  `, [batchId], (err, batch) => {
+    if (err) {
+      console.error('POST /api/batches/:batchId/package: Fetch batch error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!batch) {
+      console.error('POST /api/batches/:batchId/package: Batch not found', { batchId });
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+    if (batch.volume === null || batch.volume === undefined) {
+      console.error('POST /api/batches/:batchId/package: Batch volume not set', { batchId });
+      return res.status(400).json({ error: 'Batch volume not set' });
+    }
+    const volumeUsed = packageVolumes[packageType] * quantity;
+    if (volumeUsed > batch.volume) {
+      console.error('POST /api/batches/:batchId/package: Insufficient volume', { batchId, volumeUsed, available: batch.volume });
+      return res.status(400).json({ error: `Insufficient volume: ${volumeUsed} barrels needed, ${batch.volume} barrels available` });
+    }
+    db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, batch.siteId], (err, location) => {
+      if (err) {
+        console.error('POST /api/batches/:batchId/package: Fetch location error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (!location) {
+        console.error('POST /api/batches/:batchId/package: Invalid locationId', { locationId, siteId: batch.siteId });
+        return res.status(400).json({ error: `Invalid locationId: ${locationId} for site ${batch.siteId}` });
+      }
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        const newIdentifier = `${batch.productName} ${packageType}`;
+        db.get(
+          'SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
+          [newIdentifier, batch.productType, 'Storage', batch.siteId, locationId],
+          (err, row) => {
+            if (err) {
+              db.run('ROLLBACK');
+              console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            if (row) {
+              const newQuantity = parseFloat(row.quantity) + quantity;
+              db.run(
+                'UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
+                [newQuantity, newIdentifier, batch.productType, 'Storage', batch.siteId, locationId],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  updateBatchVolume();
+                }
+              );
+            } else {
+              db.run(
+                `INSERT INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [newIdentifier, 'Storage', batch.productType, quantity, 'Units', new Date().toISOString().split('T')[0], 'Packaged', batch.siteId, locationId, 'Stored'],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  updateBatchVolume();
+                }
+              );
+            }
+            function updateBatchVolume() {
+              const newVolume = batch.volume - volumeUsed;
+              db.run(
+                'UPDATE batches SET volume = ? WHERE batchId = ?',
+                [newVolume, batchId],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('POST /api/batches/:batchId/package: Update batch volume error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  db.run('COMMIT');
+                  console.log(`POST /api/batches/:batchId/package: Packaged ${quantity} ${packageType}s, reduced batch ${batchId} volume by ${volumeUsed} to ${newVolume}`);
+                  res.json({ message: 'Packaging successful', newIdentifier, quantity, newVolume });
+                }
+              );
+            }
+          }
+        );
+      });
     });
   });
 });
