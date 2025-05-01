@@ -37,33 +37,21 @@ const FacilityDesigner: React.FC = () => {
 
   useEffect(() => {
     if (siteId) {
-      fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`)
-        .then((res) => res.json())
-        .then((data) => setLocations(data))
-        .catch((err) => setError('Failed to load locations: ' + err.message));
+      Promise.all([
+        fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`).then((res) => res.json()),
+        fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`).then((res) => res.json()),
+        fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`).then((res) => res.json()),
+      ])
+        .then(([locationsData, equipmentData, designData]) => {
+          console.log(`Fetched data for siteId=${siteId}:`, { locationsData, equipmentData, designData });
+          setLocations(locationsData);
+          setEquipment(equipmentData);
+          setObjects(designData?.objects || []);
+        })
+        .catch((err) => setError('Failed to load data: ' + err.message));
     } else {
       setLocations([]);
-    }
-  }, [siteId]);
-
-  useEffect(() => {
-    if (siteId) {
-      fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`)
-        .then((res) => res.json())
-        .then((data) => setEquipment(data))
-        .catch((err) => setError('Failed to load equipment: ' + err.message));
-    } else {
       setEquipment([]);
-    }
-  }, [siteId]);
-
-  useEffect(() => {
-    if (siteId) {
-      fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`)
-        .then((res) => res.json())
-        .then((data) => setObjects(data?.objects || []))
-        .catch((err) => setError('Failed to load design: ' + err.message));
-    } else {
       setObjects([]);
     }
   }, [siteId]);
@@ -74,7 +62,7 @@ const FacilityDesigner: React.FC = () => {
       return;
     }
     const newObject: DesignObject = {
-      id: Date.now().toString(),
+      id: Date.now().toString(), // String ID
       type,
       shape: type === 'Tank' ? 'circle' : 'rectangle',
       x: 50,
@@ -85,6 +73,7 @@ const FacilityDesigner: React.FC = () => {
       name: '',
       abbreviation: '',
     };
+    console.log('Adding new object:', newObject);
     setObjects([...objects, newObject]);
     setSelectedObjectId(newObject.id);
     setTool(null);
@@ -92,6 +81,7 @@ const FacilityDesigner: React.FC = () => {
 
   const deleteObject = () => {
     if (selectedObjectId) {
+      console.log('Deleting object:', selectedObjectId);
       setObjects(objects.filter((obj) => obj.id !== selectedObjectId));
       setSelectedObjectId(null);
       if (transformerRef.current) {
@@ -115,40 +105,35 @@ const FacilityDesigner: React.FC = () => {
       return;
     }
     const payload = { siteId, objects };
-    console.log('Saving design:', payload); // Debug log
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/facility-design`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to save design (attempt ${attempt}): ${errorText}`);
-        }
-        const data = await response.json();
-        console.log('Save response:', data); // Debug log
-        setSuccessMessage(data.message || 'Design updated successfully');
-        setTimeout(() => setSuccessMessage(null), 2000);
-        setError(null);
-        return; // Success, exit retry loop
-      } catch (err: any) {
-        console.error(`Save design error (attempt ${attempt}):`, err);
-        if (attempt === 3) {
-          setError('Failed to save design after 3 attempts: ' + err.message);
-          return;
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+    console.log('Saving design:', payload);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/facility-design`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to save design: ${errorText}`);
       }
+      const data = await response.json();
+      console.log('Save response:', data);
+      setSuccessMessage(data.message || 'Design saved successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      console.error('Save design error:', err);
+      setError('Failed to save design: ' + err.message);
     }
   };
 
   const handleDragEnd = (id: string, x: number, y: number) => {
+    console.log('Drag end:', { id, x, y });
     setObjects(objects.map((obj) => (obj.id === id ? { ...obj, x, y } : obj)));
   };
 
   const handleTransform = (id: string, newProps: Partial<DesignObject>) => {
+    console.log('Transform:', { id, newProps });
     setObjects(
       objects.map((obj) => (obj.id === id ? { ...obj, ...newProps } : obj))
     );
@@ -161,6 +146,7 @@ const FacilityDesigner: React.FC = () => {
         setError('Selected location not found');
         return;
       }
+      console.log('Assigning location:', { selectedObjectId, locationId, name: selectedLocation.name });
       setObjects(
         objects.map((obj) =>
           obj.id === selectedObjectId
@@ -184,6 +170,7 @@ const FacilityDesigner: React.FC = () => {
         setError('Selected equipment not found');
         return;
       }
+      console.log('Assigning equipment:', { selectedObjectId, equipmentId, name: selectedEquipment.name });
       setObjects(
         objects.map((obj) =>
           obj.id === selectedObjectId
@@ -201,6 +188,7 @@ const FacilityDesigner: React.FC = () => {
   };
 
   const handleSelect = (id: string) => {
+    console.log('Selected object:', id);
     setSelectedObjectId(id);
     if (transformerRef.current) {
       const stage = transformerRef.current.getStage();
