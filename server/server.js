@@ -841,7 +841,6 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
   });
 });
 
-// Update /api/batches/:batchId/package (~line 1000)
 app.post('/api/batches/:batchId/package', (req, res) => {
   const { batchId } = req.params;
   const { packageType, quantity, locationId } = req.body;
@@ -883,8 +882,8 @@ app.post('/api/batches/:batchId/package', (req, res) => {
       return res.status(400).json({ error: `Insufficient volume: ${volumeUsed.toFixed(3)} barrels needed, ${batch.volume.toFixed(3)} barrels available` });
     }
     if (volumeUsed > batch.volume) {
-      // Prompt user for volume adjustment
       const shortfall = volumeUsed - batch.volume;
+      console.log(`POST /api/batches/:batchId/package: Volume adjustment needed`, { shortfall, volumeUsed, available: batch.volume });
       return res.status(200).json({
         prompt: 'volumeAdjustment',
         message: `${volumeUsed.toFixed(3)} barrels are needed, ${batch.volume.toFixed(3)} barrels available. Increase batch volume by ${shortfall.toFixed(3)} barrels?`,
@@ -901,65 +900,109 @@ app.post('/api/batches/:batchId/package', (req, res) => {
         return res.status(400).json({ error: `Invalid locationId: ${locationId} for site ${batch.siteId}` });
       }
       db.serialize(() => {
-        db.run('BEGIN TRANSACTION');
-        const newIdentifier = `${batch.productName} ${packageType}`;
-        db.get(
-          'SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
-          [newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
-          (err, row) => {
-            if (err) {
-              db.run('ROLLBACK');
-              console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
-              return res.status(500).json({ error: err.message });
-            }
-            const completePackaging = () => {
-              const newVolume = batch.volume - volumeUsed;
-              db.run(
-                'UPDATE batches SET volume = ? WHERE batchId = ?',
-                [newVolume, batchId],
-                (err) => {
-                  if (err) {
-                    db.run('ROLLBACK');
-                    console.error('POST /api/batches/:batchId/package: Update batch volume error:', err);
-                    return res.status(500).json({ error: err.message });
-                  }
-                  db.run('COMMIT');
-                  console.log(`POST /api/batches/:batchId/package: Packaged ${quantity} ${packageType}s, reduced batch ${batchId} volume by ${volumeUsed} to ${newVolume}`);
-                  res.json({ message: 'Packaging successful', newIdentifier, quantity, newVolume });
-                }
-              );
-            };
-            if (row) {
-              const newQuantity = parseFloat(row.quantity) + quantity;
-              db.run(
-                'UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
-                [newQuantity, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
-                (err) => {
-                  if (err) {
-                    db.run('ROLLBACK');
-                    console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
-                    return res.status(500).json({ error: err.message });
-                  }
-                  completePackaging();
-                }
-              );
-            } else {
-              db.run(
-                `INSERT INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [newIdentifier, 'Storage', 'Finished Goods', quantity, 'Units', new Date().toISOString().split('T')[0], 'Packaged', batch.siteId, locationId, 'Stored'],
-                (err) => {
-                  if (err) {
-                    db.run('ROLLBACK');
-                    console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
-                    return res.status(500).json({ error: err.message });
-                  }
-                  completePackaging();
-                }
-              );
-            }
+        db.run('BEGIN TRANSACTION', (err) => {
+          if (err) {
+            console.error('POST /api/batches/:batchId/package: Begin transaction error:', err);
+            return res.status(500).json({ error: 'Failed to start transaction' });
           }
-        );
+          const newIdentifier = `${batch.productName} ${packageType}`;
+          console.log('POST /api/batches/:batchId/package: Checking inventory', {
+            identifier: newIdentifier,
+            type: 'Finished Goods',
+            account: 'Storage',
+            siteId: batch.siteId,
+            locationId,
+          });
+          db.get(
+            'SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
+            [newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
+            (err, row) => {
+              if (err) {
+                db.run('ROLLBACK');
+                console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
+                return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
+              }
+              const completePackaging = () => {
+                const newVolume = batch.volume - volumeUsed;
+                console.log('POST /api/batches/:batchId/package: Updating batch volume', { batchId, newVolume, volumeUsed });
+                db.run(
+                  'UPDATE batches SET volume = ? WHERE batchId = ?',
+                  [newVolume, batchId],
+                  (err) => {
+                    if (err) {
+                      db.run('ROLLBACK');
+                      console.error('POST /api/batches/:batchId/package: Update batch volume error:', err);
+                      return res.status(500).json({ error: `Failed to update batch volume: ${err.message}` });
+                    }
+                    db.run('COMMIT', (err) => {
+                      if (err) {
+                        console.error('POST /api/batches/:batchId/package: Commit transaction error:', err);
+                        return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
+                      }
+                      console.log(`POST /api/batches/:batchId/package: Success`, {
+                        batchId,
+                        newIdentifier,
+                        quantity,
+                        newVolume,
+                      });
+                      res.json({ message: 'Packaging successful', newIdentifier, quantity, newVolume });
+                    });
+                  }
+                );
+              };
+              if (row) {
+                const newQuantity = parseFloat(row.quantity) + quantity;
+                console.log('POST /api/batches/:batchId/package: Updating existing inventory', { newIdentifier, newQuantity });
+                db.run(
+                  'UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
+                  [newQuantity, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
+                  (err) => {
+                    if (err) {
+                      db.run('ROLLBACK');
+                      console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
+                      return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
+                    }
+                    console.log('POST /api/batches/:batchId/package: Inventory updated', { newIdentifier, newQuantity });
+                    completePackaging();
+                  }
+                );
+              } else {
+                console.log('POST /api/batches/:batchId/package: Inserting new inventory', {
+                  newIdentifier,
+                  quantity,
+                  unit: 'Units',
+                  siteId: batch.siteId,
+                  locationId,
+                });
+                db.run(
+                  `INSERT INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    newIdentifier,
+                    'Storage',
+                    'Finished Goods',
+                    quantity,
+                    'Units',
+                    new Date().toISOString().split('T')[0],
+                    'Packaged',
+                    batch.siteId,
+                    locationId,
+                    'Stored',
+                  ],
+                  (err) => {
+                    if (err) {
+                      db.run('ROLLBACK');
+                      console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
+                      return res.status(500).json({ error: `Failed to insert inventory: ${err.message}` });
+                    }
+                    console.log('POST /api/batches/:batchId/package: Inventory inserted', { newIdentifier, quantity });
+                    completePackaging();
+                  }
+                );
+              }
+            }
+          );
+        });
       });
     });
   });
