@@ -379,7 +379,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               <th>Site</th>
               <th>Status</th>
               <th>Date</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -392,28 +391,15 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     onChange={() => handleBatchSelection(batch.batchId)}
                   />
                 </td>
-                <td>{batch.batchId}</td>
+                <td>
+                  <Link to={`/production/${batch.batchId}`} style={{ color: '#2196F3', textDecoration: 'underline' }}>
+                    {batch.batchId}
+                  </Link>
+                </td>
                 <td>{batch.productName || 'Unknown'}</td>
                 <td>{batch.siteName || batch.siteId}</td>
                 <td>{batch.status}</td>
                 <td>{batch.date}</td>
-                <td>
-                  <Link to={`/production/${batch.batchId}`}>
-                    <button
-                      style={{
-                        backgroundColor: '#2196F3',
-                        color: '#fff',
-                        padding: '8px 12px',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                      }}
-                    >
-                      View
-                    </button>
-                  </Link>
-                </td>
               </tr>
             ))}
           </tbody>

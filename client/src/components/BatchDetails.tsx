@@ -432,6 +432,17 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         });
         throw new Error('Packaging succeeded, but inventory item was not created or updated');
       }
+      // Verify item exists in items table
+      const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}`);
+      if (!itemRes.ok) {
+        throw new Error('Failed to verify item in items table');
+      }
+      const itemData = await itemRes.json();
+      if (!itemData || itemData.length === 0) {
+        console.error('handlePackage: Item not found in items table', { identifier: `${updatedBatch.productName} ${packageType}` });
+        throw new Error('Packaging succeeded, but item was not created in items table');
+      }
+      console.log('handlePackage: Item verified in items table', { identifier: `${updatedBatch.productName} ${packageType}`, itemData });
       setPackageType('');
       setPackageQuantity(0);
       setPackageLocation('');
@@ -443,7 +454,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError('Failed to package: ' + err.message);
     }
   };
-
+  
   const handleVolumeAdjustment = async (confirm: boolean) => {
     if (!showVolumePrompt) return;
     if (!confirm) {
@@ -505,6 +516,17 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         });
         throw new Error('Packaging succeeded, but inventory item was not created or updated');
       }
+      // Verify item exists in items table
+      const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}`);
+      if (!itemRes.ok) {
+        throw new Error('Failed to verify item in items table');
+      }
+      const itemData = await itemRes.json();
+      if (!itemData || itemData.length === 0) {
+        console.error('handleVolumeAdjustment: Item not found in items table', { identifier: `${updatedBatch.productName} ${packageType}` });
+        throw new Error('Packaging succeeded, but item was not created in items table');
+      }
+      console.log('handleVolumeAdjustment: Item verified in items table', { identifier: `${updatedBatch.productName} ${packageType}`, itemData });
       setPackageType('');
       setPackageQuantity(0);
       setPackageLocation('');
