@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Batch, Product, Site, Equipment, Ingredient, Location } from '../types/interfaces'; // Updated to include Location
+import { Batch, Product, Site, Equipment, Ingredient, Location } from '../types/interfaces';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
@@ -29,19 +29,21 @@ const BatchDetails: React.FC = () => {
   const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
   const [actions, setActions] = useState<BatchAction[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]); // New: For location dropdown
+  const [locations, setLocations] = useState<Location[]>([]);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [newAction, setNewAction] = useState('');
   const [newBatchId, setNewBatchId] = useState('');
   const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
   const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
   const [stage, setStage] = useState<'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed'>('Mashing');
-  const [packageType, setPackageType] = useState<string>(''); // New: For packaging form
-  const [packageQuantity, setPackageQuantity] = useState<number>(0); // New: For packaging form
-  const [packageLocation, setPackageLocation] = useState<string>(''); // New: For packaging form
+  const [packageType, setPackageType] = useState<string>('');
+  const [packageQuantity, setPackageQuantity] = useState<number>(0);
+  const [packageLocation, setPackageLocation] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
+  const [showVolumePrompt, setShowVolumePrompt] = useState<{ message: string; shortfall: number } | null>(null);
+  const [showLossPrompt, setShowLossPrompt] = useState<{ volume: number } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -53,7 +55,7 @@ const BatchDetails: React.FC = () => {
           { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
           { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
           { url: batch?.siteId ? `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}` : null, setter: setEquipment, name: 'equipment', single: false },
-          { url: batch?.siteId ? `${API_BASE_URL}/api/locations?siteId=${batch.siteId}` : null, setter: setLocations, name: 'locations', single: false }, // New: Fetch locations
+          { url: batch?.siteId ? `${API_BASE_URL}/api/locations?siteId=${batch.siteId}` : null, setter: setLocations, name: 'locations', single: false },
         ].filter(endpoint => endpoint.url !== null);
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url!, { headers: { Accept: 'application/json' } }))
@@ -109,6 +111,11 @@ const BatchDetails: React.FC = () => {
   };
 
   const handleCompleteBatch = async () => {
+    if (!batch) return;
+    if (batch.volume !== undefined && batch.volume > 0) {
+      setShowLossPrompt({ volume: batch.volume });
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
@@ -126,6 +133,66 @@ const BatchDetails: React.FC = () => {
     } catch (err: any) {
       console.error('Complete batch error:', err);
       setError('Failed to complete batch: ' + err.message);
+    }
+  };
+  
+  const handleLossConfirmation = async (confirm: boolean) => {
+    if (!showLossPrompt || !batch) return;
+    if (!confirm) {
+      setShowLossPrompt(null);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ status: 'Completed' }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        }
+        setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
+        setSuccessMessage('Batch completed without recording loss');
+        setTimeout(() => setSuccessMessage(null), 2000);
+        setError(null);
+      } catch (err: any) {
+        console.error('Complete batch error:', err);
+        setError('Failed to complete batch: ' + err.message);
+      }
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          identifier: batch.batchId,
+          quantityLost: showLossPrompt.volume,
+          proofGallonsLost: 0, // Assuming non-spirits (beer)
+          reason: 'Unpackaged batch volume shortfall',
+          date: new Date().toISOString().split('T')[0],
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to record loss: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ status: 'Completed' }),
+      });
+      if (!completeRes.ok) {
+        const text = await completeRes.text();
+        throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
+      setShowLossPrompt(null);
+      setSuccessMessage('Loss recorded and batch completed');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      console.error('Loss confirmation error:', err);
+      setError('Failed to record loss or complete batch: ' + err.message);
     }
   };
 
@@ -325,7 +392,10 @@ const BatchDetails: React.FC = () => {
         throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      // Refresh batch data
+      if (data.prompt === 'volumeAdjustment') {
+        setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
+        return;
+      }
       const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         headers: { Accept: 'application/json' },
       });
@@ -343,6 +413,58 @@ const BatchDetails: React.FC = () => {
     } catch (err: any) {
       console.error('Package error:', err);
       setError('Failed to package: ' + err.message);
+    }
+  };
+
+  const handleVolumeAdjustment = async (confirm: boolean) => {
+    if (!showVolumePrompt) return;
+    if (!confirm) {
+      setShowVolumePrompt(null);
+      setError('Packaging cancelled due to insufficient volume');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/adjust-volume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ shortfall: showVolumePrompt.shortfall }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to adjust volume: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const packageRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          packageType,
+          quantity: packageQuantity,
+          locationId: packageLocation,
+        }),
+      });
+      if (!packageRes.ok) {
+        const text = await packageRes.text();
+        throw new Error(`Failed to package after adjustment: HTTP ${packageRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await packageRes.json();
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to refresh batch');
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
+      setShowVolumePrompt(null);
+      setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      console.error('Volume adjustment error:', err);
+      setError('Failed to adjust volume or package: ' + err.message);
     }
   };
 
@@ -365,19 +487,16 @@ const BatchDetails: React.FC = () => {
       const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
       const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
 
-      // Create PDF
       const doc = new jsPDF();
       const margin = 8;
       let y = margin;
 
-      // Title
       doc.setFont('times', 'bold');
       doc.setFontSize(18);
-      doc.setTextColor(33, 150, 243); // Blue #2196F3
+      doc.setTextColor(33, 150, 243);
       doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
       y += 8;
 
-      // Batch Details Section
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.setTextColor(0);
@@ -397,7 +516,7 @@ const BatchDetails: React.FC = () => {
         { label: 'Site', value: site },
         { label: 'Status', value: batchData.status },
         { label: 'Stage', value: batchData.stage || 'Mashing' },
-        { label: 'Volume', value: batchData.volume ? `${batchData.volume.toFixed(2)} barrels` : 'N/A' }, // New: Show volume
+        { label: 'Volume', value: batchData.volume ? `${batchData.volume.toFixed(2)} barrels` : 'N/A' },
         { label: 'Date', value: batchData.date },
       ];
       batchDetails.forEach(({ label, value }) => {
@@ -405,7 +524,6 @@ const BatchDetails: React.FC = () => {
         y += 6;
       });
 
-      // Ingredients Section
       y += 4;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -444,7 +562,6 @@ const BatchDetails: React.FC = () => {
         y += 8;
       }
 
-      // Brew Day Log Section
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.text('Brew Day Log', margin, y);
@@ -478,7 +595,6 @@ const BatchDetails: React.FC = () => {
         y += 8;
       }
 
-      // Batch Actions Section
       y += 4;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -505,7 +621,6 @@ const BatchDetails: React.FC = () => {
         y += 8;
       }
 
-      // Save PDF
       doc.save(`batch_${batchData.batchId}_sheet.pdf`);
     } catch (err: any) {
       console.error('Print batch sheet error:', err);
@@ -636,7 +751,7 @@ const BatchDetails: React.FC = () => {
             value={selectedEquipmentId || ''}
             onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
             style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-            disabled={stage === 'Completed' || stage === 'Packaging'} // New: Disable for Packaging
+            disabled={stage === 'Completed' || stage === 'Packaging'}
           >
             <option value="">Select Equipment</option>
             {equipment.map((equip) => (
@@ -678,7 +793,6 @@ const BatchDetails: React.FC = () => {
               </select>
             </div>
           )}
-          {/* New: Packaging Form */}
           {stage === 'Packaging' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h4 style={{ margin: '0', fontSize: '16px' }}>Package Batch</h4>
@@ -753,7 +867,7 @@ const BatchDetails: React.FC = () => {
         <p><strong>Status:</strong> {batch.status}</p>
         <p><strong>Current Equipment:</strong> {currentEquipment?.name || (batch?.equipmentId ? `Equipment ID: ${batch.equipmentId}` : 'None')}</p>
         <p><strong>Stage:</strong> {batch.stage || 'Mashing'}</p>
-        <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p> {/* New: Show volume */}
+        <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p>
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
 
@@ -891,6 +1005,130 @@ const BatchDetails: React.FC = () => {
           </button>
         </div>
       </div>
+      {showVolumePrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2100,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+              color: '#555',
+            }}
+          >
+            <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Volume Adjustment Required</h3>
+            <p style={{ marginBottom: '20px' }}>{showVolumePrompt.message}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+              <button
+                onClick={() => handleVolumeAdjustment(true)}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => handleVolumeAdjustment(false)}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showLossPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 'auto',
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2100,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+              color: '#555',
+            }}
+          >
+            <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Unpackaged Volume Detected</h3>
+            <p style={{ marginBottom: '20px' }}>
+              {showLossPrompt.volume.toFixed(3)} barrels remain unpackaged. Do you want to report a {showLossPrompt.volume.toFixed(3)} barrel loss?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+              <button
+                onClick={() => handleLossConfirmation(true)}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => handleLossConfirmation(false)}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
