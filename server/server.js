@@ -307,6 +307,8 @@ db.serialize(() => {
     [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 40, 0]);
   db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [2, 'IPA', 'IP', 1, 2, 'Beer', 'Malt', 'American IPA', 6.5, 60]);
+  db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+    ['Finished Goods', 'Finished Goods', 1]);
   // Insert mock items (for ingredients)
   db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
     ['Corn', 'Grain', 1]);
@@ -839,6 +841,7 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
   });
 });
 
+// Update /api/batches/:batchId/package (~line 1000)
 app.post('/api/batches/:batchId/package', (req, res) => {
   const { batchId } = req.params;
   const { packageType, quantity, locationId } = req.body;
@@ -856,7 +859,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
     return res.status(400).json({ error: `Invalid packageType. Must be one of: ${Object.keys(packageVolumes).join(', ')}` });
   }
   db.get(`
-    SELECT b.volume, b.siteId, p.name AS productName, p.type AS productType
+    SELECT b.volume, b.siteId, p.name AS productName
     FROM batches b
     JOIN products p ON b.productId = p.id
     WHERE b.batchId = ?
@@ -892,7 +895,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
         const newIdentifier = `${batch.productName} ${packageType}`;
         db.get(
           'SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
-          [newIdentifier, batch.productType, 'Storage', batch.siteId, locationId],
+          [newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
           (err, row) => {
             if (err) {
               db.run('ROLLBACK');
@@ -903,7 +906,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
               const newQuantity = parseFloat(row.quantity) + quantity;
               db.run(
                 'UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
-                [newQuantity, newIdentifier, batch.productType, 'Storage', batch.siteId, locationId],
+                [newQuantity, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
                 (err) => {
                   if (err) {
                     db.run('ROLLBACK');
@@ -917,7 +920,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
               db.run(
                 `INSERT INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [newIdentifier, 'Storage', batch.productType, quantity, 'Units', new Date().toISOString().split('T')[0], 'Packaged', batch.siteId, locationId, 'Stored'],
+                [newIdentifier, 'Storage', 'Finished Goods', quantity, 'Units', new Date().toISOString().split('T')[0], 'Packaged', batch.siteId, locationId, 'Stored'],
                 (err) => {
                   if (err) {
                     db.run('ROLLBACK');
@@ -1012,12 +1015,12 @@ app.patch('/api/batches/:batchId/equipment', (req, res) => {
   });
 });
 
-// GET /api/batches/:batchId
+
 app.get('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
   db.get(`
     SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-       b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId
+           b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId, b.volume
     FROM batches b
     JOIN products p ON b.productId = p.id
     JOIN recipes r ON b.recipeId = r.id

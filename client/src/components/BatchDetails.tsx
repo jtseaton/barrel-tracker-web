@@ -305,7 +305,6 @@ const BatchDetails: React.FC = () => {
     }
   };
 
-  // New: Handle packaging submission
   const handlePackage = async () => {
     if (!packageType || packageQuantity <= 0 || !packageLocation) {
       setError('Please select package type, quantity (> 0), and location');
@@ -326,7 +325,7 @@ const BatchDetails: React.FC = () => {
         throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      // Refresh batch to get updated volume
+      // Refresh batch data
       const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         headers: { Accept: 'application/json' },
       });
