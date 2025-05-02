@@ -15,7 +15,7 @@ interface InventoryProps {
 const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) => {
   const [dailySummary, setDailySummary] = useState<DailySummaryItem[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [sites, setSites] = useState<Site[]>([]); // New state for sites
+  const [sites, setSites] = useState<Site[]>([]);
   const [moveForm, setMoveForm] = useState<MoveForm>({ identifier: '', toAccount: 'Storage', proofGallons: '' });
   const [lossForm, setLossForm] = useState<LossForm>({
     identifier: '',
@@ -32,11 +32,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
-  // Fetch inventory on mount
-  useEffect(() => {
-    refreshInventory();
-  }, [refreshInventory]);
-
   // Log inventory for debugging
   useEffect(() => {
     console.log('Inventory prop received:', inventory);
@@ -51,10 +46,18 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       .catch((err) => console.error('Daily summary error:', err));
   }, []);
 
+  // Fetch locations and sites only once or when siteIds change
   useEffect(() => {
-    const fetchLocations = async () => {
+    const fetchLocationsAndSites = async () => {
       try {
-        // Get unique siteIds using reduce
+        // Fetch sites
+        const sitesRes = await fetch(`${API_BASE_URL}/api/sites`);
+        if (!sitesRes.ok) throw new Error(`HTTP error! status: ${sitesRes.status}`);
+        const sitesData: Site[] = await sitesRes.json();
+        console.log('Fetched sites:', sitesData);
+        setSites(sitesData);
+
+        // Get unique siteIds
         const siteIds = inventory
           .map(item => item.siteId)
           .filter(Boolean)
@@ -63,9 +66,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
             [] as string[]
           );
         if (siteIds.length === 0) {
-          // Fallback to OUR_DSP if no siteIds
           siteIds.push(OUR_DSP);
         }
+
+        // Fetch locations for each siteId
         const locationPromises = siteIds.map(siteId =>
           fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`).then(res => {
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -77,31 +81,15 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         console.log('Fetched locations:', allLocations);
         setLocations(allLocations);
       } catch (err: any) {
-        console.error('Failed to fetch locations:', err);
-        setProductionError('Failed to fetch locations: ' + err.message);
+        console.error('Failed to fetch locations or sites:', err);
+        setProductionError('Failed to fetch locations or sites: ' + err.message);
       }
     };
+
     if (inventory.length > 0) {
-      fetchLocations();
+      fetchLocationsAndSites();
     }
-  }, [API_BASE_URL, inventory]);
-  
-  // Fetch sites
-  useEffect(() => {
-    const fetchSites = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/sites`);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data: Site[] = await res.json();
-        console.log('Fetched sites:', data);
-        setSites(data);
-      } catch (err: any) {
-        console.error('Failed to fetch sites:', err);
-        setProductionError('Failed to fetch sites: ' + err.message);
-      }
-    };
-    fetchSites();
-  }, [API_BASE_URL]);
+  }, [API_BASE_URL, OUR_DSP]); // Depend only on API_BASE_URL and OUR_DSP, not inventory
 
   // Helper function to map locationId to location name
   const getLocationName = (locationId: number | undefined) => {

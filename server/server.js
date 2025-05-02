@@ -877,9 +877,19 @@ app.post('/api/batches/:batchId/package', (req, res) => {
       return res.status(400).json({ error: 'Batch volume not set' });
     }
     const volumeUsed = packageVolumes[packageType] * quantity;
-    if (volumeUsed > batch.volume) {
+    const tolerance = 0.01; // Allow 0.01 barrel overrun
+    if (volumeUsed > batch.volume + tolerance) {
       console.error('POST /api/batches/:batchId/package: Insufficient volume', { batchId, volumeUsed, available: batch.volume });
-      return res.status(400).json({ error: `Insufficient volume: ${volumeUsed} barrels needed, ${batch.volume} barrels available` });
+      return res.status(400).json({ error: `Insufficient volume: ${volumeUsed.toFixed(3)} barrels needed, ${batch.volume.toFixed(3)} barrels available` });
+    }
+    if (volumeUsed > batch.volume) {
+      // Prompt user for volume adjustment
+      const shortfall = volumeUsed - batch.volume;
+      return res.status(200).json({
+        prompt: 'volumeAdjustment',
+        message: `${volumeUsed.toFixed(3)} barrels are needed, ${batch.volume.toFixed(3)} barrels available. Increase batch volume by ${shortfall.toFixed(3)} barrels?`,
+        shortfall,
+      });
     }
     db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, batch.siteId], (err, location) => {
       if (err) {
@@ -902,36 +912,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
               console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
               return res.status(500).json({ error: err.message });
             }
-            if (row) {
-              const newQuantity = parseFloat(row.quantity) + quantity;
-              db.run(
-                'UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
-                [newQuantity, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
-                (err) => {
-                  if (err) {
-                    db.run('ROLLBACK');
-                    console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
-                    return res.status(500).json({ error: err.message });
-                  }
-                  updateBatchVolume();
-                }
-              );
-            } else {
-              db.run(
-                `INSERT INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [newIdentifier, 'Storage', 'Finished Goods', quantity, 'Units', new Date().toISOString().split('T')[0], 'Packaged', batch.siteId, locationId, 'Stored'],
-                (err) => {
-                  if (err) {
-                    db.run('ROLLBACK');
-                    console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
-                    return res.status(500).json({ error: err.message });
-                  }
-                  updateBatchVolume();
-                }
-              );
-            }
-            function updateBatchVolume() {
+            const completePackaging = () => {
               const newVolume = batch.volume - volumeUsed;
               db.run(
                 'UPDATE batches SET volume = ? WHERE batchId = ?',
@@ -947,11 +928,85 @@ app.post('/api/batches/:batchId/package', (req, res) => {
                   res.json({ message: 'Packaging successful', newIdentifier, quantity, newVolume });
                 }
               );
+            };
+            if (row) {
+              const newQuantity = parseFloat(row.quantity) + quantity;
+              db.run(
+                'UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?',
+                [newQuantity, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  completePackaging();
+                }
+              );
+            } else {
+              db.run(
+                `INSERT INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [newIdentifier, 'Storage', 'Finished Goods', quantity, 'Units', new Date().toISOString().split('T')[0], 'Packaged', batch.siteId, locationId, 'Stored'],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  completePackaging();
+                }
+              );
             }
           }
         );
       });
     });
+  });
+});
+
+// New endpoint: /api/batches/:batchId/adjust-volume (~line 1050, after /api/batches/:batchId/package)
+app.post('/api/batches/:batchId/adjust-volume', (req, res) => {
+  const { batchId } = req.params;
+  const { shortfall } = req.body;
+  if (!shortfall || shortfall <= 0) {
+    console.error('POST /api/batches/:batchId/adjust-volume: Invalid shortfall', { batchId, shortfall });
+    return res.status(400).json({ error: 'Valid shortfall (> 0) required' });
+  }
+  db.get('SELECT volume FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+    if (err) {
+      console.error('POST /api/batches/:batchId/adjust-volume: Fetch batch error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!batch) {
+      console.error('POST /api/batches/:batchId/adjust-volume: Batch not found', { batchId });
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+    const newVolume = batch.volume + shortfall;
+    db.run(
+      'UPDATE batches SET volume = ? WHERE batchId = ?',
+      [newVolume, batchId],
+      (err) => {
+        if (err) {
+          console.error('POST /api/batches/:batchId/adjust-volume: Update volume error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        // Log adjustment in transactions
+        db.run(
+          `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [batchId, 'Finished Goods', shortfall, 0, new Date().toISOString().split('T')[0], 'VolumeAdjusted', 'DSP-AL-20010'],
+          (err) => {
+            if (err) {
+              console.error('POST /api/batches/:batchId/adjust-volume: Transaction error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log(`POST /api/batches/:batchId/adjust-volume: Adjusted volume by ${shortfall} to ${newVolume}`);
+            res.json({ message: 'Volume adjusted successfully', newVolume });
+          }
+        );
+      }
+    );
   });
 });
 
@@ -2495,6 +2550,7 @@ app.post('/api/package', (req, res) => {
   });
 });
 
+// Update /api/record-loss (~line 1600)
 app.post('/api/record-loss', (req, res) => {
   console.log('Received POST to /api/record-loss:', req.body);
   const { identifier, quantityLost, proofGallonsLost, reason, date, dspNumber } = req.body;
@@ -2503,12 +2559,12 @@ app.post('/api/record-loss', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const dspToUse = dspNumber || OUR_DSP;
+  const dspToUse = dspNumber || 'DSP-AL-20010';
 
   db.run(
     `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
-     VALUES (?, 'Loss', ?, ?, ?, 'Loss', ?)`,
-    [identifier, quantityLost, proofGallonsLost, date, dspToUse],
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [identifier, 'Finished Goods', parseFloat(quantityLost), parseFloat(proofGallonsLost), date, 'Loss', dspToUse],
     (err) => {
       if (err) {
         console.error('Transaction Insert Error:', err);
@@ -2522,6 +2578,7 @@ app.post('/api/record-loss', (req, res) => {
             console.error('Update Inventory Error:', err);
             return res.status(500).json({ error: err.message });
           }
+          console.log(`POST /api/record-loss: Recorded loss for ${identifier}, quantity: ${quantityLost}, proofGallons: ${proofGallonsLost}`);
           res.json({ message: 'Loss recorded' });
         }
       );
