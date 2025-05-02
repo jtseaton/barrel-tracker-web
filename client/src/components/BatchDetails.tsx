@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Batch, Product, Site, Equipment, Ingredient, Location } from '../types/interfaces';
+import { Batch, Product, Site, Equipment, Ingredient, Location, InventoryItem } from '../types/interfaces';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
@@ -20,7 +20,12 @@ interface BatchAction {
   timestamp: string;
 }
 
-const BatchDetails: React.FC = () => {
+interface BatchDetailsProps {
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
+}
+
+const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory }) => {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
   const [batch, setBatch] = useState<Batch | null>(null);
@@ -135,7 +140,7 @@ const BatchDetails: React.FC = () => {
       setError('Failed to complete batch: ' + err.message);
     }
   };
-  
+
   const handleLossConfirmation = async (confirm: boolean) => {
     if (!showLossPrompt || !batch) return;
     if (!confirm) {
@@ -405,23 +410,31 @@ const BatchDetails: React.FC = () => {
       }
       const updatedBatch = await batchRes.json();
       setBatch(updatedBatch);
-      setPackageType('');
-      setPackageQuantity(0);
-      setPackageLocation('');
-      // Verify inventory update
+      // Refresh inventory to reflect new Finished Goods
+      console.log('handlePackage: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
+      await refreshInventory();
       const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`);
       if (!inventoryRes.ok) {
         throw new Error('Failed to verify inventory update');
       }
       const inventoryData = await inventoryRes.json();
+      console.log('handlePackage: Inventory fetch after packaging', {
+        identifier: `${updatedBatch.productName} ${packageType}`,
+        siteId: updatedBatch.siteId,
+        locationId: packageLocation,
+        inventoryData,
+      });
       if (!inventoryData || inventoryData.length === 0) {
-        console.error('POST /api/batches/:batchId/package: Inventory item not found after packaging', {
+        console.error('handlePackage: Inventory item not found after packaging', {
           identifier: `${updatedBatch.productName} ${packageType}`,
           siteId: updatedBatch.siteId,
           locationId: packageLocation,
         });
         throw new Error('Packaging succeeded, but inventory item was not created or updated');
       }
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
       setSuccessMessage(data.message || 'Packaged successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
@@ -470,6 +483,28 @@ const BatchDetails: React.FC = () => {
       }
       const updatedBatch = await batchRes.json();
       setBatch(updatedBatch);
+      // Refresh inventory after volume adjustment and packaging
+      console.log('handleVolumeAdjustment: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
+      await refreshInventory();
+      const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`);
+      if (!inventoryRes.ok) {
+        throw new Error('Failed to verify inventory update');
+      }
+      const inventoryData = await inventoryRes.json();
+      console.log('handleVolumeAdjustment: Inventory fetch after packaging', {
+        identifier: `${updatedBatch.productName} ${packageType}`,
+        siteId: updatedBatch.siteId,
+        locationId: packageLocation,
+        inventoryData,
+      });
+      if (!inventoryData || inventoryData.length === 0) {
+        console.error('handleVolumeAdjustment: Inventory item not found after packaging', {
+          identifier: `${updatedBatch.productName} ${packageType}`,
+          siteId: updatedBatch.siteId,
+          locationId: packageLocation,
+        });
+        throw new Error('Packaging succeeded, but inventory item was not created or updated');
+      }
       setPackageType('');
       setPackageQuantity(0);
       setPackageLocation('');
@@ -1087,7 +1122,7 @@ const BatchDetails: React.FC = () => {
             position: 'fixed',
             top: 0,
             left: 0,
-            right: 'auto',
+            right: 0,
             bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex',

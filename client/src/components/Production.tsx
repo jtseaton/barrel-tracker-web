@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Batch, Product, Recipe, Site, Ingredient, Equipment } from '../types/interfaces'; // Import Ingredient and Equipment
+import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
-const Production: React.FC = () => {
+interface ProductionProps {
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
+}
+
+const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -159,6 +164,12 @@ const Production: React.FC = () => {
       setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null });
       setRecipes([]);
       setEquipment([]);
+      // Refresh inventory to reflect ingredient deductions
+      console.log('handleAddBatch: Refreshing inventory after batch creation', { batchId: batchData.batchId });
+      await refreshInventory();
+      const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?siteId=${batchData.siteId}`);
+      const inventoryData = await inventoryRes.json();
+      console.log('handleAddBatch: Inventory after batch creation', inventoryData);
       setError(null);
       setErrorMessage(null);
       setShowErrorPopup(false);
@@ -187,7 +198,7 @@ const Production: React.FC = () => {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           ...newRecipe,
-          ingredients: newRecipe.ingredients.map(ing => ({ itemName: ing.itemName, quantity: ing.quantity, unit: ing.unit })), // Ensure ingredients match Recipe interface
+          ingredients: newRecipe.ingredients.map(ing => ({ itemName: ing.itemName, quantity: ing.quantity, unit: ing.unit })),
         }),
       });
       if (!res.ok) {
@@ -354,47 +365,57 @@ const Production: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={selectedBatchIds.length === filteredBatches.length && filteredBatches.length > 0}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedBatchIds(filteredBatches.map((batch) => batch.batchId));
-                    } else {
-                      setSelectedBatchIds([]);
-                    }
-                  }}
+                  onChange={() =>
+                    setSelectedBatchIds(
+                      selectedBatchIds.length === filteredBatches.length
+                        ? []
+                        : filteredBatches.map((batch) => batch.batchId)
+                    )
+                  }
                 />
               </th>
-              <th>Batch #</th>
+              <th>Batch ID</th>
               <th>Product</th>
+              <th>Site</th>
               <th>Status</th>
               <th>Date</th>
-              <th>Location</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredBatches.length > 0 ? (
-              filteredBatches.map((batch) => (
-                <tr key={batch.batchId}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedBatchIds.includes(batch.batchId)}
-                      onChange={() => handleBatchSelection(batch.batchId)}
-                    />
-                  </td>
-                  <td><Link to={`/production/${batch.batchId}`}>{batch.batchId}</Link></td>
-                  <td>{batch.productName || 'Unknown'}</td>
-                  <td>{batch.status}</td>
-                  <td>{batch.date}</td>
-                  <td>{batch.siteName || batch.siteId}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
-                  No batches found
+            {filteredBatches.map((batch) => (
+              <tr key={batch.batchId}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedBatchIds.includes(batch.batchId)}
+                    onChange={() => handleBatchSelection(batch.batchId)}
+                  />
+                </td>
+                <td>{batch.batchId}</td>
+                <td>{batch.productName || 'Unknown'}</td>
+                <td>{batch.siteName || batch.siteId}</td>
+                <td>{batch.status}</td>
+                <td>{batch.date}</td>
+                <td>
+                  <Link to={`/production/${batch.batchId}`}>
+                    <button
+                      style={{
+                        backgroundColor: '#2196F3',
+                        color: '#fff',
+                        padding: '8px 12px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                      }}
+                    >
+                      View
+                    </button>
+                  </Link>
                 </td>
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>
@@ -420,8 +441,6 @@ const Production: React.FC = () => {
               borderRadius: '8px',
               width: '400px',
               boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
             }}
           >
             <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
@@ -430,16 +449,15 @@ const Production: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Batch # (required):
+                  Batch ID (required):
                 </label>
                 <input
                   type="text"
                   value={newBatch.batchId || ''}
                   onChange={(e) => setNewBatch({ ...newBatch, batchId: e.target.value })}
-                  placeholder="Enter batch ID (e.g., HT245251)"
+                  placeholder="Enter Batch ID"
                   style={{
                     width: '100%',
-                    maxWidth: '350px',
                     padding: '10px',
                     border: '1px solid #CCCCCC',
                     borderRadius: '4px',
@@ -463,7 +481,6 @@ const Production: React.FC = () => {
                   }}
                   style={{
                     width: '100%',
-                    maxWidth: '350px',
                     padding: '10px',
                     border: '1px solid #CCCCCC',
                     borderRadius: '4px',
@@ -489,14 +506,13 @@ const Production: React.FC = () => {
                   disabled={!newBatch.productId}
                   style={{
                     width: '100%',
-                    maxWidth: '350px',
                     padding: '10px',
                     border: '1px solid #CCCCCC',
                     borderRadius: '4px',
                     fontSize: '16px',
                     boxSizing: 'border-box',
                     color: '#000000',
-                    backgroundColor: newBatch.productId ? '#FFFFFF' : '#f0f0f0',
+                    backgroundColor: '#FFFFFF',
                   }}
                 >
                   <option value="">Select Recipe</option>
@@ -511,10 +527,9 @@ const Production: React.FC = () => {
                 </label>
                 <select
                   value={newBatch.siteId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value, equipmentId: null })}
+                  onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value })}
                   style={{
                     width: '100%',
-                    maxWidth: '350px',
                     padding: '10px',
                     border: '1px solid #CCCCCC',
                     borderRadius: '4px',
@@ -536,18 +551,17 @@ const Production: React.FC = () => {
                 </label>
                 <select
                   value={newBatch.equipmentId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, equipmentId: parseInt(e.target.value) || null })}
+                  onChange={(e) => setNewBatch({ ...newBatch, equipmentId: parseInt(e.target.value, 10) || null })}
                   disabled={!newBatch.siteId}
                   style={{
                     width: '100%',
-                    maxWidth: '350px',
                     padding: '10px',
                     border: '1px solid #CCCCCC',
                     borderRadius: '4px',
                     fontSize: '16px',
                     boxSizing: 'border-box',
                     color: '#000000',
-                    backgroundColor: newBatch.siteId ? '#FFFFFF' : '#f0f0f0',
+                    backgroundColor: '#FFFFFF',
                   }}
                 >
                   <option value="">Select Equipment</option>
@@ -573,17 +587,13 @@ const Production: React.FC = () => {
                 onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
                 onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
               >
-                Add
+                Create
               </button>
               <button
                 onClick={() => {
                   setShowAddBatchModal(false);
                   setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null });
-                  setRecipes([]);
-                  setEquipment([]);
                   setError(null);
-                  setErrorMessage(null);
-                  setShowErrorPopup(false);
                 }}
                 style={{
                   backgroundColor: '#F86752',
@@ -602,56 +612,56 @@ const Production: React.FC = () => {
               </button>
             </div>
           </div>
-          {showErrorPopup && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                zIndex: 2100,
+        </div>
+      )}
+      {showErrorPopup && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2100,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '300px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+            }}
+          >
+            <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Inventory Error</h3>
+            <p style={{ color: '#555', marginBottom: '20px' }}>{errorMessage}</p>
+            <button
+              onClick={() => {
+                setShowErrorPopup(false);
+                setErrorMessage(null);
               }}
+              style={{
+                backgroundColor: '#2196F3',
+                color: '#fff',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                transition: 'background-color 0.3s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
             >
-              <div
-                style={{
-                  backgroundColor: '#fff',
-                  padding: '20px',
-                  borderRadius: '8px',
-                  width: '300px',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                  textAlign: 'center',
-                }}
-              >
-                <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Inventory Error</h3>
-                <p style={{ color: '#555', marginBottom: '20px' }}>{errorMessage}</p>
-                <button
-                  onClick={() => {
-                    setShowErrorPopup(false);
-                    setErrorMessage(null);
-                  }}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    transition: 'background-color 0.3s',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-                >
-                  OK
-                </button>
-              </div>
-            </div>
-          )}
+              OK
+            </button>
+          </div>
         </div>
       )}
       {showAddRecipeModal && (
