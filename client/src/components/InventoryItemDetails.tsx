@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { InventoryItem, Site } from '../types/interfaces'; // Added Site import
+import { InventoryItem, Site } from '../types/interfaces';
 
 interface InventoryProps {
   inventory: InventoryItem[];
@@ -11,7 +11,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
   const { identifier } = useParams<{ identifier: string }>();
   const navigate = useNavigate();
   const [item, setItem] = useState<InventoryItem | null>(null);
-  const [sites, setSites] = useState<Site[]>([]); // New state for sites
+  const [sites, setSites] = useState<Site[]>([]);
   const [adjustForm, setAdjustForm] = useState<{ newQuantity: string; reason: string; date: string }>({
     newQuantity: '',
     reason: '',
@@ -23,6 +23,9 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
+
+  // Decode URL identifier (replace _ with /)
+  const decodedIdentifier = identifier ? decodeURIComponent(identifier).replace(/_/g, '/') : '';
 
   // Helper function to get site name
   const getSiteName = (siteId: string | undefined) => {
@@ -37,7 +40,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
         const res = await fetch(`${API_BASE_URL}/api/inventory`);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        const foundItem = data.find((i: InventoryItem) => getIdentifier(i) === identifier);
+        const foundItem = data.find((i: InventoryItem) => getIdentifier(i) === decodedIdentifier);
         if (foundItem) {
           setItem(foundItem);
           setAdjustForm((prev) => ({ ...prev, newQuantity: foundItem.quantity || '' }));
@@ -50,7 +53,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
       }
     };
     fetchItem();
-  }, [identifier]);
+  }, [decodedIdentifier]);
 
   // Fetch sites
   useEffect(() => {
@@ -135,7 +138,7 @@ const InventoryItemDetails: React.FC<InventoryProps> = ({ refreshInventory }) =>
           <div><strong>Date Received:</strong> {item?.receivedDate || 'N/A'}</div>
           <div><strong>Source:</strong> {item?.source || 'N/A'}</div>
           <div><strong>Location:</strong> {item?.account || 'Storage'}</div>
-          <div><strong>Site:</strong> {item ? getSiteName(item.siteId) : 'N/A'}</div> {/* New field */}
+          <div><strong>Site:</strong> {item ? getSiteName(item.siteId) : 'N/A'}</div>
           <div><strong>Status:</strong> {item?.status || 'Stored'}</div>
           <div><strong>DSP Number:</strong> {item?.dspNumber || 'N/A'}</div>
         </div>
