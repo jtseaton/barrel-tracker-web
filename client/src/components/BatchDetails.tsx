@@ -396,6 +396,7 @@ const BatchDetails: React.FC = () => {
         setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
         return;
       }
+      // Refresh batch data
       const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         headers: { Accept: 'application/json' },
       });
@@ -407,6 +408,20 @@ const BatchDetails: React.FC = () => {
       setPackageType('');
       setPackageQuantity(0);
       setPackageLocation('');
+      // Verify inventory update
+      const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`);
+      if (!inventoryRes.ok) {
+        throw new Error('Failed to verify inventory update');
+      }
+      const inventoryData = await inventoryRes.json();
+      if (!inventoryData || inventoryData.length === 0) {
+        console.error('POST /api/batches/:batchId/package: Inventory item not found after packaging', {
+          identifier: `${updatedBatch.productName} ${packageType}`,
+          siteId: updatedBatch.siteId,
+          locationId: packageLocation,
+        });
+        throw new Error('Packaging succeeded, but inventory item was not created or updated');
+      }
       setSuccessMessage(data.message || 'Packaged successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
