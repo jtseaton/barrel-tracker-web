@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem, Site } from '../types/interfaces';
 import { fetchDailySummary } from '../utils/fetchUtils';
 
@@ -89,7 +89,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     if (inventory.length > 0) {
       fetchLocationsAndSites();
     }
-  }, [API_BASE_URL, OUR_DSP]); // Depend only on API_BASE_URL and OUR_DSP, not inventory
+  }, [API_BASE_URL, OUR_DSP]);
 
   // Helper function to map locationId to location name
   const getLocationName = (locationId: number | undefined) => {
@@ -158,7 +158,8 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
 
   const handleItemClick = (item: InventoryItem) => {
-    navigate(`/inventory/${getIdentifier(item)}`);
+    const encodedIdentifier = encodeURIComponent(getIdentifier(item).replace(/\//g, '_'));
+    navigate(`/inventory/${encodedIdentifier}`);
   };
 
   const filteredInventory = inventory.filter(item => 
@@ -173,15 +174,22 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     <div style={{ padding: '20px', backgroundColor: '#2E4655', color: '#FFFFFF', fontFamily: 'Arial, sans-serif' }}>
       <h2 style={{ color: '#EEC930', textAlign: 'center' }}>Inventory Management</h2>
       <div style={{ marginBottom: '20px' }}>
-        <Link to="/receive">
-          <button style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>
-            Receive Inventory
-          </button>
-        </Link>
-        <button onClick={() => setShowMoveModal(true)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>
+        <button
+          onClick={() => navigate('/receive')}
+          style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}
+        >
+          Receive Inventory
+        </button>
+        <button
+          onClick={() => setShowMoveModal(true)}
+          style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}
+        >
           Move Inventory
         </button>
-        <button onClick={() => setShowLossModal(true)} style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}>
+        <button
+          onClick={() => setShowLossModal(true)}
+          style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}
+        >
           Record Loss
         </button>
       </div>
