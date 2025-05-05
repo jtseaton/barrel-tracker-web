@@ -166,16 +166,19 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       return;
     }
     try {
+      const lossPayload = {
+        identifier: batch.batchId,
+        quantityLost: showLossPrompt.volume,
+        proofGallonsLost: 0, // Non-spirits (beer)
+        reason: 'Unpackaged batch volume shortfall',
+        date: new Date().toISOString().split('T')[0],
+        dspNumber: 'DSP-AL-20010', // Add DSP number
+      };
+      console.log('handleLossConfirmation: Sending loss payload', lossPayload);
       const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          identifier: batch.batchId,
-          quantityLost: showLossPrompt.volume,
-          proofGallonsLost: 0, // Assuming non-spirits (beer)
-          reason: 'Unpackaged batch volume shortfall',
-          date: new Date().toISOString().split('T')[0],
-        }),
+        body: JSON.stringify(lossPayload),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -195,6 +198,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setSuccessMessage('Loss recorded and batch completed');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
+      await refreshInventory(); // Refresh inventory to reflect updated quantity
     } catch (err: any) {
       console.error('Loss confirmation error:', err);
       setError('Failed to record loss or complete batch: ' + err.message);
