@@ -170,7 +170,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         identifier: batch.batchId,
         quantityLost: showLossPrompt.volume,
         proofGallonsLost: 0, // Non-spirits (beer)
-        reason: 'Fermentation loss due to trub/spillage', // Specific for TTB
+        reason: 'Fermentation loss due to trub/spillage', // TTB-specific
         date: new Date().toISOString().split('T')[0],
         dspNumber: 'DSP-AL-20010',
       };
@@ -188,9 +188,12 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
       if (!res.ok) {
         const text = await res.text();
+        console.error('handleLossConfirmation: Loss recording failed', { status: res.status, response: text });
         throw new Error(`Failed to record loss: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      // Update batch volume to 0 after recording loss
+      const responseData = await res.json();
+      console.log('handleLossConfirmation: Loss recorded', responseData);
+      // Update batch volume to 0
       const updateRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -200,6 +203,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         const text = await updateRes.text();
         throw new Error(`Failed to update batch volume: HTTP ${updateRes.status}, Response: ${text.slice(0, 50)}`);
       }
+      // Complete the batch
       const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -214,7 +218,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setSuccessMessage('Loss recorded and batch completed');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
-      // No refreshInventory() needed since batch loss doesn't affect user-visible inventory
     } catch (err: any) {
       console.error('Loss confirmation error:', err);
       setError('Failed to record loss or complete batch: ' + err.message);

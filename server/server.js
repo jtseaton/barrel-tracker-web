@@ -2688,8 +2688,8 @@ app.post('/api/record-loss', (req, res) => {
           ],
           (err) => {
             if (err) {
-              console.error('POST /api/record-loss: Insert loss error:', err);
-              return res.status(500).json({ error: `Failed to record loss: ${err.message}` });
+              console.error('POST /api/record-loss: Insert inventory loss error:', err);
+              return res.status(500).json({ error: `Failed to record inventory loss: ${err.message}` });
             }
             db.run(
               'UPDATE inventory SET quantity = ? WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
@@ -2721,28 +2721,43 @@ app.post('/api/record-loss', (req, res) => {
               return res.status(404).json({ error: `Neither inventory item nor batch found: ${identifier}` });
             }
             const { siteId } = batchRow;
-            // Use null for locationId since this is a batch-level loss
-            console.log('POST /api/record-loss: Recording batch-level loss', { identifier, siteId, locationId: null });
-            db.run(
-              `INSERT INTO inventory_losses (identifier, quantityLost, proofGallonsLost, reason, date, dspNumber, siteId, locationId)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                identifier,
-                parseFloat(quantityLost),
-                parsedProofGallonsLost,
-                reason,
-                date,
-                effectiveDspNumber,
-                siteId,
-                null, // Batch-level loss, no specific location
-              ],
-              (err) => {
+            // Get a default locationId for the site
+            db.get(
+              'SELECT locationId FROM locations WHERE siteId = ? LIMIT 1',
+              [siteId],
+              (err, locationRow) => {
                 if (err) {
-                  console.error('POST /api/record-loss: Insert batch loss error:', err);
-                  return res.status(500).json({ error: `Failed to record batch loss: ${err.message}` });
+                  console.error('POST /api/record-loss: Fetch location error:', err);
+                  return res.status(500).json({ error: `Failed to fetch location: ${err.message}` });
                 }
-                console.log('POST /api/record-loss: Success (batch loss)', { identifier, quantityLost });
-                res.json({ message: 'Batch loss recorded successfully' });
+                if (!locationRow) {
+                  console.error('POST /api/record-loss: No location found for site', { siteId });
+                  return res.status(400).json({ error: `No location found for site: ${siteId}` });
+                }
+                const locationId = locationRow.locationId;
+                console.log('POST /api/record-loss: Recording batch-level loss', { identifier, siteId, locationId });
+                db.run(
+                  `INSERT INTO inventory_losses (identifier, quantityLost, proofGallonsLost, reason, date, dspNumber, siteId, locationId)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    identifier,
+                    parseFloat(quantityLost),
+                    parsedProofGallonsLost,
+                    reason,
+                    date,
+                    effectiveDspNumber,
+                    siteId,
+                    locationId,
+                  ],
+                  (err) => {
+                    if (err) {
+                      console.error('POST /api/record-loss: Insert batch loss error:', err);
+                      return res.status(500).json({ error: `Failed to record batch loss: ${err.message}` });
+                    }
+                    console.log('POST /api/record-loss: Success (batch loss)', { identifier, quantityLost, siteId, locationId });
+                    res.json({ message: 'Batch loss recorded successfully' });
+                  }
+                );
               }
             );
           }
