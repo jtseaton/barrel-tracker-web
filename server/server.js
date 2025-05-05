@@ -2627,36 +2627,96 @@ app.post('/api/package', (req, res) => {
   });
 });
 
-// Update /api/record-loss (~line 1600)
 app.post('/api/record-loss', (req, res) => {
-  console.log('Received POST to /api/record-loss:', req.body);
   const { identifier, quantityLost, proofGallonsLost, reason, date, dspNumber } = req.body;
-
-  if (!identifier || !quantityLost || !proofGallonsLost || !reason || !date) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  const requiredFields = { identifier, quantityLost, reason, date };
+  const missingFields = Object.entries(requiredFields)
+    .filter(([_, value]) => value === undefined || value === null || value === '')
+    .map(([key]) => key);
+  if (missingFields.length > 0) {
+    console.error('POST /api/record-loss: Missing required fields', { missingFields, reqBody: req.body });
+    return res.status(400).json({ error: `Missing required fields: ${missingFields.join(', ')}` });
   }
-
-  const dspToUse = dspNumber || 'DSP-AL-20010';
-
-  db.run(
-    `INSERT INTO transactions (barrelId, type, quantity, proofGallons, date, action, dspNumber)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [identifier, 'Finished Goods', parseFloat(quantityLost), parseFloat(proofGallonsLost), date, 'Loss', dspToUse],
-    (err) => {
+  if (isNaN(parseFloat(quantityLost)) || parseFloat(quantityLost) < 0) {
+    console.error('POST /api/record-loss: Invalid quantityLost', { quantityLost });
+    return res.status(400).json({ error: 'quantityLost must be a non-negative number' });
+  }
+  const parsedProofGallonsLost = proofGallonsLost !== undefined ? parseFloat(proofGallonsLost) : 0;
+  if (isNaN(parsedProofGallonsLost) || parsedProofGallonsLost < 0) {
+    console.error('POST /api/record-loss: Invalid proofGallonsLost', { proofGallonsLost });
+    return res.status(400).json({ error: 'proofGallonsLost must be a non-negative number or 0' });
+  }
+  const effectiveDspNumber = dspNumber || 'DSP-AL-20010'; // Default DSP
+  console.log('POST /api/record-loss: Processing loss', {
+    identifier,
+    quantityLost,
+    proofGallonsLost: parsedProofGallonsLost,
+    reason,
+    date,
+    dspNumber: effectiveDspNumber,
+  });
+  db.get(
+    'SELECT siteId, locationId FROM inventory WHERE identifier = ? AND status IN (?, ?)',
+    [identifier, 'Received', 'Stored'],
+    (err, row) => {
       if (err) {
-        console.error('Transaction Insert Error:', err);
-        return res.status(500).json({ error: err.message });
+        console.error('POST /api/record-loss: Fetch inventory error:', err);
+        return res.status(500).json({ error: `Failed to fetch inventory: ${err.message}` });
       }
+      if (!row) {
+        console.error('POST /api/record-loss: Inventory item not found', { identifier });
+        return res.status(404).json({ error: `Inventory item not found: ${identifier}` });
+      }
+      const { siteId, locationId } = row;
       db.run(
-        `UPDATE inventory SET quantity = quantity - ?, proofGallons = proofGallons - ? WHERE identifier = ?`,
-        [parseFloat(quantityLost), parseFloat(proofGallonsLost), identifier],
+        `INSERT INTO inventory_losses (identifier, quantityLost, proofGallonsLost, reason, date, dspNumber, siteId, locationId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          identifier,
+          parseFloat(quantityLost),
+          parsedProofGallonsLost,
+          reason,
+          date,
+          effectiveDspNumber,
+          siteId,
+          locationId,
+        ],
         (err) => {
           if (err) {
-            console.error('Update Inventory Error:', err);
-            return res.status(500).json({ error: err.message });
+            console.error('POST /api/record-loss: Insert loss error:', err);
+            return res.status(500).json({ error: `Failed to record loss: ${err.message}` });
           }
-          console.log(`POST /api/record-loss: Recorded loss for ${identifier}, quantity: ${quantityLost}, proofGallons: ${proofGallonsLost}`);
-          res.json({ message: 'Loss recorded' });
+          db.get(
+            'SELECT quantity FROM inventory WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
+            [identifier, siteId, locationId, 'Received', 'Stored'],
+            (err, inventoryRow) => {
+              if (err) {
+                console.error('POST /api/record-loss: Fetch inventory quantity error:', err);
+                return res.status(500).json({ error: `Failed to fetch inventory quantity: ${err.message}` });
+              }
+              if (!inventoryRow) {
+                console.error('POST /api/record-loss: Inventory item disappeared', { identifier, siteId, locationId });
+                return res.status(404).json({ error: `Inventory item not found after loss recording` });
+              }
+              const newQuantity = parseFloat(inventoryRow.quantity) - parseFloat(quantityLost);
+              if (newQuantity < 0) {
+                console.error('POST /api/record-loss: Insufficient quantity', { identifier, currentQuantity: inventoryRow.quantity, quantityLost });
+                return res.status(400).json({ error: `Insufficient quantity: ${quantityLost} requested, ${inventoryRow.quantity} available` });
+              }
+              db.run(
+                'UPDATE inventory SET quantity = ? WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
+                [newQuantity, identifier, siteId, locationId, 'Received', 'Stored'],
+                (err) => {
+                  if (err) {
+                    console.error('POST /api/record-loss: Update inventory error:', err);
+                    return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
+                  }
+                  console.log('POST /api/record-loss: Success', { identifier, quantityLost, newQuantity });
+                  res.json({ message: 'Loss recorded successfully' });
+                }
+              );
+            }
+          );
         }
       );
     }
