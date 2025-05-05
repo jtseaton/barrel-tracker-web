@@ -2646,7 +2646,7 @@ app.post('/api/record-loss', (req, res) => {
     console.error('POST /api/record-loss: Invalid proofGallonsLost', { proofGallonsLost });
     return res.status(400).json({ error: 'proofGallonsLost must be a non-negative number or 0' });
   }
-  const effectiveDspNumber = dspNumber || 'DSP-AL-20010'; // Default DSP
+  const effectiveDspNumber = dspNumber || 'DSP-AL-20010';
   console.log('POST /api/record-loss: Processing loss', {
     identifier,
     quantityLost,
@@ -2655,70 +2655,99 @@ app.post('/api/record-loss', (req, res) => {
     date,
     dspNumber: effectiveDspNumber,
   });
+
+  // Try to find an inventory item first
   db.get(
-    'SELECT siteId, locationId FROM inventory WHERE identifier = ? AND status IN (?, ?)',
+    'SELECT siteId, locationId, quantity FROM inventory WHERE identifier = ? AND status IN (?, ?)',
     [identifier, 'Received', 'Stored'],
-    (err, row) => {
+    (err, inventoryRow) => {
       if (err) {
         console.error('POST /api/record-loss: Fetch inventory error:', err);
         return res.status(500).json({ error: `Failed to fetch inventory: ${err.message}` });
       }
-      if (!row) {
-        console.error('POST /api/record-loss: Inventory item not found', { identifier });
-        return res.status(404).json({ error: `Inventory item not found: ${identifier}` });
-      }
-      const { siteId, locationId } = row;
-      db.run(
-        `INSERT INTO inventory_losses (identifier, quantityLost, proofGallonsLost, reason, date, dspNumber, siteId, locationId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          identifier,
-          parseFloat(quantityLost),
-          parsedProofGallonsLost,
-          reason,
-          date,
-          effectiveDspNumber,
-          siteId,
-          locationId,
-        ],
-        (err) => {
-          if (err) {
-            console.error('POST /api/record-loss: Insert loss error:', err);
-            return res.status(500).json({ error: `Failed to record loss: ${err.message}` });
-          }
-          db.get(
-            'SELECT quantity FROM inventory WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
-            [identifier, siteId, locationId, 'Received', 'Stored'],
-            (err, inventoryRow) => {
-              if (err) {
-                console.error('POST /api/record-loss: Fetch inventory quantity error:', err);
-                return res.status(500).json({ error: `Failed to fetch inventory quantity: ${err.message}` });
-              }
-              if (!inventoryRow) {
-                console.error('POST /api/record-loss: Inventory item disappeared', { identifier, siteId, locationId });
-                return res.status(404).json({ error: `Inventory item not found after loss recording` });
-              }
-              const newQuantity = parseFloat(inventoryRow.quantity) - parseFloat(quantityLost);
-              if (newQuantity < 0) {
-                console.error('POST /api/record-loss: Insufficient quantity', { identifier, currentQuantity: inventoryRow.quantity, quantityLost });
-                return res.status(400).json({ error: `Insufficient quantity: ${quantityLost} requested, ${inventoryRow.quantity} available` });
-              }
-              db.run(
-                'UPDATE inventory SET quantity = ? WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
-                [newQuantity, identifier, siteId, locationId, 'Received', 'Stored'],
-                (err) => {
-                  if (err) {
-                    console.error('POST /api/record-loss: Update inventory error:', err);
-                    return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
-                  }
-                  console.log('POST /api/record-loss: Success', { identifier, quantityLost, newQuantity });
-                  res.json({ message: 'Loss recorded successfully' });
-                }
-              );
-            }
-          );
+      if (inventoryRow) {
+        // Inventory item found, update quantity
+        const { siteId, locationId, quantity } = inventoryRow;
+        const newQuantity = parseFloat(quantity) - parseFloat(quantityLost);
+        if (newQuantity < 0) {
+          console.error('POST /api/record-loss: Insufficient quantity', { identifier, currentQuantity: quantity, quantityLost });
+          return res.status(400).json({ error: `Insufficient quantity: ${quantityLost} requested, ${quantity} available` });
         }
-      );
+        db.run(
+          `INSERT INTO inventory_losses (identifier, quantityLost, proofGallonsLost, reason, date, dspNumber, siteId, locationId)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            identifier,
+            parseFloat(quantityLost),
+            parsedProofGallonsLost,
+            reason,
+            date,
+            effectiveDspNumber,
+            siteId,
+            locationId,
+          ],
+          (err) => {
+            if (err) {
+              console.error('POST /api/record-loss: Insert loss error:', err);
+              return res.status(500).json({ error: `Failed to record loss: ${err.message}` });
+            }
+            db.run(
+              'UPDATE inventory SET quantity = ? WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
+              [newQuantity, identifier, siteId, locationId, 'Received', 'Stored'],
+              (err) => {
+                if (err) {
+                  console.error('POST /api/record-loss: Update inventory error:', err);
+                  return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
+                }
+                console.log('POST /api/record-loss: Success (inventory loss)', { identifier, quantityLost, newQuantity });
+                res.json({ message: 'Loss recorded successfully' });
+              }
+            );
+          }
+        );
+      } else {
+        // No inventory item, check if identifier is a batch
+        console.log('POST /api/record-loss: No inventory item, checking batch', { identifier });
+        db.get(
+          'SELECT siteId FROM batches WHERE batchId = ?',
+          [identifier],
+          (err, batchRow) => {
+            if (err) {
+              console.error('POST /api/record-loss: Fetch batch error:', err);
+              return res.status(500).json({ error: `Failed to fetch batch: ${err.message}` });
+            }
+            if (!batchRow) {
+              console.error('POST /api/record-loss: Neither inventory nor batch found', { identifier });
+              return res.status(404).json({ error: `Neither inventory item nor batch found: ${identifier}` });
+            }
+            const { siteId } = batchRow;
+            // Use null for locationId since this is a batch-level loss
+            console.log('POST /api/record-loss: Recording batch-level loss', { identifier, siteId, locationId: null });
+            db.run(
+              `INSERT INTO inventory_losses (identifier, quantityLost, proofGallonsLost, reason, date, dspNumber, siteId, locationId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                identifier,
+                parseFloat(quantityLost),
+                parsedProofGallonsLost,
+                reason,
+                date,
+                effectiveDspNumber,
+                siteId,
+                null, // Batch-level loss, no specific location
+              ],
+              (err) => {
+                if (err) {
+                  console.error('POST /api/record-loss: Insert batch loss error:', err);
+                  return res.status(500).json({ error: `Failed to record batch loss: ${err.message}` });
+                }
+                console.log('POST /api/record-loss: Success (batch loss)', { identifier, quantityLost });
+                res.json({ message: 'Batch loss recorded successfully' });
+              }
+            );
+          }
+        );
+      }
     }
   );
 });
@@ -3079,49 +3108,121 @@ app.get('/api/daily-summary', (req, res) => {
 });
 
 app.get('/api/report/monthly', (req, res) => {
-  const { month } = req.query;
-  if (!month) {
-    return res.status(400).json({ error: 'Month parameter is required' });
+  const { month, siteId } = req.query;
+  if (!month || !siteId) {
+    console.error('GET /api/report/monthly: Missing month or siteId', { month, siteId });
+    return res.status(400).json({ error: 'month and siteId are required' });
   }
-
   const startDate = `${month}-01`;
-  const endDate = `${month}-31`;
+  const endDate = new Date(new Date(startDate).setMonth(new Date(startDate).getMonth() + 1)).toISOString().split('T')[0];
 
+  // Total barrels on hand (packaged + unpackaged)
   db.all(
-    `SELECT * FROM transactions WHERE date BETWEEN ? AND ?`,
-    [startDate, endDate],
-    (err, transactions) => {
+    `
+    SELECT 
+      COALESCE(SUM(CASE 
+        WHEN identifier LIKE '%1/2 BBL Keg%' THEN quantity * 0.5
+        WHEN identifier LIKE '%1/6 BBL Keg%' THEN quantity * 0.167
+        WHEN identifier LIKE '%750ml Bottle%' THEN quantity * 0.006
+        ELSE 0 
+      END), 0) AS packagedBarrels
+    FROM inventory 
+    WHERE type = 'Finished Goods' AND status IN ('Received', 'Stored') AND siteId = ?
+    `,
+    [siteId],
+    (err, packagedRows) => {
       if (err) {
-        console.error('DB Select Error:', err);
-        return res.status(500).json({ error: err.message });
+        console.error('GET /api/report/monthly: Fetch packaged barrels error:', err);
+        return res.status(500).json({ error: `Failed to fetch packaged barrels: ${err.message}` });
       }
-
-      let totalReceived = 0;
-      let totalProcessed = 0;
-      let totalMoved = 0;
-      let totalRemoved = 0;
-      const byType = {};
-
-      transactions.forEach((tx) => {
-        const proofGallons = parseFloat(tx.proofGallons);
-        if (tx.action === 'Received') totalReceived += proofGallons;
-        if (tx.action === 'Packaged') totalProcessed += proofGallons;
-        if (tx.action === 'Moved') totalMoved += proofGallons;
-        if (tx.action === 'Loss') totalRemoved += proofGallons;
-        if (tx.action === 'Packaged') {
-          byType[tx.type] = (byType[tx.type] || 0) + proofGallons;
+      db.all(
+        `
+        SELECT 
+          COALESCE(SUM(volume), 0) AS unpackagedBarrels
+        FROM batches 
+        WHERE status = 'In Progress' AND siteId = ?
+        `,
+        [siteId],
+        (err, unpackagedRows) => {
+          if (err) {
+            console.error('GET /api/report/monthly: Fetch unpackaged barrels error:', err);
+            return res.status(500).json({ error: `Failed to fetch unpackaged barrels: ${err.message}` });
+          }
+          // Barrels produced by fermentation
+          db.all(
+            `
+            SELECT 
+              COALESCE(SUM(volume), 0) AS producedBarrels
+            FROM batches 
+            WHERE date >= ? AND date < ? AND siteId = ?
+            `,
+            [startDate, endDate, siteId],
+            (err, producedRows) => {
+              if (err) {
+                console.error('GET /api/report/monthly: Fetch produced barrels error:', err);
+                return res.status(500).json({ error: `Failed to fetch produced barrels: ${err.message}` });
+              }
+              // Barrels packaged (kegs and bottles/cans)
+              db.all(
+                `
+                SELECT 
+                  identifier,
+                  COALESCE(SUM(CASE 
+                    WHEN identifier LIKE '%1/2 BBL Keg%' THEN quantity * 0.5
+                    WHEN identifier LIKE '%1/6 BBL Keg%' THEN quantity * 0.167
+                    WHEN identifier LIKE '%750ml Bottle%' THEN quantity * 0.006
+                    ELSE 0 
+                  END), 0) AS packagedBarrels
+                FROM inventory 
+                WHERE type = 'Finished Goods' 
+                  AND status IN ('Received', 'Stored') 
+                  AND receivedDate >= ? AND receivedDate < ? 
+                  AND siteId = ?
+                GROUP BY identifier
+                `,
+                [startDate, endDate, siteId],
+                (err, packagedRows) => {
+                  if (err) {
+                    console.error('GET /api/report/monthly: Fetch packaged barrels error:', err);
+                    return res.status(500).json({ error: `Failed to fetch packaged barrels: ${err.message}` });
+                  }
+                  // Barrels lost
+                  db.all(
+                    `
+                    SELECT 
+                      COALESCE(SUM(quantityLost), 0) AS lostBarrels
+                    FROM inventory_losses 
+                    WHERE date >= ? AND date < ? AND siteId = ?
+                    `,
+                    [startDate, endDate, siteId],
+                    (err, lossRows) => {
+                      if (err) {
+                        console.error('GET /api/report/monthly: Fetch lost barrels error:', err);
+                        return res.status(500).json({ error: `Failed to fetch lost barrels: ${err.message}` });
+                      }
+                      const report = {
+                        siteId,
+                        month,
+                        totalBarrelsOnHand: (packagedRows[0]?.packagedBarrels || 0) + (unpackagedRows[0]?.unpackagedBarrels || 0),
+                        barrelsProduced: producedRows[0]?.producedBarrels || 0,
+                        barrelsPackagedInKegs: packagedRows
+                          .filter(row => row.identifier.includes('Keg'))
+                          .reduce((sum, row) => sum + row.packagedBarrels, 0),
+                        barrelsPackagedInBottles: packagedRows
+                          .filter(row => row.identifier.includes('Bottle'))
+                          .reduce((sum, row) => sum + row.packagedBarrels, 0),
+                        barrelsLost: lossRows[0]?.lostBarrels || 0,
+                      };
+                      console.log('GET /api/report/monthly: Report generated', report);
+                      res.json(report);
+                    }
+                  );
+                }
+              );
+            }
+          );
         }
-      });
-
-      res.json({
-        month,
-        totalReceived,
-        totalProcessed,
-        totalMoved,
-        totalRemoved,
-        byType,
-        transactions
-      });
+      );
     }
   );
 });
