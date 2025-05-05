@@ -202,6 +202,21 @@ db.serialize(() => {
     }
   });
   db.run(`
+    CREATE TABLE IF NOT EXISTS inventory_losses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    identifier TEXT NOT NULL,
+    quantityLost REAL NOT NULL,
+    proofGallonsLost REAL DEFAULT 0,
+    reason TEXT NOT NULL,
+    date TEXT NOT NULL,
+    dspNumber TEXT,
+    siteId TEXT NOT NULL,
+    locationId INTEGER,
+    FOREIGN KEY (siteId) REFERENCES sites(siteId),
+    FOREIGN KEY (locationId) REFERENCES locations(locationId)
+  )
+  `;
+  db.run(`
     CREATE TABLE IF NOT EXISTS recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
