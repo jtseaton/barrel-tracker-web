@@ -865,35 +865,37 @@ app.post('/api/batches/:batchId/package', (req, res) => {
   `, [batchId], (err, batch) => {
     if (err) {
       console.error('POST /api/batches/:batchId/package: Fetch batch error:', err);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: `Failed to fetch batch: ${err.message}` });
     }
     if (!batch) {
       console.error('POST /api/batches/:batchId/package: Batch not found', { batchId });
       return res.status(404).json({ error: 'Batch not found' });
     }
+    console.log('POST /api/batches/:batchId/package: Fetched batch', { batchId, batch });
     if (batch.volume === null || batch.volume === undefined) {
       console.error('POST /api/batches/:batchId/package: Batch volume not set', { batchId });
       return res.status(400).json({ error: 'Batch volume not set' });
     }
-    const volumeUsed = packageVolumes[packageType] * quantity;
-    const tolerance = 0.01; // Allow 0.01 barrel overrun
-    if (volumeUsed > batch.volume + tolerance) {
-      console.error('POST /api/batches/:batchId/package: Insufficient volume', { batchId, volumeUsed, available: batch.volume });
-      return res.status(400).json({ error: `Insufficient volume: ${volumeUsed.toFixed(3)} barrels needed, ${batch.volume.toFixed(3)} barrels available` });
+    if (!batch.productName) {
+      console.error('POST /api/batches/:batchId/package: Product name missing', { batchId });
+      return res.status(400).json({ error: 'Product name missing for batch' });
     }
-    if (volumeUsed > batch.volume) {
-      const shortfall = volumeUsed - batch.volume;
-      console.log(`POST /api/batches/:batchId/package: Volume adjustment needed`, { shortfall, volumeUsed, available: batch.volume });
+    const volumeUsed = packageVolumes[packageType] * quantity;
+    const availableVolume = parseFloat(batch.volume);
+    const tolerance = 0.01; // Allow 0.01 barrel overrun
+    if (volumeUsed > availableVolume + tolerance) {
+      const shortfall = volumeUsed - availableVolume;
+      console.log('POST /api/batches/:batchId/package: Volume adjustment needed', { batchId, volumeUsed, availableVolume, shortfall });
       return res.status(200).json({
         prompt: 'volumeAdjustment',
-        message: `${volumeUsed.toFixed(3)} barrels are needed, ${batch.volume.toFixed(3)} barrels available. Increase batch volume by ${shortfall.toFixed(3)} barrels?`,
+        message: `${volumeUsed.toFixed(3)} barrels needed, ${availableVolume.toFixed(3)} barrels available. Increase batch volume by ${shortfall.toFixed(3)} barrels?`,
         shortfall,
       });
     }
     db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, batch.siteId], (err, location) => {
       if (err) {
         console.error('POST /api/batches/:batchId/package: Fetch location error:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: `Failed to fetch location: ${err.message}` });
       }
       if (!location) {
         console.error('POST /api/batches/:batchId/package: Invalid locationId', { locationId, siteId: batch.siteId });
@@ -954,7 +956,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
                   return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
                 }
                 const completePackaging = () => {
-                  const newVolume = batch.volume - volumeUsed;
+                  const newVolume = availableVolume - volumeUsed;
                   console.log('POST /api/batches/:batchId/package: Updating batch volume', { batchId, newVolume, volumeUsed });
                   db.run(
                     'UPDATE batches SET volume = ? WHERE batchId = ?',
@@ -970,7 +972,7 @@ app.post('/api/batches/:batchId/package', (req, res) => {
                           console.error('POST /api/batches/:batchId/package: Commit transaction error:', err);
                           return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
                         }
-                        console.log(`POST /api/batches/:batchId/package: Success`, {
+                        console.log('POST /api/batches/:batchId/package: Success', {
                           batchId,
                           newIdentifier,
                           quantity,
