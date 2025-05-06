@@ -450,6 +450,10 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError('Please select stage and equipment (if not Completed)');
       return;
     }
+    if (stage === 'Packaging' && packagingActions.length > 0) {
+      setError('Cannot progress to Packaging: existing packaging actions must be deleted first');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/equipment`, {
         method: 'POST',
@@ -993,7 +997,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
             <option value="Boiling">Boiling</option>
             <option value="Fermenting">Fermenting</option>
             <option value="Bright Tank">Bright Tank</option>
-            <option value="Packaging" disabled={packagingActions.length > 0}>Packaging</option>
+            <option value="Packaging">Packaging</option>
             <option value="Completed">Completed</option>
           </select>
           <select
@@ -1154,13 +1158,14 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           )}
           <button
             onClick={handleProgressBatch}
+            disabled={stage === 'Packaging' && packagingActions.length > 0}
             style={{
-              backgroundColor: '#2196F3',
+              backgroundColor: (stage === 'Packaging' && packagingActions.length > 0) ? '#ccc' : '#2196F3',
               color: '#fff',
               padding: '10px 20px',
               border: 'none',
               borderRadius: '4px',
-              cursor: 'pointer',
+              cursor: (stage === 'Packaging' && packagingActions.length > 0) ? 'not-allowed' : 'pointer',
               fontSize: '16px',
               width: '100%',
             }}
