@@ -1267,139 +1267,149 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       </div>
 
       {editPackaging && (
-        <div
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 2100,
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: '#fff',
+        padding: '20px',
+        borderRadius: '8px',
+        width: '400px',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+        textAlign: 'center',
+        color: '#555',
+      }}
+    >
+      <h3 style={{ color: '#555', marginBottom: '20px' }}>Edit Packaging Action</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Package Type:
+          </label>
+          <input
+            type="text"
+            value={editPackaging.packageType}
+            disabled
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #CCCCCC',
+              borderRadius: '4px',
+              fontSize: '16px',
+              boxSizing: 'border-box',
+              color: '#000000',
+              backgroundColor: '#F5F5F5',
+            }}
+          />
+        </div>
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Quantity:
+          </label>
+          <input
+            type="number"
+            value={editPackaging.quantity}
+            onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
+            min="0"
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #CCCCCC',
+              borderRadius: '4px',
+              fontSize: '16px',
+              boxSizing: 'border-box',
+              color: '#000000',
+              backgroundColor: '#FFFFFF',
+            }}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
+        <button
+          onClick={async () => {
+            console.log('Edit packaging: Attempting to update', {
+              batchId,
+              packageId: editPackaging.id,
+              packageType: editPackaging.packageType,
+              newQuantity: editPackaging.quantity,
+            });
+            try {
+              const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${editPackaging.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ quantity: editPackaging.quantity }),
+              });
+              if (!res.ok) {
+                const text = await res.text();
+                console.error('Edit packaging: Failed to update', {
+                  status: res.status,
+                  response: text.slice(0, 100),
+                });
+                throw new Error(`Failed to update packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+              }
+              const data = await res.json();
+              console.log('Edit packaging success:', data);
+              setPackagingActions((prev) =>
+                prev.map((action) =>
+                  action.id === editPackaging.id
+                    ? { ...action, quantity: editPackaging.quantity, volume: editPackaging.quantity * (packageVolumes[action.packageType] || 0) }
+                    : action
+                )
+              );
+              setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
+              setEditPackaging(null);
+              setSuccessMessage('Packaging action updated successfully');
+              setTimeout(() => setSuccessMessage(null), 2000);
+              setError(null);
+              await refreshInventory();
+            } catch (err: unknown) {
+              const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+              console.error('Edit packaging error:', err);
+              setError(`Failed to update packaging: ${errorMessage}`);
+            }
+          }}
           style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2100,
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
           }}
         >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-              color: '#555',
-            }}
-          >
-            <h3 style={{ color: '#555', marginBottom: '20px' }}>Edit Packaging Action</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Package Type:
-                </label>
-                <input
-                  type="text"
-                  value={editPackaging.packageType}
-                  disabled
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#F5F5F5',
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Quantity:
-                </label>
-                <input
-                  type="number"
-                  value={editPackaging.quantity}
-                  onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
-                  min="0"
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${editPackaging.id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                      body: JSON.stringify({ quantity: editPackaging.quantity }),
-                    });
-                    if (!res.ok) {
-                      const text = await res.text();
-                      throw new Error(`Failed to update packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-                    }
-                    const data = await res.json();
-                    console.log('Edit packaging success:', data);
-                    setPackagingActions((prev) =>
-                      prev.map((action) =>
-                        action.id === editPackaging.id
-                          ? { ...action, quantity: editPackaging.quantity, volume: editPackaging.quantity * (packageVolumes[action.packageType] || 0) }
-                          : action
-                      )
-                    );
-                    setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
-                    setEditPackaging(null);
-                    setSuccessMessage('Packaging action updated successfully');
-                    setTimeout(() => setSuccessMessage(null), 2000);
-                    setError(null);
-                    await refreshInventory();
-                  } catch (err: unknown) {
-                    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-                    console.error('Edit packaging error:', err);
-                    setError('Failed to update packaging: ' + errorMessage);
-                  }
-                }}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setEditPackaging(null)}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          Save
+        </button>
+        <button
+          onClick={() => setEditPackaging(null)}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {showVolumePrompt && (
         <div
