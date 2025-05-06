@@ -1,186 +1,849 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Batch, Ingredient, PackagingAction, BatchDetailsProps } from '../types/interfaces';
+import { Batch, Product, Site, Equipment, Ingredient, Location, InventoryItem, PackagingAction, BatchDetailsProps } from '../types/interfaces';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import '../App.css';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+    lastAutoTable: { finalY: number };
+  }
+}
+
+interface BatchAction {
+  id: number;
+  action: string;
+  timestamp: string;
+}
 
 const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory }) => {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
-
-  // State declarations
-  const [batch, setBatch] = useState<Batch>({} as Batch);
-  const [products, setProducts] = useState<any[]>([]);
-  const [sites, setSites] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([]);
-  const [actions, setActions] = useState<any[]>([]);
-  const [equipment, setEquipment] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [newBatchId, setNewBatchId] = useState('');
-  const [stage, setStage] = useState<string>('Mashing');
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
+  const [actions, setActions] = useState<BatchAction[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
-  const [newIngredients, setNewIngredients] = useState([{ itemName: '', quantity: 0, unit: 'lbs' }]);
   const [newAction, setNewAction] = useState('');
+  const [newBatchId, setNewBatchId] = useState('');
+  const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
+  const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
+  const [stage, setStage] = useState<'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed'>('Mashing');
+  const [packageType, setPackageType] = useState<string>('');
+  const [packageQuantity, setPackageQuantity] = useState<number>(0);
+  const [packageLocation, setPackageLocation] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [packageType, setPackageType] = useState('');
-  const [packageQuantity, setPackageQuantity] = useState(0);
-  const [packageLocation, setPackageLocation] = useState('');
+  const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
   const [showVolumePrompt, setShowVolumePrompt] = useState<{ message: string; shortfall: number } | null>(null);
   const [showLossPrompt, setShowLossPrompt] = useState<{ volume: number } | null>(null);
-  const [pendingDeletions, setPendingDeletions] = useState(new Set<string>());
-  const [newIngredient, setNewIngredient] = useState({ itemName: '', quantity: 0, unit: 'lbs' });
   const [packagingActions, setPackagingActions] = useState<PackagingAction[]>([]);
   const [editPackaging, setEditPackaging] = useState<PackagingAction | null>(null);
-
   const packageVolumes: { [key: string]: number } = {
     '1/2 BBL Keg': 0.5,
     '1/6 BBL Keg': 0.167,
     '750ml Bottle': 0.006,
   };
 
-  // Existing functions (assumed; replace with your actual implementations)
-  const handleEditBatchName = async () => {
-    // Your implementation
-  };
-  const handleCompleteBatch = async () => {
-    // Your implementation
-  };
-  const handleUnCompleteBatch = async () => {
-    // Your implementation
-  };
-  const handleDeleteBatch = async () => {
-    // Your implementation
-  };
-  const handlePrintBatchSheet = () => {
-    // Your implementation
-  };
-  const handleProgressBatch = async () => {
-    // Your implementation
-  };
-  const handleAddIngredient = async () => {
-    // Your implementation
-  };
-  const handleRemoveIngredient = async (ingredient: Ingredient) => {
-    // Your implementation
-  };
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const endpoints = [
+          { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
+          { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
+          { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
+          { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
+          { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
+          { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
+        ].filter(endpoint => endpoint.url !== null);
+
+        console.log('Fetching endpoints:', endpoints.map(e => e.url));
+
+        const responses = await Promise.all(
+          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+        );
+
+        for (let i = 0; i < responses.length; i++) {
+          const res = responses[i];
+          const { name, setter, single } = endpoints[i];
+          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
+          }
+
+          const data = await res.json();
+          setter(single ? data : data);
+        }
+
+        if (batch) {
+          setSelectedEquipmentId(batch.equipmentId || null);
+          setStage(batch.stage || 'Mashing');
+          setNewIngredients(batch.additionalIngredients || [{ itemName: '', quantity: 0, unit: 'lbs' }]);
+        }
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Fetch error:', err);
+        setError('Failed to load batch details: ' + errorMessage);
+      }
+    };
+    fetchData();
+  }, [batchId]);
+
+  useEffect(() => {
+    if (!batch?.siteId) return;
+    const fetchSiteData = async () => {
+      try {
+        const endpoints = [
+          { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
+          { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
+        ];
+
+        console.log('Fetching site endpoints:', endpoints.map(e => e.url));
+
+        const responses = await Promise.all(
+          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+        );
+
+        for (let i = 0; i < responses.length; i++) {
+          const res = responses[i];
+          const { name, setter } = endpoints[i];
+          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
+          }
+
+          const data = await res.json();
+          setter(data);
+        }
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Fetch site data error:', err);
+        setError('Failed to load site data: ' + errorMessage);
+      }
+    };
+    fetchSiteData();
+  }, [batch?.siteId]);
+
   const handleAddAction = async () => {
-    // Your implementation
+    if (!newAction) {
+      setError('Action description is required');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ action: newAction }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to add action: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const addedAction = await res.json();
+      setActions([...actions, addedAction]);
+      setNewAction('');
+      setError(null);
+      setSuccessMessage('Action added successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Add action error:', err);
+      setError('Failed to add action: ' + errorMessage);
+    }
   };
-  const handlePackage = async () => {
-    // Your implementation
+
+  const handleCompleteBatch = async () => {
+    if (!batch) return;
+    if (batch.volume !== undefined && batch.volume > 0) {
+      setShowLossPrompt({ volume: batch.volume });
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ status: 'Completed' }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
+      setError(null);
+      setSuccessMessage('Batch completed successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Complete batch error:', err);
+      setError('Failed to complete batch: ' + errorMessage);
+    }
   };
-  const handleVolumeAdjustment = async (confirm: boolean) => {
-    // Your implementation
-  };
+
   const handleLossConfirmation = async (confirm: boolean) => {
-    // Your implementation
-  };
-
-  // Current Equipment
-  const product = products.find((p) => p.id === batch.productId);
-  const site = sites.find((s) => s.siteId === batch.siteId);
-  const currentEquipment = equipment.find((e) => e.equipmentId === batch.equipmentId);
-
-  // Inside BatchDetails.tsx
-useEffect(() => {
-  const fetchData = async () => {
-    try {
-      const endpoints = [
-        { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
-        { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
-        { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
-        { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
-        { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
-        { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
-      ].filter(endpoint => endpoint.url !== null);
-
-      console.log('Fetching endpoints:', endpoints.map(e => e.url));
-
-      const responses = await Promise.all(
-        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-      );
-
-      for (let i = 0; i < responses.length; i++) {
-        const res = responses[i];
-        const { name, setter, single } = endpoints[i];
-        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
-
+    if (!showLossPrompt || !batch) return;
+    if (!confirm) {
+      setShowLossPrompt(null);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ status: 'Completed' }),
+        });
         if (!res.ok) {
           const text = await res.text();
-          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
-          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          console.error('handleLossConfirmation: Complete batch failed', { status: res.status, response: text });
+          throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          const text = await res.text();
-          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
-          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
-        }
-
-        const data = await res.json();
-        setter(single ? data : data);
+        setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
+        setSuccessMessage('Batch completed without recording loss');
+        setTimeout(() => setSuccessMessage(null), 2000);
+        setError(null);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Complete batch error:', err);
+        setError('Failed to complete batch: ' + errorMessage);
       }
-
-      if (batch) {
-        setSelectedEquipmentId(batch.equipmentId || null);
-        setStage(batch.stage || 'Mashing');
-        setNewIngredients(batch.additionalIngredients || [{ itemName: '', quantity: 0, unit: 'lbs' }]);
+      return;
+    }
+    try {
+      const lossPayload = {
+        identifier: batch.batchId,
+        quantityLost: showLossPrompt.volume,
+        proofGallonsLost: 0, // Non-spirits (beer)
+        reason: 'Fermentation loss due to trub/spillage', // TTB-specific
+        date: new Date().toISOString().split('T')[0],
+        dspNumber: 'DSP-AL-20010',
+      };
+      console.log('handleLossConfirmation: Sending loss payload', {
+        batchId: batch.batchId,
+        productName: batch.productName,
+        siteId: batch.siteId,
+        volume: batch.volume,
+        payload: lossPayload,
+      });
+      const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(lossPayload),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('handleLossConfirmation: Loss recording failed', { status: res.status, response: text });
+        throw new Error(`Failed to record loss: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
+      const responseData = await res.json();
+      console.log('handleLossConfirmation: Loss recorded', responseData);
+      // Update batch volume to 0
+      const updateRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ volume: 0 }),
+      });
+      if (!updateRes.ok) {
+        const text = await updateRes.text();
+        console.error('handleLossConfirmation: Update batch volume failed', { status: updateRes.status, response: text });
+        throw new Error(`Failed to update batch volume: HTTP ${updateRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      // Complete the batch
+      const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ status: 'Completed' }),
+      });
+      if (!completeRes.ok) {
+        const text = await completeRes.text();
+        console.error('handleLossConfirmation: Complete batch failed', { status: completeRes.status, response: text });
+        throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, status: 'Completed', volume: 0 } : null);
+      setShowLossPrompt(null);
+      setSuccessMessage('Loss recorded and batch completed');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Fetch error:', err);
-      setError('Failed to load batch details: ' + errorMessage);
+      console.error('Loss confirmation error:', err);
+      setError('Failed to record loss or complete batch: ' + errorMessage);
     }
   };
-  fetchData();
-}, [batchId]);
 
-// Separate useEffect for equipment and locations
-useEffect(() => {
-  if (!batch?.siteId) return;
-  const fetchSiteData = async () => {
+  const handleEditBatchName = async () => {
+    if (!newBatchId) {
+      setError('New batch ID is required');
+      return;
+    }
     try {
-      const endpoints = [
-        { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
-        { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ batchId: newBatchId }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to update batch ID: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, batchId: newBatchId } : null);
+      setNewBatchId('');
+      setError(null);
+      setSuccessMessage('Batch ID updated successfully');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        navigate(`/production/${newBatchId}`);
+      }, 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Update batch ID error:', err);
+      setError('Failed to update batch ID: ' + errorMessage);
+    }
+  };
+
+  const handleDeleteBatch = async () => {
+    if (!window.confirm('Are you sure you want to delete this batch?')) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to delete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setError(null);
+      setSuccessMessage('Batch deleted successfully');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        navigate('/production');
+      }, 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Delete batch error:', err);
+      setError('Failed to delete batch: ' + errorMessage);
+    }
+  };
+
+  const handleAddIngredient = async () => {
+    if (!newIngredient.itemName || newIngredient.quantity <= 0 || !newIngredient.unit) {
+      setError('Valid item, quantity, and unit are required');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(newIngredient),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to add ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const updatedBatch = await res.json();
+      console.log('Add ingredient response:', updatedBatch);
+      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
+      setNewIngredient({ itemName: '', quantity: 0, unit: 'lbs' });
+      setError(null);
+      setSuccessMessage('Ingredient added successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Add ingredient error:', err);
+      setError('Failed to add ingredient: ' + errorMessage);
+    }
+  };
+
+  const handleRemoveIngredient = async (ingredient: Ingredient) => {
+    const deletionKey = `${ingredient.itemName}-${ingredient.quantity}-${ingredient.unit || 'lbs'}`;
+    if (pendingDeletions.has(deletionKey)) return;
+    setPendingDeletions(prev => new Set(prev).add(deletionKey));
+    console.log('Attempting to delete ingredient:', { ...ingredient, unit: ingredient.unit || 'lbs' });
+    try {
+      if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit || 'lbs'} of ${ingredient.itemName}?`)) {
+        setPendingDeletions(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(deletionKey);
+          return newSet;
+        });
+        return;
+      }
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ ...ingredient, unit: ingredient.unit || 'lbs' }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to remove ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const updatedBatch = await res.json();
+      console.log('Delete response:', updatedBatch);
+      if (!Array.isArray(updatedBatch.ingredients)) {
+        console.error('Invalid ingredients array in response:', updatedBatch.ingredients);
+        throw new Error('Invalid server response: ingredients array missing');
+      }
+      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
+      setError(null);
+      setSuccessMessage('Ingredient removed successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Remove ingredient error:', err);
+      setError('Failed to remove ingredient: ' + errorMessage);
+    } finally {
+      setPendingDeletions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(deletionKey);
+        return newSet;
+      });
+    }
+  };
+
+  const handleUnCompleteBatch = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ status: 'In Progress' }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to un-complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, status: 'In Progress' } : null);
+      setError(null);
+      setSuccessMessage('Batch un-completed successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Un-complete batch error:', err);
+      setError('Failed to un-complete batch: ' + errorMessage);
+    }
+  };
+
+  const handleProgressBatch = async () => {
+    if (!stage || (stage !== 'Completed' && !selectedEquipmentId)) {
+      setError('Please select stage and equipment (if not Completed)');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/equipment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          equipmentId: stage === 'Completed' ? null : selectedEquipmentId,
+          ingredients: stage === 'Boiling' ? newIngredients.filter(ing => ing.itemName && ing.quantity > 0) : [],
+          stage,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to progress batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      setBatch((prev) => prev && (stage === 'Completed' || selectedEquipmentId) ? { ...prev, equipmentId: stage === 'Completed' ? null : selectedEquipmentId, stage } : prev);
+      setSuccessMessage(data.message || 'Batch progressed successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Progress batch error:', err);
+      setError('Failed to progress batch: ' + errorMessage);
+    }
+  };
+
+  const handlePackage = async () => {
+    console.log('handlePackage: Attempting to package', { batchId, packageType, packageQuantity, packageLocation });
+
+    if (!packageType || packageQuantity <= 0 || !packageLocation) {
+      console.error('handlePackage: Invalid input', { packageType, packageQuantity, packageLocation });
+      setError('Please select a package type, quantity (> 0), and location');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          packageType,
+          quantity: packageQuantity,
+          locationId: packageLocation,
+        }),
+      });
+
+      console.log('handlePackage: Response received', { status: res.status, ok: res.ok });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('handlePackage: Failed to package', { status: res.status, response: text.slice(0, 100) });
+        throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+
+      const data = await res.json();
+      console.log('handlePackage: Response data', data);
+
+      if (data.prompt === 'volumeAdjustment') {
+        setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
+        return;
+      }
+
+      // Refresh batch data
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        const text = await batchRes.text();
+        console.error('handlePackage: Failed to refresh batch', { status: batchRes.status, response: text });
+        throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+
+      // Refresh packaging actions
+      const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (packagingRes.ok) {
+        const packagingData = await packagingRes.json();
+        setPackagingActions(packagingData);
+      } else {
+        console.error('handlePackage: Failed to refresh packaging actions', { status: packagingRes.status });
+      }
+
+      // Refresh inventory
+      console.log('handlePackage: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
+      await refreshInventory();
+
+      // Verify inventory update
+      const identifier = `${updatedBatch.productName} ${packageType}`;
+      const inventoryRes = await fetch(
+        `${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(identifier)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`
+      );
+      if (!inventoryRes.ok) {
+        const text = await inventoryRes.text();
+        console.error('handlePackage: Failed to verify inventory update', { status: inventoryRes.status, response: text });
+        throw new Error(`Failed to verify inventory update: HTTP ${inventoryRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const inventoryData = await inventoryRes.json();
+      console.log('handlePackage: Inventory fetch after packaging', {
+        identifier,
+        siteId: updatedBatch.siteId,
+        locationId: packageLocation,
+        inventoryData,
+      });
+      if (!inventoryData || inventoryData.length === 0) {
+        console.error('handlePackage: Inventory item not found after packaging', {
+          identifier,
+          siteId: updatedBatch.siteId,
+          locationId: packageLocation,
+        });
+        throw new Error('Packaging succeeded, but inventory item was not created or updated');
+      }
+
+      // Verify item exists in items table
+      const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(identifier)}`);
+      if (!itemRes.ok) {
+        const text = await itemRes.text();
+        console.error('handlePackage: Failed to verify item in items table', { status: itemRes.status, response: text });
+        throw new Error(`Failed to verify item in items table: HTTP ${itemRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const itemData = await itemRes.json();
+      if (!itemData || itemData.length === 0) {
+        console.error('handlePackage: Item not found in items table', { identifier });
+        throw new Error('Packaging succeeded, but item was not created in items table');
+      }
+      console.log('handlePackage: Item verified in items table', { identifier, itemData });
+
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
+      setSuccessMessage(data.message || 'Packaged successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Package error:', err);
+      setError('Failed to package: ' + errorMessage);
+    }
+  };
+
+  const handleVolumeAdjustment = async (confirm: boolean) => {
+    if (!showVolumePrompt) return;
+    if (!confirm) {
+      setShowVolumePrompt(null);
+      setError('Packaging cancelled due to insufficient volume');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/adjust-volume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ shortfall: showVolumePrompt.shortfall }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to adjust volume: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const packageRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          packageType,
+          quantity: packageQuantity,
+          locationId: packageLocation,
+        }),
+      });
+      if (!packageRes.ok) {
+        const text = await packageRes.text();
+        throw new Error(`Failed to package after adjustment: HTTP ${packageRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await packageRes.json();
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to refresh batch');
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      // Refresh inventory after volume adjustment and packaging
+      console.log('handleVolumeAdjustment: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
+      await refreshInventory();
+      const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`);
+      if (!inventoryRes.ok) {
+        throw new Error('Failed to verify inventory update');
+      }
+      const inventoryData = await inventoryRes.json();
+      console.log('handleVolumeAdjustment: Inventory fetch after packaging', {
+        identifier: `${updatedBatch.productName} ${packageType}`,
+        siteId: updatedBatch.siteId,
+        locationId: packageLocation,
+        inventoryData,
+      });
+      if (!inventoryData || inventoryData.length === 0) {
+        console.error('handleVolumeAdjustment: Inventory item not found after packaging', {
+          identifier: `${updatedBatch.productName} ${packageType}`,
+          siteId: updatedBatch.siteId,
+          locationId: packageLocation,
+        });
+        throw new Error('Packaging succeeded, but inventory item was not created or updated');
+      }
+      // Verify item exists in items table
+      const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}`);
+      if (!itemRes.ok) {
+        throw new Error('Failed to verify item in items table');
+      }
+      const itemData = await itemRes.json();
+      if (!itemData || itemData.length === 0) {
+        console.error('handleVolumeAdjustment: Item not found in items table', { identifier: `${updatedBatch.productName} ${packageType}` });
+        throw new Error('Packaging succeeded, but item was not created in items table');
+      }
+      console.log('handleVolumeAdjustment: Item verified in items table', { identifier: `${updatedBatch.productName} ${packageType}`, itemData });
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
+      setShowVolumePrompt(null);
+      setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Volume adjustment error:', err);
+      setError('Failed to adjust volume or package: ' + errorMessage);
+    }
+  };
+
+  const handlePrintBatchSheet = async () => {
+    try {
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to fetch batch details');
+      }
+      const batchData = await batchRes.json();
+      const brewLogRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/brewlog`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!brewLogRes.ok) {
+        throw new Error('Failed to fetch brew log');
+      }
+      const brewLog = await brewLogRes.json();
+      const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
+      const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
+
+      const doc = new jsPDF();
+      const margin = 8;
+      let y = margin;
+
+      doc.setFont('times', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(33, 150, 243);
+      doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
+      y += 8;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      doc.text('Batch Details', margin, y);
+      y += 4;
+      doc.setLineWidth(0.5);
+      doc.setDrawColor(33, 150, 243);
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const batchDetails = [
+        { label: 'Batch ID', value: batchData.batchId },
+        { label: 'Product', value: product },
+        { label: 'Recipe', value: batchData.recipeName || 'Unknown' },
+        { label: 'Site', value: site },
+        { label: 'Status', value: batchData.status },
+        { label: 'Stage', value: batchData.stage || 'Mashing' },
+        { label: 'Volume', value: batchData.volume ? `${batchData.volume.toFixed(2)} barrels` : 'N/A' },
+        { label: 'Date', value: batchData.date },
       ];
+      batchDetails.forEach(({ label, value }) => {
+        doc.text(`${label}: ${value}`, margin, y);
+        y += 6;
+      });
 
-      console.log('Fetching site endpoints:', endpoints.map(e => e.url));
+      y += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Ingredients', margin, y);
+      y += 4;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
 
-      const responses = await Promise.all(
-        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-      );
-
-      for (let i = 0; i < responses.length; i++) {
-        const res = responses[i];
-        const { name, setter } = endpoints[i];
-        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
-
-        if (!res.ok) {
-          const text = await res.text();
-          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
-          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-        }
-
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          const text = await res.text();
-          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
-          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
-        }
-
-        const data = await res.json();
-        setter(data);
+      if (batchData.ingredients.length > 0) {
+        doc.autoTable({
+          startY: y,
+          head: [['Item', 'Quantity', 'Unit', 'Source']],
+          body: batchData.ingredients.map((ing: Ingredient) => [
+            ing.itemName,
+            ing.quantity,
+            ing.unit || 'lbs',
+            ing.isRecipe ? 'Recipe' : 'Added',
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [33, 150, 243], textColor: 255, fontStyle: 'bold', font: 'helvetica' },
+          styles: { fontSize: 9, cellPadding: 2, font: 'helvetica' },
+          columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 40 },
+          },
+          margin: { left: margin, right: margin },
+        });
+        y = doc.lastAutoTable.finalY + 8;
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('None', margin, y);
+        y += 8;
       }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Brew Day Log', margin, y);
+      y += 4;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (brewLog.date) {
+        const logDetails = [
+          { label: 'Date', value: brewLog.date },
+          { label: 'Notes', value: brewLog.notes },
+          { label: 'Temperature', value: brewLog.temperature ? `${brewLog.temperature} °C` : 'N/A' },
+          { label: 'Gravity', value: brewLog.gravity || 'N/A' },
+        ];
+        logDetails.forEach(({ label, value }) => {
+          if (label === 'Notes') {
+            const splitNotes = doc.splitTextToSize(value, 184);
+            doc.text(`${label}:`, margin, y);
+            doc.text(splitNotes, margin + 20, y);
+            y += splitNotes.length * 6;
+          } else {
+            doc.text(`${label}: ${value}`, margin, y);
+            y += 6;
+          }
+        });
+      } else {
+        doc.text('No brew log available', margin, y);
+        y += 8;
+      }
+
+      y += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Batch Actions', margin, y);
+      y += 4;
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, 202 - margin, y);
+      y += 8;
+
+      if (actions.length > 0) {
+        actions.forEach((action) => {
+          const timestamp = new Date(action.timestamp).toLocaleString();
+          const actionText = `- ${action.action} (${timestamp})`;
+          const splitAction = doc.splitTextToSize(actionText, 184);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.text(splitAction, margin, y);
+          y += splitAction.length * 6;
+        });
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('No actions recorded', margin, y);
+        y += 8;
+      }
+
+      doc.save(`batch_${batchData.batchId}_sheet.pdf`);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Fetch site data error:', err);
-      setError('Failed to load site data: ' + errorMessage);
+      console.error('Print batch sheet error:', err);
+      setError('Failed to generate batch sheet: ' + errorMessage);
     }
   };
-  fetchSiteData();
-}, [batch?.siteId]);
+
+  if (!batch) return <div>Loading...</div>;
+
+  const product = products.find(p => p.id === batch.productId);
+  const site = sites.find(s => s.siteId === batch.siteId);
+  const currentEquipment = equipment.find((e: Equipment) => e.equipmentId === batch.equipmentId);
 
   return (
     <div className="page-container">
@@ -695,7 +1358,7 @@ useEffect(() => {
                           : action
                       )
                     );
-                    setBatch((prev) => ({ ...prev, volume: data.newBatchVolume }));
+                    setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
                     setEditPackaging(null);
                     setSuccessMessage('Packaging action updated successfully');
                     setTimeout(() => setSuccessMessage(null), 2000);
