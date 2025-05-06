@@ -1298,6 +1298,190 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
   );
 });
 
+app.delete('/api/batches/:batchId/package/:packageId', (req, res) => {
+  const { batchId, packageId } = req.params;
+  console.log('DELETE /api/batches/:batchId/package/:packageId: Received request', { batchId, packageId });
+
+  db.get(
+    `SELECT bp.packageType, bp.quantity AS currentQuantity, bp.volume AS currentVolume, bp.locationId, bp.siteId,
+            b.volume AS batchVolume, p.name AS productName
+     FROM batch_packaging bp
+     JOIN batches b ON bp.batchId = b.batchId
+     JOIN products p ON b.productId = p.id
+     WHERE bp.id = ? AND bp.batchId = ?`,
+    [packageId, batchId],
+    (err, row) => {
+      if (err) {
+        console.error('DELETE /api/batches/:batchId/package/:packageId: Fetch packaging error:', err);
+        return res.status(500).json({ error: `Failed to fetch packaging: ${err.message}` });
+      }
+      if (!row) {
+        console.error('DELETE /api/batches/:batchId/package/:packageId: Packaging record not found', { packageId, batchId });
+        return res.status(404).json({ error: 'Packaging record not found' });
+      }
+
+      const { packageType, currentQuantity, currentVolume, locationId, siteId, batchVolume, productName } = row;
+      console.log('DELETE /api/batches/:batchId/package/:packageId: Current record', {
+        packageType,
+        currentQuantity,
+        currentVolume,
+        batchVolume,
+        locationId,
+        siteId,
+        productName,
+      });
+
+      const newBatchVolume = parseFloat(batchVolume) + currentVolume;
+      console.log('DELETE /api/batches/:batchId/package/:packageId: Volume calculation', {
+        currentVolume,
+        currentBatchVolume: batchVolume,
+        newBatchVolume,
+      });
+
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (err) => {
+          if (err) {
+            console.error('DELETE /api/batches/:batchId/package/:packageId: Begin transaction error:', err);
+            return res.status(500).json({ error: `Failed to start transaction: ${err.message}` });
+          }
+
+          // Delete from batch_packaging
+          db.run(
+            `DELETE FROM batch_packaging WHERE id = ? AND batchId = ?`,
+            [packageId, batchId],
+            (err) => {
+              if (err) {
+                db.run('ROLLBACK');
+                console.error('DELETE /api/batches/:batchId/package/:packageId: Delete packaging error:', err);
+                return res.status(500).json({ error: `Failed to delete packaging: ${err.message}` });
+              }
+              console.log('DELETE /api/batches/:batchId/package/:packageId: Deleted batch_packaging', { packageId });
+
+              // Update batch volume
+              db.run(
+                `UPDATE batches SET volume = ? WHERE batchId = ?`,
+                [newBatchVolume, batchId],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('DELETE /api/batches/:batchId/package/:packageId: Update batch volume error:', err);
+                    return res.status(500).json({ error: `Failed to update batch volume: ${err.message}` });
+                  }
+                  console.log('DELETE /api/batches/:batchId/package/:packageId: Updated batch volume', {
+                    batchId,
+                    newBatchVolume,
+                  });
+
+                  // Update inventory
+                  const identifier = `${productName} ${packageType}`;
+                  db.get(
+                    `SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
+                    [identifier, 'Finished Goods', 'Storage', siteId, locationId],
+                    (err, row) => {
+                      if (err) {
+                        db.run('ROLLBACK');
+                        console.error('DELETE /api/batches/:batchId/package/:packageId: Fetch inventory error:', err);
+                        return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
+                      }
+                      if (!row) {
+                        db.run('ROLLBACK');
+                        console.error('DELETE /api/batches/:batchId/package/:packageId: Inventory not found', {
+                          identifier,
+                          siteId,
+                          locationId,
+                        });
+                        return res.status(404).json({ error: `Inventory item not found: ${identifier}` });
+                      }
+
+                      const newInventoryQuantity = parseFloat(row.quantity) - currentQuantity;
+                      console.log('DELETE /api/batches/:batchId/package/:packageId: Updating inventory', {
+                        identifier,
+                        currentInventoryQuantity: row.quantity,
+                        quantityChange: -currentQuantity,
+                        newInventoryQuantity,
+                      });
+
+                      if (newInventoryQuantity < 0) {
+                        db.run('ROLLBACK');
+                        console.error('DELETE /api/batches/:batchId/package/:packageId: Negative inventory quantity', {
+                          identifier,
+                          newInventoryQuantity,
+                        });
+                        return res.status(400).json({ error: `Cannot reduce inventory below zero: ${identifier}` });
+                      }
+
+                      if (newInventoryQuantity === 0) {
+                        // Delete inventory record if quantity becomes 0
+                        db.run(
+                          `DELETE FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
+                          [identifier, 'Finished Goods', 'Storage', siteId, locationId],
+                          (err) => {
+                            if (err) {
+                              db.run('ROLLBACK');
+                              console.error('DELETE /api/batches/:batchId/package/:packageId: Delete inventory error:', err);
+                              return res.status(500).json({ error: `Failed to delete inventory: ${err.message}` });
+                            }
+                            console.log('DELETE /api/batches/:batchId/package/:packageId: Deleted inventory', { identifier });
+
+                            db.run('COMMIT', (err) => {
+                              if (err) {
+                                db.run('ROLLBACK');
+                                console.error('DELETE /api/batches/:batchId/package/:packageId: Commit transaction error:', err);
+                                return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
+                              }
+                              console.log('DELETE /api/batches/:batchId/package/:packageId: Success', {
+                                batchId,
+                                packageId,
+                                newBatchVolume,
+                              });
+                              res.json({ message: 'Packaging action deleted successfully', newBatchVolume });
+                            });
+                          }
+                        );
+                      } else {
+                        // Update inventory quantity
+                        db.run(
+                          `UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
+                          [newInventoryQuantity, identifier, 'Finished Goods', 'Storage', siteId, locationId],
+                          (err) => {
+                            if (err) {
+                              db.run('ROLLBACK');
+                              console.error('DELETE /api/batches/:batchId/package/:packageId: Update inventory error:', err);
+                              return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
+                            }
+                            console.log('DELETE /api/batches/:batchId/package/:packageId: Updated inventory', {
+                              identifier,
+                              newInventoryQuantity,
+                            });
+
+                            db.run('COMMIT', (err) => {
+                              if (err) {
+                                db.run('ROLLBACK');
+                                console.error('DELETE /api/batches/:batchId/package/:packageId: Commit transaction error:', err);
+                                return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
+                              }
+                              console.log('DELETE /api/batches/:batchId/package/:packageId: Success', {
+                                batchId,
+                                packageId,
+                                newBatchVolume,
+                              });
+                              res.json({ message: 'Packaging action deleted successfully', newBatchVolume });
+                            });
+                          }
+                        );
+                      }
+                    }
+                  );
+                }
+              );
+            }
+          );
+        });
+      });
+    }
+  );
+});
+
 // New endpoint: /api/batches/:batchId/adjust-volume (~line 1050, after /api/batches/:batchId/package)
 app.post('/api/batches/:batchId/adjust-volume', (req, res) => {
   const { batchId } = req.params;
