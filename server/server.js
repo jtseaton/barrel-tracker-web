@@ -1104,15 +1104,24 @@ app.post('/api/batches/:batchId/package', (req, res) => {
 app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
   const { batchId, packageId } = req.params;
   const { quantity } = req.body;
+  console.log('PATCH /api/batches/:batchId/package/:packageId: Received request', { batchId, packageId, quantity });
+
   if (!quantity || quantity < 0) {
-    console.error('PATCH /api/batches/:batchId/package/:packageId: Invalid quantity', { batchId, packageId, quantity });
-    return res.status(400).json({ error: 'quantity (>= 0) is required' });
+    console.error('PATCH /api/batches/:batchId/package/:packageId: Invalid quantity', { quantity });
+    return res.status(400).json({ error: 'Quantity must be a non-negative number' });
   }
+
+  const packageVolumes = {
+    '1/2 BBL Keg': 0.5,
+    '1/6 BBL Keg': 0.167,
+    '750ml Bottle': 0.006,
+  };
+
   db.get(
-    `SELECT bp.packageType, bp.quantity AS currentQuantity, bp.volume AS currentVolume, bp.locationId, bp.siteId, b.volume AS batchVolume, p.name AS productName
+    `SELECT bp.packageType, bp.quantity AS currentQuantity, bp.volume AS currentVolume, bp.locationId, bp.siteId,
+            b.volume AS batchVolume, b.productName
      FROM batch_packaging bp
      JOIN batches b ON bp.batchId = b.batchId
-     JOIN products p ON b.productId = p.id
      WHERE bp.id = ? AND bp.batchId = ?`,
     [packageId, batchId],
     (err, row) => {
@@ -1121,28 +1130,58 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
         return res.status(500).json({ error: `Failed to fetch packaging: ${err.message}` });
       }
       if (!row) {
-        console.error('PATCH /api/batches/:batchId/package/:packageId: Packaging not found', { batchId, packageId });
-        return res.status(404).json({ error: `Packaging record not found: ${packageId}` });
+        console.error('PATCH /api/batches/:batchId/package/:packageId: Packaging record not found', { packageId, batchId });
+        return res.status(404).json({ error: 'Packaging record not found' });
       }
+
       const { packageType, currentQuantity, currentVolume, locationId, siteId, batchVolume, productName } = row;
-      const packageVolumes = {
-        '1/2 BBL Keg': 0.5,
-        '1/6 BBL Keg': 0.167,
-        '750ml Bottle': 0.006
-      };
-      const newVolume = packageVolumes[packageType] * quantity;
-      const volumeDifference = newVolume - currentVolume; // Positive if adding volume, negative if reducing
-      const newBatchVolume = parseFloat(batchVolume) + volumeDifference; // Adjust batch volume
-      if (newBatchVolume < 0) {
-        console.error('PATCH /api/batches/:batchId/package/:packageId: Insufficient batch volume', { batchId, newBatchVolume, volumeDifference });
-        return res.status(400).json({ error: `Insufficient batch volume: ${volumeDifference.toFixed(3)} barrels needed` });
+      console.log('PATCH /api/batches/:batchId/package/:packageId: Current record', {
+        packageType,
+        currentQuantity,
+        currentVolume,
+        batchVolume,
+        locationId,
+        siteId,
+        productName,
+      });
+
+      if (!packageVolumes[packageType]) {
+        console.error('PATCH /api/batches/:batchId/package/:packageId: Invalid packageType', { packageType });
+        return res.status(400).json({ error: `Invalid packageType: ${packageType}` });
       }
+
+      // Calculate volume change
+      const volumePerUnit = packageVolumes[packageType];
+      const newVolume = quantity * volumePerUnit;
+      const volumeDifference = currentVolume - newVolume; // Positive if reducing quantity, negative if increasing
+      const newBatchVolume = parseFloat(batchVolume) + volumeDifference;
+
+      console.log('PATCH /api/batches/:batchId/package/:packageId: Volume calculation', {
+        currentQuantity,
+        newQuantity: quantity,
+        currentVolume,
+        newVolume,
+        volumeDifference,
+        currentBatchVolume: batchVolume,
+        newBatchVolume,
+      });
+
+      if (newBatchVolume < 0) {
+        console.error('PATCH /api/batches/:batchId/package/:packageId: Insufficient batch volume', {
+          requiredVolume: newVolume,
+          availableVolume: batchVolume,
+          shortfall: -newBatchVolume,
+        });
+        return res.status(400).json({ error: `Insufficient batch volume: ${newVolume.toFixed(3)} barrels required, ${batchVolume.toFixed(3)} available` });
+      }
+
       db.serialize(() => {
         db.run('BEGIN TRANSACTION', (err) => {
           if (err) {
             console.error('PATCH /api/batches/:batchId/package/:packageId: Begin transaction error:', err);
             return res.status(500).json({ error: 'Failed to start transaction' });
           }
+
           // Update batch_packaging
           db.run(
             `UPDATE batch_packaging SET quantity = ?, volume = ? WHERE id = ? AND batchId = ?`,
@@ -1153,6 +1192,7 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
                 console.error('PATCH /api/batches/:batchId/package/:packageId: Update packaging error:', err);
                 return res.status(500).json({ error: `Failed to update packaging: ${err.message}` });
               }
+
               // Update batch volume
               db.run(
                 `UPDATE batches SET volume = ? WHERE batchId = ?`,
@@ -1163,37 +1203,36 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
                     console.error('PATCH /api/batches/:batchId/package/:packageId: Update batch volume error:', err);
                     return res.status(500).json({ error: `Failed to update batch volume: ${err.message}` });
                   }
+
                   // Update inventory
-                  const newIdentifier = `${productName} ${packageType}`;
+                  const identifier = `${productName} ${packageType}`;
                   db.get(
                     `SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
-                    [newIdentifier, 'Finished Goods', 'Storage', siteId, locationId],
+                    [identifier, 'Finished Goods', 'Storage', siteId, locationId],
                     (err, row) => {
                       if (err) {
                         db.run('ROLLBACK');
                         console.error('PATCH /api/batches/:batchId/package/:packageId: Fetch inventory error:', err);
-                        return res.status(500).json({ error: `Failed to fetch inventory: ${err.message}` });
+                        return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
                       }
+
                       if (!row) {
                         db.run('ROLLBACK');
-                        console.error('PATCH /api/batches/:batchId/package/:packageId: Inventory not found', { newIdentifier });
-                        return res.status(404).json({ error: `Inventory item not found: ${newIdentifier}` });
+                        console.error('PATCH /api/batches/:batchId/package/:packageId: Inventory not found', { identifier, siteId, locationId });
+                        return res.status(404).json({ error: `Inventory item not found: ${identifier}` });
                       }
-                      const newInventoryQuantity = quantity; // Replace with new quantity
-                      if (newInventoryQuantity < 0) {
-                        db.run('ROLLBACK');
-                        console.error('PATCH /api/batches/:batchId/package/:packageId: Invalid inventory quantity', { newInventoryQuantity });
-                        return res.status(400).json({ error: `Invalid inventory quantity: ${newInventoryQuantity}` });
-                      }
+
+                      const newInventoryQuantity = quantity; // Replace entire quantity
                       db.run(
                         `UPDATE inventory SET quantity = ? WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
-                        [newInventoryQuantity, newIdentifier, 'Finished Goods', 'Storage', siteId, locationId],
+                        [newInventoryQuantity, identifier, 'Finished Goods', 'Storage', siteId, locationId],
                         (err) => {
                           if (err) {
                             db.run('ROLLBACK');
                             console.error('PATCH /api/batches/:batchId/package/:packageId: Update inventory error:', err);
                             return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
                           }
+
                           db.run('COMMIT', (err) => {
                             if (err) {
                               console.error('PATCH /api/batches/:batchId/package/:packageId: Commit transaction error:', err);
@@ -1202,11 +1241,12 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
                             console.log('PATCH /api/batches/:batchId/package/:packageId: Success', {
                               batchId,
                               packageId,
-                              newIdentifier,
-                              newQuantity: newInventoryQuantity,
+                              newQuantity: quantity,
+                              newVolume,
                               newBatchVolume,
+                              newInventoryQuantity,
                             });
-                            res.json({ message: 'Packaging updated successfully', newIdentifier, quantity: newInventoryQuantity, newBatchVolume });
+                            res.json({ message: 'Packaging updated successfully', newBatchVolume });
                           });
                         }
                       );
