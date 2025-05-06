@@ -81,75 +81,106 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
   const site = sites.find((s) => s.siteId === batch.siteId);
   const currentEquipment = equipment.find((e) => e.equipmentId === batch.equipmentId);
 
-  // useEffect for fetching data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const endpoints = [
-          { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
-          { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
-          { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
-          { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
-          { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
-          { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
-        ].filter(endpoint => endpoint.url !== null);
-        const responses = await Promise.all(
-          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-        );
-        for (let i = 0; i < responses.length; i++) {
-          const res = responses[i];
-          const { name, setter, single } = endpoints[i];
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-          }
-          const data = await res.json();
-          setter(single ? data : data);
-        }
-        if (batch) {
-          setSelectedEquipmentId(batch.equipmentId || null);
-          setStage(batch.stage || 'Mashing');
-          setNewIngredients(batch.additionalIngredients || [{ itemName: '', quantity: 0, unit: 'lbs' }]);
-        }
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Fetch error:', err);
-        setError('Failed to load batch details: ' + errorMessage);
-      }
-    };
-    fetchData();
-  }, [batchId]);
+  // Inside BatchDetails.tsx
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      const endpoints = [
+        { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
+        { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
+        { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
+        { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
+        { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
+        { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
+      ].filter(endpoint => endpoint.url !== null);
 
-  // Separate useEffect for equipment and locations
-  useEffect(() => {
-    if (!batch?.siteId) return;
-    const fetchSiteData = async () => {
-      try {
-        const endpoints = [
-          { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
-          { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
-        ];
-        const responses = await Promise.all(
-          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-        );
-        for (let i = 0; i < responses.length; i++) {
-          const res = responses[i];
-          const { name, setter } = endpoints[i];
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-          }
-          const data = await res.json();
-          setter(data);
+      console.log('Fetching endpoints:', endpoints.map(e => e.url));
+
+      const responses = await Promise.all(
+        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+      );
+
+      for (let i = 0; i < responses.length; i++) {
+        const res = responses[i];
+        const { name, setter, single } = endpoints[i];
+        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+
+        if (!res.ok) {
+          const text = await res.text();
+          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Fetch site data error:', err);
-        setError('Failed to load site data: ' + errorMessage);
+
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
+        }
+
+        const data = await res.json();
+        setter(single ? data : data);
       }
-    };
-    fetchSiteData();
-  }, [batch?.siteId]);
+
+      if (batch) {
+        setSelectedEquipmentId(batch.equipmentId || null);
+        setStage(batch.stage || 'Mashing');
+        setNewIngredients(batch.additionalIngredients || [{ itemName: '', quantity: 0, unit: 'lbs' }]);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Fetch error:', err);
+      setError('Failed to load batch details: ' + errorMessage);
+    }
+  };
+  fetchData();
+}, [batchId]);
+
+// Separate useEffect for equipment and locations
+useEffect(() => {
+  if (!batch?.siteId) return;
+  const fetchSiteData = async () => {
+    try {
+      const endpoints = [
+        { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
+        { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
+      ];
+
+      console.log('Fetching site endpoints:', endpoints.map(e => e.url));
+
+      const responses = await Promise.all(
+        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+      );
+
+      for (let i = 0; i < responses.length; i++) {
+        const res = responses[i];
+        const { name, setter } = endpoints[i];
+        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+
+        if (!res.ok) {
+          const text = await res.text();
+          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        }
+
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
+        }
+
+        const data = await res.json();
+        setter(data);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Fetch site data error:', err);
+      setError('Failed to load site data: ' + errorMessage);
+    }
+  };
+  fetchSiteData();
+}, [batch?.siteId]);
 
   return (
     <div className="page-container">

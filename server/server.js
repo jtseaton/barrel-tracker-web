@@ -1382,6 +1382,25 @@ app.get('/api/batches/:batchId', (req, res) => {
   });
 });
 
+app.get('/api/batches/:batchId/package', (req, res) => {
+  const { batchId } = req.params;
+  console.log('GET /api/batches/:batchId/package: Fetching packaging actions', { batchId });
+  db.all(
+    `SELECT id, batchId, packageType, quantity, volume, locationId, date, siteId
+     FROM batch_packaging
+     WHERE batchId = ?`,
+    [batchId],
+    (err, rows) => {
+      if (err) {
+        console.error('GET /api/batches/:batchId/package: Fetch packaging error:', err);
+        return res.status(500).json({ error: `Failed to fetch packaging: ${err.message}` });
+      }
+      console.log('GET /api/batches/:batchId/package: Success', { batchId, count: rows.length });
+      res.json(rows);
+    }
+  );
+});
+
 // DELETE /api/batches/:batchId/ingredients
 app.delete('/api/batches/:batchId/ingredients', (req, res) => {
   const { batchId } = req.params;
