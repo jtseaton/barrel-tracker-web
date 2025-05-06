@@ -153,6 +153,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         });
         if (!res.ok) {
           const text = await res.text();
+          console.error('handleLossConfirmation: Complete batch failed', { status: res.status, response: text });
           throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
         setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
@@ -201,6 +202,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
       if (!updateRes.ok) {
         const text = await updateRes.text();
+        console.error('handleLossConfirmation: Update batch volume failed', { status: updateRes.status, response: text });
         throw new Error(`Failed to update batch volume: HTTP ${updateRes.status}, Response: ${text.slice(0, 50)}`);
       }
       // Complete the batch
@@ -211,6 +213,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
       if (!completeRes.ok) {
         const text = await completeRes.text();
+        console.error('handleLossConfirmation: Complete batch failed', { status: completeRes.status, response: text });
         throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
       }
       setBatch((prev) => prev ? { ...prev, status: 'Completed', volume: 0 } : null);
