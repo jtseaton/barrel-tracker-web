@@ -215,7 +215,7 @@ db.serialize(() => {
     FOREIGN KEY (siteId) REFERENCES sites(siteId),
     FOREIGN KEY (locationId) REFERENCES locations(locationId)
   )
-  `;
+  `);
   db.run(`
     CREATE TABLE IF NOT EXISTS recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
