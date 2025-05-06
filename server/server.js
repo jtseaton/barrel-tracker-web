@@ -1577,69 +1577,74 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
   });
 });
 
-// PATCH /api/batches/:batchId
 app.patch('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
-  const { status, batchId: newBatchId } = req.body;
-  if (!status && !newBatchId) {
-    return res.status(400).json({ error: 'Status or new batchId required' });
+  const { status, volume } = req.body;
+  console.log('PATCH /api/batches/:batchId: Processing update', { batchId, status, volume });
+
+  if (!status && volume === undefined) {
+    console.error('PATCH /api/batches/:batchId: No valid fields provided', { batchId });
+    return res.status(400).json({ error: 'At least one of status or volume is required' });
   }
-  db.get('SELECT status FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
-    if (err) {
-      console.error('Fetch batch error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!batch) {
-      return res.status(404).json({ error: 'Batch not found' });
-    }
-    const updates = [];
-    const values = [];
-    if (status && ['In Progress', 'Completed'].includes(status)) {
-      updates.push('status = ?');
-      values.push(status);
-    }
-    if (newBatchId) {
-      updates.push('batchId = ?');
-      values.push(newBatchId);
-    }
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No valid updates provided' });
-    }
-    values.push(batchId);
-    db.run(
-      `UPDATE batches SET ${updates.join(', ')} WHERE batchId = ?`,
-      values,
-      (err) => {
-        if (err) {
-          console.error('Update batch error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        db.get(`
-          SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-                 b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
-          FROM batches b
-          JOIN products p ON b.productId = p.id
-          JOIN recipes r ON b.recipeId = r.id
-          JOIN sites s ON b.siteId = s.siteId
-          WHERE b.batchId = ?
-        `, [newBatchId || batchId], (err, updatedBatch) => {
-          if (err) {
-            console.error('Fetch updated batch error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          const recipeIngredients = JSON.parse(updatedBatch.ingredients || '[]');
-          const additionalIngredients = JSON.parse(updatedBatch.additionalIngredients || '[]');
-          updatedBatch.ingredients = [
-            ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
-            ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: false }))
-          ];
-          updatedBatch.additionalIngredients = additionalIngredients;
-          console.log(`PATCH /api/batches/${batchId}, updated:`, updatedBatch);
-          res.json(updatedBatch);
-        });
+
+  // Fetch current batch
+  db.get(
+    `SELECT status, volume FROM batches WHERE batchId = ?`,
+    [batchId],
+    (err, row) => {
+      if (err) {
+        console.error('PATCH /api/batches/:batchId: Fetch batch error:', err);
+        return res.status(500).json({ error: `Failed to fetch batch: ${err.message}` });
       }
-    );
-  });
+      if (!row) {
+        console.error('PATCH /api/batches/:batchId: Batch not found', { batchId });
+        return res.status(404).json({ error: `Batch not found: ${batchId}` });
+      }
+
+      const currentStatus = row.status;
+      const currentVolume = parseFloat(row.volume) || 0;
+
+      // Validate status change
+      if (status) {
+        if (currentStatus === 'Completed' && status !== 'In Progress') {
+          console.error('PATCH /api/batches/:batchId: Cannot modify completed batch', { batchId, currentStatus });
+          return res.status(400).json({ error: `Batch ${batchId} is already completed` });
+        }
+        if (status === 'Completed' && currentVolume > 0) {
+          console.error('PATCH /api/batches/:batchId: Unpackaged volume detected', { batchId, currentVolume });
+          return res.status(400).json({ error: 'Unpackaged volume detected. Record loss or adjust volume before completing.' });
+        }
+      }
+
+      // Build update query
+      const updates = [];
+      const params = [];
+      if (status) {
+        updates.push('status = ?');
+        params.push(status);
+      }
+      if (volume !== undefined) {
+        updates.push('volume = ?');
+        params.push(volume);
+      }
+      if (updates.length === 0) {
+        console.error('PATCH /api/batches/:batchId: No updates to apply', { batchId });
+        return res.status(400).json({ error: 'No valid updates provided' });
+      }
+
+      params.push(batchId);
+      const query = `UPDATE batches SET ${updates.join(', ')} WHERE batchId = ?`;
+
+      db.run(query, params, (err) => {
+        if (err) {
+          console.error('PATCH /api/batches/:batchId: Update batch error:', err);
+          return res.status(500).json({ error: `Failed to update batch: ${err.message}` });
+        }
+        console.log('PATCH /api/batches/:batchId: Success', { batchId, status, volume });
+        res.json({ message: 'Batch updated successfully' });
+      });
+    }
+  );
 });
 
 // Replace DELETE /api/batches/:batchId (~line 600)
@@ -2707,7 +2712,7 @@ app.post('/api/record-loss', (req, res) => {
               return res.status(500).json({ error: `Failed to record inventory loss: ${err.message}` });
             }
             db.run(
-              'UPDATE inventory SET quantity = ? WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)',
+              `UPDATE inventory SET quantity = ? WHERE identifier = ? AND siteId = ? AND locationId = ? AND status IN (?, ?)`,
               [newQuantity, identifier, siteId, locationId, 'Received', 'Stored'],
               (err) => {
                 if (err) {
@@ -2724,7 +2729,7 @@ app.post('/api/record-loss', (req, res) => {
         // No inventory item, check if identifier is a batch
         console.log('POST /api/record-loss: No inventory item, checking batch', { identifier });
         db.get(
-          'SELECT siteId FROM batches WHERE batchId = ?',
+          `SELECT siteId, status FROM batches WHERE batchId = ?`,
           [identifier],
           (err, batchRow) => {
             if (err) {
@@ -2735,10 +2740,14 @@ app.post('/api/record-loss', (req, res) => {
               console.error('POST /api/record-loss: Neither inventory nor batch found', { identifier });
               return res.status(404).json({ error: `Neither inventory item nor batch found: ${identifier}` });
             }
-            const { siteId } = batchRow;
+            const { siteId, status } = batchRow;
+            if (status === 'Completed') {
+              console.error('POST /api/record-loss: Batch already completed', { identifier, status });
+              return res.status(400).json({ error: `Batch ${identifier} is already completed` });
+            }
             // Get a default locationId for the site
             db.get(
-              'SELECT locationId FROM locations WHERE siteId = ? LIMIT 1',
+              `SELECT locationId FROM locations WHERE siteId = ? LIMIT 1`,
               [siteId],
               (err, locationRow) => {
                 if (err) {
