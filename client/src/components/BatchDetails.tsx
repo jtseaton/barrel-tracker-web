@@ -631,7 +631,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       }
       const updatedBatch = await batchRes.json();
       setBatch(updatedBatch);
-      // Refresh inventory after volume adjustment and packaging
       console.log('handleVolumeAdjustment: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
       await refreshInventory();
       const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`);
@@ -653,7 +652,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         });
         throw new Error('Packaging succeeded, but inventory item was not created or updated');
       }
-      // Verify item exists in items table
       const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}`);
       if (!itemRes.ok) {
         throw new Error('Failed to verify item in items table');
@@ -675,6 +673,42 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Volume adjustment error:', err);
       setError('Failed to adjust volume or package: ' + errorMessage);
+    }
+  };
+
+  const handleDeletePackaging = async (action: PackagingAction) => {
+    if (!window.confirm(`Are you sure you want to delete the packaging action for ${action.quantity} ${action.packageType}?`)) return;
+    console.log('handleDeletePackaging: Attempting to delete', {
+      batchId,
+      packageId: action.id,
+      packageType: action.packageType,
+      quantity: action.quantity,
+    });
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${action.id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('handleDeletePackaging: Failed to delete', {
+          status: res.status,
+          response: text.slice(0, 100),
+        });
+        throw new Error(`Failed to delete packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('handleDeletePackaging: Success', data);
+      setPackagingActions((prev) => prev.filter((a) => a.id !== action.id));
+      setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
+      await refreshInventory();
+      setSuccessMessage('Packaging action deleted successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('handleDeletePackaging: Error', err);
+      setError(`Failed to delete packaging: ${errorMessage}`);
     }
   };
 
@@ -959,7 +993,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
             <option value="Boiling">Boiling</option>
             <option value="Fermenting">Fermenting</option>
             <option value="Bright Tank">Bright Tank</option>
-            <option value="Packaging">Packaging</option>
+            <option value="Packaging" disabled={packagingActions.length > 0}>Packaging</option>
             <option value="Completed">Completed</option>
           </select>
           <select
@@ -1090,9 +1124,24 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                                 borderRadius: '4px',
                                 cursor: 'pointer',
                                 fontSize: '14px',
+                                marginRight: '5px',
                               }}
                             >
                               Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeletePackaging(action)}
+                              style={{
+                                backgroundColor: '#F86752',
+                                color: '#fff',
+                                padding: '8px 12px',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                              }}
+                            >
+                              Delete
                             </button>
                           </td>
                         </tr>
@@ -1267,149 +1316,149 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       </div>
 
       {editPackaging && (
-  <div
-    style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 2100,
-    }}
-  >
-    <div
-      style={{
-        backgroundColor: '#fff',
-        padding: '20px',
-        borderRadius: '8px',
-        width: '400px',
-        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-        textAlign: 'center',
-        color: '#555',
-      }}
-    >
-      <h3 style={{ color: '#555', marginBottom: '20px' }}>Edit Packaging Action</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-            Package Type:
-          </label>
-          <input
-            type="text"
-            value={editPackaging.packageType}
-            disabled
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #CCCCCC',
-              borderRadius: '4px',
-              fontSize: '16px',
-              boxSizing: 'border-box',
-              color: '#000000',
-              backgroundColor: '#F5F5F5',
-            }}
-          />
-        </div>
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-            Quantity:
-          </label>
-          <input
-            type="number"
-            value={editPackaging.quantity}
-            onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
-            min="0"
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #CCCCCC',
-              borderRadius: '4px',
-              fontSize: '16px',
-              boxSizing: 'border-box',
-              color: '#000000',
-              backgroundColor: '#FFFFFF',
-            }}
-          />
-        </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
-        <button
-          onClick={async () => {
-            console.log('Edit packaging: Attempting to update', {
-              batchId,
-              packageId: editPackaging.id,
-              packageType: editPackaging.packageType,
-              newQuantity: editPackaging.quantity,
-            });
-            try {
-              const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${editPackaging.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ quantity: editPackaging.quantity }),
-              });
-              if (!res.ok) {
-                const text = await res.text();
-                console.error('Edit packaging: Failed to update', {
-                  status: res.status,
-                  response: text.slice(0, 100),
-                });
-                throw new Error(`Failed to update packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-              }
-              const data = await res.json();
-              console.log('Edit packaging success:', data);
-              setPackagingActions((prev) =>
-                prev.map((action) =>
-                  action.id === editPackaging.id
-                    ? { ...action, quantity: editPackaging.quantity, volume: editPackaging.quantity * (packageVolumes[action.packageType] || 0) }
-                    : action
-                )
-              );
-              setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
-              setEditPackaging(null);
-              setSuccessMessage('Packaging action updated successfully');
-              setTimeout(() => setSuccessMessage(null), 2000);
-              setError(null);
-              await refreshInventory();
-            } catch (err: unknown) {
-              const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-              console.error('Edit packaging error:', err);
-              setError(`Failed to update packaging: ${errorMessage}`);
-            }
-          }}
+        <div
           style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2100,
           }}
         >
-          Save
-        </button>
-        <button
-          onClick={() => setEditPackaging(null)}
-          style={{
-            backgroundColor: '#F86752',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+              color: '#555',
+            }}
+          >
+            <h3 style={{ color: '#555', marginBottom: '20px' }}>Edit Packaging Action</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Package Type:
+                </label>
+                <input
+                  type="text"
+                  value={editPackaging.packageType}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#F5F5F5',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Quantity:
+                </label>
+                <input
+                  type="number"
+                  value={editPackaging.quantity}
+                  onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
+              <button
+                onClick={async () => {
+                  console.log('Edit packaging: Attempting to update', {
+                    batchId,
+                    packageId: editPackaging.id,
+                    packageType: editPackaging.packageType,
+                    newQuantity: editPackaging.quantity,
+                  });
+                  try {
+                    const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${editPackaging.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                      body: JSON.stringify({ quantity: editPackaging.quantity }),
+                    });
+                    if (!res.ok) {
+                      const text = await res.text();
+                      console.error('Edit packaging: Failed to update', {
+                        status: res.status,
+                        response: text.slice(0, 100),
+                      });
+                      throw new Error(`Failed to update packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+                    }
+                    const data = await res.json();
+                    console.log('Edit packaging success:', data);
+                    setPackagingActions((prev) =>
+                      prev.map((action) =>
+                        action.id === editPackaging.id
+                          ? { ...action, quantity: editPackaging.quantity, volume: editPackaging.quantity * (packageVolumes[action.packageType] || 0) }
+                          : action
+                      )
+                    );
+                    setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
+                    setEditPackaging(null);
+                    setSuccessMessage('Packaging action updated successfully');
+                    setTimeout(() => setSuccessMessage(null), 2000);
+                    setError(null);
+                    await refreshInventory();
+                  } catch (err: unknown) {
+                    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+                    console.error('Edit packaging error:', err);
+                    setError(`Failed to update packaging: ${errorMessage}`);
+                  }
+                }}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditPackaging(null)}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showVolumePrompt && (
         <div
