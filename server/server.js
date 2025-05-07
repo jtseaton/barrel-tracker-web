@@ -628,7 +628,7 @@ app.get('/api/batches', (req, res) => {
 });
 
 app.post('/api/batches', (req, res) => {
-  const { batchId, productId, recipeId, siteId, status, date, equipmentId, fermenterId, volume } = req.body;
+  const { batchId, productId, recipeId, siteId, status, date, fermenterId, volume } = req.body;
   console.log('Received /api/batches request:', req.body);
   try {
     if (!batchId || !productId || !recipeId || !siteId || !status || !date || !fermenterId) {
@@ -684,29 +684,17 @@ app.post('/api/batches', (req, res) => {
         }
         console.log('Recipe details:', { recipeId, ingredients, volume: calculatedVolume });
         const validateEquipment = (callback) => {
-          const equipmentChecks = [];
-          if (equipmentId) {
-            equipmentChecks.push(new Promise((resolve, reject) => {
-              db.get('SELECT equipmentId FROM equipment WHERE equipmentId = ? AND siteId = ?', [equipmentId, siteId], (err, equipment) => {
-                if (err) reject(err);
-                if (!equipment) reject(new Error(`Invalid equipmentId: ${equipmentId} for site ${siteId}`));
-                resolve();
-              });
-            }));
-          }
-          equipmentChecks.push(new Promise((resolve, reject) => {
-            db.get('SELECT equipmentId FROM equipment WHERE equipmentId = ? AND siteId = ? AND type = ?', [fermenterId, siteId, 'Fermenter'], (err, equipment) => {
-              if (err) reject(err);
-              if (!equipment) reject(new Error(`Invalid fermenterId: ${fermenterId} for site ${siteId}`));
-              resolve();
-            });
-          }));
-          Promise.all(equipmentChecks)
-            .then(() => callback())
-            .catch((err) => {
-              console.log('Equipment validation error:', err.message);
-              res.status(400).json({ error: err.message });
-            });
+          db.get('SELECT equipmentId FROM equipment WHERE equipmentId = ? AND siteId = ? AND type = ?', [fermenterId, siteId, 'Fermenter'], (err, equipment) => {
+            if (err) {
+              console.error('Error validating fermenterId:', err);
+              return res.status(500).json({ error: 'Database error validating fermenter' });
+            }
+            if (!equipment) {
+              console.log('Invalid fermenterId:', fermenterId, 'for site:', siteId);
+              return res.status(400).json({ error: `Invalid fermenterId: ${fermenterId} for site ${siteId}` });
+            }
+            callback();
+          });
         };
         validateEquipment(() => {
           const errors = [];
@@ -741,28 +729,36 @@ app.post('/api/batches', (req, res) => {
                   if (remaining === 0) finishValidation(inventoryUpdates);
                   return;
                 }
+                // Debug: Log all inventory rows for the item
                 db.all(
-                  'SELECT identifier, quantity, unit FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ? AND account = ? AND type = ?',
-                  [ing.itemName, normalizedUnit, 'pounds', siteId, 'Storage', 'Raw Material'],
-                  (err, rows) => {
-                    if (err) {
-                      console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
-                      errors.push(`Database error for ${ing.itemName}: ${err.message}`);
-                    } else {
-                      console.log(`Inventory rows for ${ing.itemName} (${normalizedUnit}) at site ${siteId}:`, rows);
-                      const available = rows.reduce((sum, row) => {
-                        const qty = parseFloat(row.quantity);
-                        return sum + (isNaN(qty) ? 0 : qty);
-                      }, 0);
-                      console.log(`Inventory check for ${ing.itemName} (${normalizedUnit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`);
-                      if (available < ing.quantity) {
-                        errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${normalizedUnit} available, ${ing.quantity}${normalizedUnit} needed`);
-                      } else {
-                        inventoryUpdates.push({ itemName: ing.itemName, quantity: ing.quantity, unit: normalizedUnit });
+                  'SELECT * FROM inventory WHERE identifier LIKE ? AND siteId = ?',
+                  [`%${ing.itemName}%`, siteId],
+                  (err, allRows) => {
+                    console.log(`All inventory rows for ${ing.itemName} (LIKE) at site ${siteId}:`, allRows);
+                    db.all(
+                      'SELECT identifier, quantity, unit, account, type FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ? AND account = ? AND type = ?',
+                      [ing.itemName, normalizedUnit, 'pounds', siteId, 'Storage', 'Raw Material'],
+                      (err, rows) => {
+                        if (err) {
+                          console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
+                          errors.push(`Database error for ${ing.itemName}: ${err.message}`);
+                        } else {
+                          console.log(`Filtered inventory rows for ${ing.itemName} (${normalizedUnit}) at site ${siteId}:`, rows);
+                          const available = rows.reduce((sum, row) => {
+                            const qty = parseFloat(row.quantity);
+                            return sum + (isNaN(qty) ? 0 : qty);
+                          }, 0);
+                          console.log(`Inventory check for ${ing.itemName} (${normalizedUnit}) at site ${siteId}: Available ${available}, Needed ${ing.quantity}`);
+                          if (available < ing.quantity) {
+                            errors.push(`Insufficient inventory for ${ing.itemName}: ${available}${normalizedUnit} available, ${ing.quantity}${normalizedUnit} needed`);
+                          } else {
+                            inventoryUpdates.push({ itemName: ing.itemName, quantity: ing.quantity, unit: normalizedUnit });
+                          }
+                        }
+                        remaining--;
+                        if (remaining === 0) finishValidation(inventoryUpdates);
                       }
-                    }
-                    remaining--;
-                    if (remaining === 0) finishValidation(inventoryUpdates);
+                    );
                   }
                 );
               });
@@ -779,17 +775,17 @@ app.post('/api/batches', (req, res) => {
 
           function createBatch(inventoryUpdates) {
             db.run(
-              'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date, additionalIngredients, equipmentId, fermenterId, volume, stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [batchId, productId, recipeId, siteId, status, date, JSON.stringify([]), equipmentId || null, fermenterId, calculatedVolume, 'Fermentation'],
+              'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date, additionalIngredients, fermenterId, volume, stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [batchId, productId, recipeId, siteId, status, date, JSON.stringify([]), fermenterId, calculatedVolume, 'Fermentation'],
               function(err) {
                 if (err) {
                   console.error('Error inserting batch:', err);
                   return res.status(500).json({ error: `Database error inserting batch: ${err.message}` });
                 }
-                console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date, equipmentId, fermenterId, volume: calculatedVolume });
+                console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date, fermenterId, volume: calculatedVolume });
                 let remainingUpdates = inventoryUpdates.length;
                 if (remainingUpdates === 0) {
-                  return res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], equipmentId, fermenterId, volume: calculatedVolume });
+                  return res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], fermenterId, volume: calculatedVolume });
                 }
                 inventoryUpdates.forEach(({ itemName, quantity, unit }, index) => {
                   db.run(
@@ -806,7 +802,7 @@ app.post('/api/batches', (req, res) => {
                       console.log(`Inventory deducted: ${quantity}${unit} for ${itemName} at site ${siteId}`);
                       remainingUpdates--;
                       if (remainingUpdates === 0) {
-                        res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], equipmentId, fermenterId, volume: calculatedVolume });
+                        res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], fermenterId, volume: calculatedVolume });
                       }
                     }
                   );
@@ -3798,6 +3794,18 @@ app.get('/styles.xml', (req, res) => {
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/build/index.html')));
+
+app.get('/api/debug/inventory/hops', (req, res) => {
+  const { siteId } = req.query;
+  db.all('SELECT * FROM inventory WHERE identifier LIKE ? AND siteId = ?', ['%Hops%', siteId || 'BR-AL-20019'], (err, rows) => {
+    if (err) {
+      console.error('Debug inventory hops error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Debug inventory hops:', rows);
+    res.json(rows);
+  });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
