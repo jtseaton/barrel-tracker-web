@@ -179,14 +179,23 @@ db.serialize(() => {
   });
   db.run(`
     CREATE TABLE IF NOT EXISTS batches (
-      batchId TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batchId TEXT UNIQUE,
       productId INTEGER,
       recipeId INTEGER,
       siteId TEXT,
       status TEXT,
       date TEXT,
+      additionalIngredients TEXT,
+      equipmentId INTEGER,
+      fermenterId INTEGER,
+      volume REAL,
+      stage TEXT,
       FOREIGN KEY (productId) REFERENCES products(id),
-      FOREIGN KEY (siteId) REFERENCES sites(siteId)
+      FOREIGN KEY (recipeId) REFERENCES recipes(id),
+      FOREIGN KEY (siteId) REFERENCES sites(siteId),
+      FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
+      FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
     )
   `, (err) => {
     if (err) console.error('Error creating batches table:', err);
