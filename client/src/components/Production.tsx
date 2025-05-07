@@ -25,6 +25,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     recipeId: 0,
     siteId: '',
     equipmentId: null,
+    fermenterId: null, // Added fermenterId
   });
   const [newRecipe, setNewRecipe] = useState<{
     name: string;
@@ -77,12 +78,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
   useEffect(() => {
     if (newBatch.siteId) {
-      fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}`)
+      // Fetch only fermenters
+      fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}&type=Fermenter`)
         .then((res) => res.json())
         .then((data) => setEquipment(data))
         .catch((err) => {
           console.error('Fetch equipment error:', err);
-          setError('Failed to load equipment: ' + err.message);
+          setError('Failed to load fermenters: ' + err.message);
         });
     } else {
       setEquipment([]);
@@ -112,8 +114,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleAddBatch = async () => {
-    if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
-      setError('All fields are required');
+    if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId || !newBatch.fermenterId) {
+      setError('All fields, including Fermenter, are required');
       return;
     }
     const product = products.find(p => p.id === newBatch.productId);
@@ -134,6 +136,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       status: 'In Progress',
       date: new Date().toISOString().split('T')[0],
       equipmentId: newBatch.equipmentId || null,
+      fermenterId: newBatch.fermenterId, // Added fermenterId
     };
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
@@ -161,10 +164,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const addedBatch = await res.json();
       setBatches([...batches, { ...addedBatch, productName: product.name, siteName: sites.find(s => s.siteId === batchData.siteId)?.name }]);
       setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null });
+      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null, fermenterId: null });
       setRecipes([]);
       setEquipment([]);
-      // Refresh inventory to reflect ingredient deductions
       console.log('handleAddBatch: Refreshing inventory after batch creation', { batchId: batchData.batchId });
       await refreshInventory();
       const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?siteId=${batchData.siteId}`);
@@ -533,6 +535,32 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               </div>
               <div>
                 <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Fermenter (required):
+                </label>
+                <select
+                  value={newBatch.fermenterId || ''}
+                  onChange={(e) => setNewBatch({ ...newBatch, fermenterId: parseInt(e.target.value, 10) || null })}
+                  disabled={!newBatch.siteId}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                  required
+                >
+                  <option value="">Select Fermenter</option>
+                  {equipment.map((equip) => (
+                    <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
                   Equipment (optional):
                 </label>
                 <select
@@ -578,7 +606,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               <button
                 onClick={() => {
                   setShowAddBatchModal(false);
-                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null });
+                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', equipmentId: null, fermenterId: null });
                   setError(null);
                 }}
                 style={{
