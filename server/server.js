@@ -362,9 +362,8 @@ db.serialize(() => {
   // Insert mock inventory with identifier as itemName for non-Spirits
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Flaked Corn', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
-  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops Cascade', 'Storage', 'Hops', '225', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 8, 'Stored']);
-  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    db.run('INSERT OR REPLACE INTO inventory (identifier, quantity, unit, siteId, account, type, receivedDate, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['Hops', 550, 'lbs', 'BR-AL-20019', 'Storage', 'Hops', '2025-04-20', 'Stored', 'Acme Supplies']);db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
   db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 8, 'Stored']);
@@ -736,8 +735,8 @@ app.post('/api/batches', (req, res) => {
                   (err, allRows) => {
                     console.log(`All inventory rows for ${ing.itemName} (LIKE) at site ${siteId}:`, allRows);
                     db.all(
-                      'SELECT identifier, quantity, unit, account, type FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ? AND account = ? AND type = ?',
-                      [ing.itemName, normalizedUnit, 'pounds', siteId, 'Storage', 'Raw Material'],
+                      'SELECT identifier, quantity, unit, account, type FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?, ?) AND siteId = ? AND account = ? AND type IN (?, ?)',
+                      [ing.itemName, 'lbs', 'pounds', 'Pounds', siteId, 'Storage', 'Raw Material', 'Hops'],
                       (err, rows) => {
                         if (err) {
                           console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
@@ -789,8 +788,8 @@ app.post('/api/batches', (req, res) => {
                 }
                 inventoryUpdates.forEach(({ itemName, quantity, unit }, index) => {
                   db.run(
-                    'UPDATE inventory SET quantity = CAST(quantity AS REAL) - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ? AND account = ? AND type = ?',
-                    [quantity, itemName, unit, 'pounds', siteId, 'Storage', 'Raw Material'],
+                    'UPDATE inventory SET quantity = CAST(quantity AS REAL) - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?, ?) AND siteId = ? AND account = ? AND type IN (?, ?)',
+                    [quantity, itemName, 'lbs', 'pounds', 'Pounds', siteId, 'Storage', 'Raw Material', 'Hops'],
                     (err) => {
                       if (err) {
                         console.error(`Error updating inventory for ${itemName} at index ${index}:`, err);
