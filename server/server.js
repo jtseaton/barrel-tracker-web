@@ -210,6 +210,13 @@ db.serialize(() => {
       console.log('Added stage column to batches table');
     }
   });
+  db.run('UPDATE batches SET stage = ? WHERE stage = ? OR stage IS NULL OR status = ?', ['Brewing', 'Mashing', 'In Progress'], (err) => {
+    if (err) {
+      console.error('Error updating batches stage:', err);
+    } else {
+      console.log('Updated batches stage to Brewing');
+    }
+  });
   db.run(`
     CREATE TABLE IF NOT EXISTS inventory_losses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -737,15 +744,14 @@ app.post('/api/batches', (req, res) => {
                   if (remaining === 0) finishValidation(inventoryUpdates);
                   return;
                 }
-                // Debug: Log all inventory rows for the item
                 db.all(
                   'SELECT * FROM inventory WHERE identifier LIKE ? AND siteId = ?',
                   [`%${ing.itemName}%`, siteId],
                   (err, allRows) => {
                     console.log(`All inventory rows for ${ing.itemName} (LIKE) at site ${siteId}:`, allRows);
                     db.all(
-                      'SELECT identifier, quantity, unit, account, type FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?, ?) AND siteId = ? AND account = ? AND type IN (?, ?)',
-                      [ing.itemName, 'lbs', 'pounds', 'Pounds', siteId, 'Storage', 'Raw Material', 'Hops'],
+                      'SELECT identifier, quantity, unit, account, type FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?, ?) AND siteId = ? AND account = ? AND type IN (?, ?, ?)',
+                      [ing.itemName, 'lbs', 'pounds', 'Pounds', siteId, 'Storage', 'Raw Material', 'Hops', ing.itemName],
                       (err, rows) => {
                         if (err) {
                           console.error(`Database error querying inventory for ${ing.itemName} at site ${siteId}:`, err.message);
@@ -784,7 +790,7 @@ app.post('/api/batches', (req, res) => {
           function createBatch(inventoryUpdates) {
             db.run(
               'INSERT INTO batches (batchId, productId, recipeId, siteId, status, date, additionalIngredients, fermenterId, volume, stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [batchId, productId, recipeId, siteId, status, date, JSON.stringify([]), fermenterId, calculatedVolume, 'Fermentation'],
+              [batchId, productId, recipeId, siteId, status, date, JSON.stringify([]), fermenterId, calculatedVolume, 'Brewing'],
               function(err) {
                 if (err) {
                   console.error('Error inserting batch:', err);
@@ -797,8 +803,8 @@ app.post('/api/batches', (req, res) => {
                 }
                 inventoryUpdates.forEach(({ itemName, quantity, unit }, index) => {
                   db.run(
-                    'UPDATE inventory SET quantity = CAST(quantity AS REAL) - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?, ?) AND siteId = ? AND account = ? AND type IN (?, ?)',
-                    [quantity, itemName, 'lbs', 'pounds', 'Pounds', siteId, 'Storage', 'Raw Material', 'Hops'],
+                    'UPDATE inventory SET quantity = CAST(quantity AS REAL) - ? WHERE identifier = ? AND LOWER(unit) IN (?, ?, ?) AND siteId = ? AND account = ? AND type IN (?, ?, ?)',
+                    [quantity, itemName, 'lbs', 'pounds', 'Pounds', siteId, 'Storage', 'Raw Material', 'Hops', itemName],
                     (err) => {
                       if (err) {
                         console.error(`Error updating inventory for ${itemName} at index ${index}:`, err);
@@ -836,15 +842,15 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
     return res.status(400).json({ error: 'stage is required' });
   }
   if (stage !== 'Completed' && stage !== 'Packaging' && !equipmentId) {
-    console.error('POST /api/batches/:batchId/equipment: Missing equipmentId for non-Completed stage', { batchId, equipmentId, stage });
-    return res.status(400).json({ error: 'equipmentId is required for non-Completed and non-Packaging stages' });
+    console.error('POST /api/batches/:batchId/equipment: Missing equipmentId for non-Completed/Packaging stage', { batchId, equipmentId, stage });
+    return res.status(400).json({ error: 'equipmentId is required for Brewing, Fermentation, and Filtering/Carbonating stages' });
   }
-  const validStages = ['Fermentation', 'Filtering/Carbonating', 'Packaging', 'Completed'];
+  const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packaging', 'Completed'];
   if (!validStages.includes(stage)) {
     console.error('POST /api/batches/:batchId/equipment: Invalid stage', { batchId, stage });
     return res.status(400).json({ error: `Invalid stage. Must be one of: ${validStages.join(', ')}` });
   }
-  db.get('SELECT siteId FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+  db.get('SELECT siteId, stage FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
     if (err) {
       console.error('POST /api/batches/:batchId/equipment: Fetch batch error:', err);
       return res.status(500).json({ error: err.message });
@@ -852,6 +858,12 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
     if (!batch) {
       console.error('POST /api/batches/:batchId/equipment: Batch not found', { batchId });
       return res.status(404).json({ error: 'Batch not found' });
+    }
+    const currentStageIndex = validStages.indexOf(batch.stage || 'Brewing');
+    const newStageIndex = validStages.indexOf(stage);
+    if (newStageIndex <= currentStageIndex) {
+      console.error('POST /api/batches/:batchId/equipment: Cannot regress stage', { batchId, currentStage: batch.stage, newStage: stage });
+      return res.status(400).json({ error: `Cannot regress from ${batch.stage} to ${stage}` });
     }
     const validateEquipment = (callback) => {
       if (!equipmentId || stage === 'Completed' || stage === 'Packaging') return callback();
@@ -877,7 +889,7 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           console.log(`POST /api/batches/:batchId/equipment: Updated batch ${batchId} to equipmentId=${equipmentId || 'null'}, stage=${stage}`);
-          res.json({ message: 'Batch equipment updated successfully' });
+          res.json({ message: 'Batch equipment and stage updated successfully' });
         }
       );
     });
