@@ -305,7 +305,20 @@ db.serialize(() => {
     ['Fermentation FV2', 'FV2', 'BR-AL-20019', 1]);
   db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
     ['Brite Tank', 'BT', 'BR-AL-20019', 1]);
-  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
+  db.run('ALTER TABLE equipment ADD COLUMN type TEXT', (err) => {
+    if (err) {
+      console.error('Error adding type column to equipment:', err);
+    } else {
+      console.log('Added type column to equipment table');
+    }
+  });
+  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Mash Tun', 'Mash Tun', 'BR-AL-20019']);
+  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Kettle', 'Boil Kettle', 'BR-AL-20019']);
+  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Fermenter', 'Fermentation FV1', 'BR-AL-20019']);
+  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Fermenter', 'Fermentation FV2', 'BR-AL-20019']);
+  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Brite Tank', 'Brite Tank', 'BR-AL-20019']);
+
+    db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
     ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
   db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
     ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
