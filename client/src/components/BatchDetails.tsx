@@ -23,34 +23,36 @@ interface BatchAction {
 const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory }) => {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
-  const [batch, setBatch] = useState<Batch | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [sites, setSites] = useState<Site[]>([]);
-  const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
-  const [actions, setActions] = useState<BatchAction[]>([]);
-  const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
-  const [newAction, setNewAction] = useState('');
-  const [newBatchId, setNewBatchId] = useState('');
-  const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
-  const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
-  const [stage, setStage] = useState<'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed'>('Mashing');
-  const [packageType, setPackageType] = useState<string>('');
-  const [packageQuantity, setPackageQuantity] = useState<number>(0);
-  const [packageLocation, setPackageLocation] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
-  const [showVolumePrompt, setShowVolumePrompt] = useState<{ message: string; shortfall: number } | null>(null);
-  const [showLossPrompt, setShowLossPrompt] = useState<{ volume: number } | null>(null);
-  const [packagingActions, setPackagingActions] = useState<PackagingAction[]>([]);
-  const [editPackaging, setEditPackaging] = useState<PackagingAction | null>(null);
-  const packageVolumes: { [key: string]: number } = {
-    '1/2 BBL Keg': 0.5,
-    '1/6 BBL Keg': 0.167,
-    '750ml Bottle': 0.006,
-  };
+ const [batch, setBatch] = useState<Batch | null>(null);
+const [products, setProducts] = useState<Product[]>([]);
+const [sites, setSites] = useState<Site[]>([]);
+const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
+const [actions, setActions] = useState<BatchAction[]>([]);
+const [equipment, setEquipment] = useState<Equipment[]>([]);
+const [fermenter, setFermenter] = useState<Equipment | null>(null); // Added for TS2304
+const [locations, setLocations] = useState<Location[]>([]);
+const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
+const [newAction, setNewAction] = useState('');
+const [newBatchId, setNewBatchId] = useState('');
+const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
+const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
+const [stage, setStage] = useState<'Brewing' | 'Fermentation' | 'Filtering/Carbonating' | 'Packaging' | 'Completed'>('Brewing'); // Updated for TS2345
+const [packageType, setPackageType] = useState<string>('');
+const [packageQuantity, setPackageQuantity] = useState<number>(0);
+const [packageLocation, setPackageLocation] = useState<string>('');
+const [error, setError] = useState<string | null>(null);
+const [successMessage, setSuccessMessage] = useState<string | null>(null);
+const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
+const [showVolumePrompt, setShowVolumePrompt] = useState<{ message: string; shortfall: number } | null>(null);
+const [showLossPrompt, setShowLossPrompt] = useState<{ volume: number } | null>(null);
+const [packagingActions, setPackagingActions] = useState<PackagingAction[]>([]);
+const [editPackaging, setEditPackaging] = useState<PackagingAction | null>(null);
+const packageVolumes: { [key: string]: number } = {
+  '1/2 BBL Keg': 0.5,
+  '1/6 BBL Keg': 0.167,
+  '750ml Bottle': 0.006,
+};
+const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packaging', 'Completed']; // Added for stage progression
 
   useEffect(() => {
     const fetchData = async () => {
@@ -93,9 +95,8 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         }
 
         if (batch) {
-          setSelectedEquipmentId(batch.equipmentId || null);
-          setStage(batch.stage || 'Mashing');
-          setNewIngredients(batch.additionalIngredients || [{ itemName: '', quantity: 0, unit: 'lbs' }]);
+          setSelectedEquipmentId(batch.fermenterId || null);
+          setStage(batch.stage || 'Brewing');
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -111,36 +112,50 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
     const fetchSiteData = async () => {
       try {
         const endpoints = [
-          { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
+          { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}&type=Fermenter`, setter: setEquipment, name: 'equipment' },
           { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
         ];
-
+  
         console.log('Fetching site endpoints:', endpoints.map(e => e.url));
-
+  
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
         );
-
+  
         for (let i = 0; i < responses.length; i++) {
           const res = responses[i];
           const { name, setter } = endpoints[i];
           console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
-
+  
           if (!res.ok) {
             const text = await res.text();
             console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
             throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
-
+  
           const contentType = res.headers.get('content-type');
           if (!contentType || !contentType.includes('application/json')) {
             const text = await res.text();
             console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
             throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
           }
-
+  
           const data = await res.json();
           setter(data);
+        }
+  
+        // Fetch fermenter details
+        if (batch.fermenterId) {
+          const equipRes = await fetch(`${API_BASE_URL}/api/equipment?equipmentId=${batch.fermenterId}`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!equipRes.ok) {
+            const text = await equipRes.text();
+            throw new Error(`Failed to fetch fermenter: HTTP ${equipRes.status}, Response: ${text.slice(0, 50)}`);
+          }
+          const equipData = await equipRes.json();
+          console.log('Fetched fermenter:', equipData);
+          setFermenter(equipData[0] || null);
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -149,7 +164,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       }
     };
     fetchSiteData();
-  }, [batch?.siteId]);
+  }, [batch?.siteId, batch?.fermenterId]);
 
   const handleAddAction = async () => {
     if (!newAction) {
@@ -446,8 +461,8 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
   };
 
   const handleProgressBatch = async () => {
-    if (!stage || (stage !== 'Completed' && !selectedEquipmentId)) {
-      setError('Please select stage and equipment (if not Completed)');
+    if (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId)) {
+      setError('Please select stage and equipment (if not Completed or Packaging)');
       return;
     }
     if (stage === 'Packaging' && packagingActions.length > 0) {
@@ -459,8 +474,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          equipmentId: stage === 'Completed' ? null : selectedEquipmentId,
-          ingredients: stage === 'Boiling' ? newIngredients.filter(ing => ing.itemName && ing.quantity > 0) : [],
+          equipmentId: stage === 'Completed' || stage === 'Packaging' ? null : selectedEquipmentId,
           stage,
         }),
       });
@@ -469,7 +483,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         throw new Error(`Failed to progress batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      setBatch((prev) => prev && (stage === 'Completed' || selectedEquipmentId) ? { ...prev, equipmentId: stage === 'Completed' ? null : selectedEquipmentId, stage } : prev);
+      setBatch((prev) => prev ? { ...prev, fermenterId: stage === 'Completed' || stage === 'Packaging' ? prev.fermenterId : selectedEquipmentId, stage } : null);
       setSuccessMessage(data.message || 'Batch progressed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
@@ -731,20 +745,21 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       if (!brewLogRes.ok) {
         throw new Error('Failed to fetch brew log');
       }
-      const brewLog = await brewLogRes.json();
+      const brewLog = await batchRes.json();
       const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
       const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
-
+      const fermenterName = fermenter?.name || (batchData.fermenterId ? `Fermenter ID: ${batchData.fermenterId}` : 'None');
+  
       const doc = new jsPDF();
       const margin = 8;
       let y = margin;
-
+  
       doc.setFont('times', 'bold');
       doc.setFontSize(18);
       doc.setTextColor(33, 150, 243);
       doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
       y += 8;
-
+  
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.setTextColor(0);
@@ -754,7 +769,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       doc.setDrawColor(33, 150, 243);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       const batchDetails = [
@@ -763,7 +778,8 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         { label: 'Recipe', value: batchData.recipeName || 'Unknown' },
         { label: 'Site', value: site },
         { label: 'Status', value: batchData.status },
-        { label: 'Stage', value: batchData.stage || 'Mashing' },
+        { label: 'Stage', value: batchData.stage || 'Brewing' },
+        { label: 'Current Equipment', value: fermenterName },
         { label: 'Volume', value: batchData.volume ? `${batchData.volume.toFixed(2)} barrels` : 'N/A' },
         { label: 'Date', value: batchData.date },
       ];
@@ -771,7 +787,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         doc.text(`${label}: ${value}`, margin, y);
         y += 6;
       });
-
+  
       y += 4;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -780,7 +796,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       doc.setLineWidth(0.5);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       if (batchData.ingredients.length > 0) {
         doc.autoTable({
           startY: y,
@@ -809,7 +825,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         doc.text('None', margin, y);
         y += 8;
       }
-
+  
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.text('Brew Day Log', margin, y);
@@ -817,7 +833,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       doc.setLineWidth(0.5);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       if (brewLog.date) {
@@ -842,7 +858,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         doc.text('No brew log available', margin, y);
         y += 8;
       }
-
+  
       y += 4;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -851,7 +867,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       doc.setLineWidth(0.5);
       doc.line(margin, y, 202 - margin, y);
       y += 8;
-
+  
       if (actions.length > 0) {
         actions.forEach((action) => {
           const timestamp = new Date(action.timestamp).toLocaleString();
@@ -868,7 +884,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         doc.text('No actions recorded', margin, y);
         y += 8;
       }
-
+  
       doc.save(`batch_${batchData.batchId}_sheet.pdf`);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -988,190 +1004,152 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       <div style={{ marginTop: '20px' }}>
         <h3>Progress Batch</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
-          <select
-            value={stage}
-            onChange={(e) => setStage(e.target.value as typeof stage)}
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          >
-            <option value="Mashing">Mashing</option>
-            <option value="Boiling">Boiling</option>
-            <option value="Fermenting">Fermenting</option>
-            <option value="Bright Tank">Bright Tank</option>
-            <option value="Packaging">Packaging</option>
-            <option value="Completed">Completed</option>
-          </select>
-          <select
-            value={selectedEquipmentId || ''}
-            onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-            disabled={stage === 'Completed' || stage === 'Packaging'}
-          >
-            <option value="">Select Equipment</option>
-            {equipment.map((equip) => (
-              <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
+<select
+  value={stage}
+  onChange={(e) => setStage(e.target.value as typeof stage)}
+  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+>
+  {validStages.slice(validStages.indexOf(batch?.stage || 'Brewing') + 1).map((s) => (
+    <option key={s} value={s}>{s}</option>
+  ))}
+</select>
+<select
+  value={selectedEquipmentId || ''}
+  onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
+  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+  disabled={stage === 'Completed' || stage === 'Packaging'}
+>
+  <option value="">Select Equipment</option>
+  {equipment.map((equip) => (
+    <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
+  ))}
+</select>
+{stage === 'Packaging' && (
+  <>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <h4 style={{ margin: '0', fontSize: '16px' }}>Package Batch</h4>
+      <select
+        value={packageType}
+        onChange={(e) => setPackageType(e.target.value)}
+        style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+      >
+        <option value="">Select Package Type</option>
+        <option value="1/2 BBL Keg">1/2 BBL Keg (15.5 gal)</option>
+        <option value="1/6 BBL Keg">1/6 BBL Keg (5.16 gal)</option>
+        <option value="750ml Bottle">750ml Bottle</option>
+      </select>
+      <input
+        type="number"
+        value={packageQuantity || ''}
+        onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
+        placeholder="Quantity"
+        min="1"
+        style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+      />
+      <select
+        value={packageLocation}
+        onChange={(e) => setPackageLocation(e.target.value)}
+        style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+      >
+        <option value="">Select Location</option>
+        {locations.map((loc) => (
+          <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+        ))}
+      </select>
+      <button
+        onClick={handlePackage}
+        disabled={!packageType || packageQuantity <= 0 || !packageLocation}
+        style={{
+          backgroundColor: !packageType || packageQuantity <= 0 || !packageLocation ? '#ccc' : '#28A745',
+          color: '#fff',
+          padding: '10px 20px',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: !packageType || packageQuantity <= 0 || !packageLocation ? 'not-allowed' : 'pointer',
+          fontSize: '16px',
+          width: '100%',
+        }}
+      >
+        Package
+      </button>
+    </div>
+    <div style={{ marginTop: '20px' }}>
+      <h4 style={{ margin: '0', fontSize: '16px' }}>Packaging Actions</h4>
+      {packagingActions.length === 0 ? (
+        <p>No packaging actions recorded.</p>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginTop: '10px' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Package Type</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Volume (Barrels)</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Date</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {packagingActions.map((action) => (
+              <tr key={action.id}>
+                <td style={{ padding: '10px' }}>{action.packageType}</td>
+                <td style={{ padding: '10px' }}>{action.quantity}</td>
+                <td style={{ padding: '10px' }}>{action.volume.toFixed(3)}</td>
+                <td style={{ padding: '10px' }}>{action.date}</td>
+                <td style={{ padding: '10px' }}>
+                  <button
+                    onClick={() => setEditPackaging(action)}
+                    style={{
+                      backgroundColor: '#2196F3',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      marginRight: '5px',
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeletePackaging(action)}
+                    style={{
+                      backgroundColor: '#F86752',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
             ))}
-          </select>
-          {stage === 'Boiling' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <h4 style={{ margin: '0', fontSize: '16px' }}>Add Ingredients (Optional)</h4>
-              <select
-                value={newIngredients[0]?.itemName || ''}
-                onChange={(e) => setNewIngredients([{ ...newIngredients[0], itemName: e.target.value }])}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-              >
-                <option value="">Select Item</option>
-                {items.filter(item => item.enabled).map((item) => (
-                  <option key={item.name} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={newIngredients[0]?.quantity || ''}
-                onChange={(e) => setNewIngredients([{ ...newIngredients[0], quantity: parseFloat(e.target.value) || 0 }])}
-                placeholder="Quantity"
-                step="0.01"
-                min="0"
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-              />
-              <select
-                value={newIngredients[0]?.unit || 'lbs'}
-                onChange={(e) => setNewIngredients([{ ...newIngredients[0], unit: e.target.value }])}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-              >
-                <option value="lbs">lbs</option>
-                <option value="kg">kg</option>
-                <option value="oz">oz</option>
-                <option value="gal">gal</option>
-                <option value="l">l</option>
-              </select>
-            </div>
-          )}
-          {stage === 'Packaging' && (
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <h4 style={{ margin: '0', fontSize: '16px' }}>Package Batch</h4>
-                <select
-                  value={packageType}
-                  onChange={(e) => setPackageType(e.target.value)}
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-                >
-                  <option value="">Select Package Type</option>
-                  <option value="1/2 BBL Keg">1/2 BBL Keg (15.5 gal)</option>
-                  <option value="1/6 BBL Keg">1/6 BBL Keg (5.16 gal)</option>
-                  <option value="750ml Bottle">750ml Bottle</option>
-                </select>
-                <input
-                  type="number"
-                  value={packageQuantity || ''}
-                  onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
-                  placeholder="Quantity"
-                  min="1"
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-                />
-                <select
-                  value={packageLocation}
-                  onChange={(e) => setPackageLocation(e.target.value)}
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-                >
-                  <option value="">Select Location</option>
-                  {locations.map((loc) => (
-                    <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={handlePackage}
-                  disabled={!packageType || packageQuantity <= 0 || !packageLocation}
-                  style={{
-                    backgroundColor: !packageType || packageQuantity <= 0 || !packageLocation ? '#ccc' : '#28A745',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: !packageType || packageQuantity <= 0 || !packageLocation ? 'not-allowed' : 'pointer',
-                    fontSize: '16px',
-                    width: '100%',
-                  }}
-                >
-                  Package
-                </button>
-              </div>
-              <div style={{ marginTop: '20px' }}>
-                <h4 style={{ margin: '0', fontSize: '16px' }}>Packaging Actions</h4>
-                {packagingActions.length === 0 ? (
-                  <p>No packaging actions recorded.</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginTop: '10px' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Package Type</th>
-                        <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
-                        <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Volume (Barrels)</th>
-                        <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Date</th>
-                        <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {packagingActions.map((action) => (
-                        <tr key={action.id}>
-                          <td style={{ padding: '10px' }}>{action.packageType}</td>
-                          <td style={{ padding: '10px' }}>{action.quantity}</td>
-                          <td style={{ padding: '10px' }}>{action.volume.toFixed(3)}</td>
-                          <td style={{ padding: '10px' }}>{action.date}</td>
-                          <td style={{ padding: '10px' }}>
-                            <button
-                              onClick={() => setEditPackaging(action)}
-                              style={{
-                                backgroundColor: '#2196F3',
-                                color: '#fff',
-                                padding: '8px 12px',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                marginRight: '5px',
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeletePackaging(action)}
-                              style={{
-                                backgroundColor: '#F86752',
-                                color: '#fff',
-                                padding: '8px 12px',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </>
-          )}
-          <button
-            onClick={handleProgressBatch}
-            disabled={stage === 'Packaging' && packagingActions.length > 0}
-            style={{
-              backgroundColor: (stage === 'Packaging' && packagingActions.length > 0) ? '#ccc' : '#2196F3',
-              color: '#fff',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: (stage === 'Packaging' && packagingActions.length > 0) ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              width: '100%',
-            }}
-          >
-            Progress to {stage}
-          </button>
+          </tbody>
+        </table>
+      )}
+    </div>
+  </>
+)}
+<button
+  onClick={handleProgressBatch}
+  disabled={stage === 'Packaging' && packagingActions.length > 0}
+  style={{
+    backgroundColor: (stage === 'Packaging' && packagingActions.length > 0) ? '#ccc' : '#2196F3',
+    color: '#fff',
+    padding: '10px 20px',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: (stage === 'Packaging' && packagingActions.length > 0) ? 'not-allowed' : 'pointer',
+    fontSize: '16px',
+    width: '100%',
+  }}
+>
+  Progress to {stage}
+</button>
         </div>
       </div>
       <div className="batch-details">
@@ -1179,8 +1157,8 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
         <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
         <p><strong>Status:</strong> {batch.status}</p>
-        <p><strong>Current Equipment:</strong> {currentEquipment?.name || (batch?.equipmentId ? `Equipment ID: ${batch.equipmentId}` : 'None')}</p>
-        <p><strong>Stage:</strong> {batch.stage || 'Mashing'}</p>
+        <p><strong>Current Equipment:</strong> {fermenter?.name || (batch?.fermenterId ? `Fermenter ID: ${batch.fermenterId}` : 'None')}</p>
+        <p><strong>Stage:</strong> {batch.stage || 'Brewing'}</p>
         <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p>
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
