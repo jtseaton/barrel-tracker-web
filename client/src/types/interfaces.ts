@@ -10,6 +10,17 @@ export interface Transaction {
   toAccount?: string;
 }
 
+export interface PackagingAction {
+  id: number;
+  batchId: string;
+  packageType: string;
+  quantity: number;
+  volume: number;
+  locationId: number;
+  date: string;
+  siteId: string;
+}
+
 export interface ReportData {
   month?: string;
   date?: string;
@@ -134,6 +145,7 @@ export interface Batch {
   ingredients?: Ingredient[];
   additionalIngredients?: Ingredient[];
   equipmentId?: number | null;
+  fermenterId: number | null;
   stage?: 'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed';
   volume?: number; // New: Added volume as optional number
 }
@@ -196,18 +208,23 @@ export interface InventoryItem {
   type: MaterialType;
   quantity: string;
   unit: Unit;
-  proof?: string; // Optional, string | undefined
+  proof?: string;
   proofGallons?: string;
   receivedDate: string;
   source?: string;
   dspNumber?: string;
   status: Status;
-  description?: string; // Optional, string | undefined
+  description?: string;
   cost?: string;
   totalCost?: string;
   poNumber?: string;
   siteId: string;
   locationId?: number;
+}
+
+export interface BatchDetailsProps {
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
 }
 
 export interface PurchaseOrder {
