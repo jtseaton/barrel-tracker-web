@@ -25,7 +25,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     recipeId: 0,
     siteId: '',
     equipmentId: null,
-    fermenterId: null, // Added fermenterId
+    fermenterId: null,
   });
   const [newRecipe, setNewRecipe] = useState<{
     name: string;
@@ -66,6 +66,10 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
             throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
           const data = await res.json();
+          if (!Array.isArray(data)) {
+            console.error(`Invalid ${name} data: expected array, got`, data);
+            throw new Error(`Invalid ${name} response: expected array`);
+          }
           setter(data);
         }
       } catch (err: any) {
@@ -78,14 +82,31 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
   useEffect(() => {
     if (newBatch.siteId) {
-      // Fetch only fermenters
-      fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}&type=Fermenter`)
-        .then((res) => res.json())
-        .then((data) => setEquipment(data))
-        .catch((err) => {
-          console.error('Fetch equipment error:', err);
+      const fetchFermenters = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}&type=Fermenter`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Failed to fetch fermenters: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+          const data = await res.json();
+          console.log('Fetched fermenters:', data);
+          if (!Array.isArray(data)) {
+            console.error('Invalid fermenters data: expected array, got', data);
+            setError('Invalid fermenters response from server');
+            setEquipment([]);
+            return;
+          }
+          setEquipment(data);
+        } catch (err: any) {
+          console.error('Fetch fermenters error:', err);
           setError('Failed to load fermenters: ' + err.message);
-        });
+          setEquipment([]);
+        }
+      };
+      fetchFermenters();
     } else {
       setEquipment([]);
     }
@@ -105,6 +126,10 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         throw new Error(`Failed to fetch recipes: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        console.error('Invalid recipes data: expected array, got', data);
+        throw new Error('Invalid recipes response: expected array');
+      }
       setRecipes(data);
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
@@ -136,7 +161,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       status: 'In Progress',
       date: new Date().toISOString().split('T')[0],
       equipmentId: newBatch.equipmentId || null,
-      fermenterId: newBatch.fermenterId, // Added fermenterId
+      fermenterId: newBatch.fermenterId,
     };
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
