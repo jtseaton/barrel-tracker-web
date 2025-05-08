@@ -850,7 +850,7 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
     console.error('POST /api/batches/:batchId/equipment: Invalid stage', { batchId, stage });
     return res.status(400).json({ error: `Invalid stage. Must be one of: ${validStages.join(', ')}` });
   }
-  db.get('SELECT siteId, stage FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+  db.get('SELECT siteId, stage, fermenterId FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
     if (err) {
       console.error('POST /api/batches/:batchId/equipment: Fetch batch error:', err);
       return res.status(500).json({ error: err.message });
@@ -867,7 +867,7 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
     }
     const validateEquipment = (callback) => {
       if (!equipmentId || stage === 'Completed' || stage === 'Packaging') return callback();
-      db.get('SELECT equipmentId FROM equipment WHERE equipmentId = ? AND siteId = ?', [equipmentId, batch.siteId], (err, equipment) => {
+      db.get('SELECT equipmentId, type FROM equipment WHERE equipmentId = ? AND siteId = ?', [equipmentId, batch.siteId], (err, equipment) => {
         if (err) {
           console.error('POST /api/batches/:batchId/equipment: Fetch equipment error:', err);
           return res.status(500).json({ error: err.message });
@@ -876,19 +876,23 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
           console.error('POST /api/batches/:batchId/equipment: Invalid equipmentId', { equipmentId, siteId: batch.siteId });
           return res.status(400).json({ error: `Invalid equipmentId: ${equipmentId} for site ${batch.siteId}` });
         }
+        if (stage === 'Fermentation' && equipment.type !== 'Fermenter') {
+          console.error('POST /api/batches/:batchId/equipment: Invalid equipment type for Fermentation', { equipmentId, type: equipment.type });
+          return res.status(400).json({ error: `Equipment ${equipmentId} must be a Fermenter for Fermentation stage` });
+        }
         callback();
       });
     };
     validateEquipment(() => {
       db.run(
-        `UPDATE batches SET equipmentId = ?, stage = ? WHERE batchId = ?`,
-        [equipmentId || null, stage, batchId],
+        `UPDATE batches SET fermenterId = ?, stage = ? WHERE batchId = ?`,
+        [equipmentId || batch.fermenterId, stage, batchId],
         (err) => {
           if (err) {
             console.error('POST /api/batches/:batchId/equipment: Update error:', err);
             return res.status(500).json({ error: err.message });
           }
-          console.log(`POST /api/batches/:batchId/equipment: Updated batch ${batchId} to equipmentId=${equipmentId || 'null'}, stage=${stage}`);
+          console.log(`POST /api/batches/:batchId/equipment: Updated batch ${batchId} to fermenterId=${equipmentId || batch.fermenterId}, stage=${stage}`);
           res.json({ message: 'Batch equipment and stage updated successfully' });
         }
       );

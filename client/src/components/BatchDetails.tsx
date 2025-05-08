@@ -461,6 +461,7 @@ const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packag
   };
 
   const handleProgressBatch = async () => {
+    console.log('handleProgressBatch: Selected stage:', stage); // Debug log
     if (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId)) {
       setError('Please select stage and equipment (if not Completed or Packaging)');
       return;
@@ -483,7 +484,7 @@ const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packag
         throw new Error(`Failed to progress batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      setBatch((prev) => prev ? { ...prev, fermenterId: stage === 'Completed' || stage === 'Packaging' ? prev.fermenterId : selectedEquipmentId, stage } : prev);
+      setBatch((prev) => prev ? { ...prev, fermenterId: stage === 'Completed' || stage === 'Packaging' ? prev.fermenterId : selectedEquipmentId, stage } : null);
       setSuccessMessage(data.message || 'Batch progressed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
