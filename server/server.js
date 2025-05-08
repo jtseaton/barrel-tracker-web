@@ -8,6 +8,36 @@ const nodemailer = require('nodemailer');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
+let packageVolumes = {};
+
+// Load package types from XML
+const loadPackageTypesFromXML = () => {
+  const filePath = path.join(__dirname, '../config/package_types.xml');
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading package_types.xml:', err);
+      return;
+    }
+    xml2js.parseString(data, (err, result) => {
+      if (err) {
+        console.error('Error parsing package_types.xml:', err);
+        return;
+      }
+      const packageTypes = result.packageTypes.packageType || [];
+      packageVolumes = {};
+      packageTypes.forEach((pkg) => {
+        const attributes = pkg.$ || {};
+        const name = String(attributes.name || '').replace(/[^a-zA-Z0-9\s]/g, '');
+        const volume = parseFloat(attributes.volume || '0');
+        const enabled = parseInt(attributes.enabled || '1', 10);
+        if (name && volume > 0 && enabled === 1) {
+          packageVolumes[name] = volume;
+        }
+      });
+      console.log('Loaded package volumes:', packageVolumes);
+    });
+  });
+};
 
 app.use(cors());
 app.use(express.json());
@@ -28,7 +58,11 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
 db.serialize(() => {
+  
+  loadPackageTypesFromXML();
+
   db.run(`
     CREATE TABLE IF NOT EXISTS inventory (
       identifier TEXT,
@@ -905,9 +939,14 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
 app.post('/api/batches/:batchId/package', (req, res) => {
   const { batchId } = req.params;
   const { packageType, quantity, locationId } = req.body;
+  console.log('POST /api/batches/:batchId/package: Received request', { batchId, packageType, quantity, locationId });
   if (!packageType || !quantity || quantity <= 0 || !locationId) {
     console.error('POST /api/batches/:batchId/package: Missing required fields', { batchId, packageType, quantity, locationId });
     return res.status(400).json({ error: 'packageType, quantity (> 0), and locationId are required' });
+  }
+  if (!packageVolumes[packageType]) {
+    console.error('POST /api/batches/:batchId/package: Invalid packageType', { packageType });
+    return res.status(400).json({ error: `Invalid packageType. Must be one of: ${Object.keys(packageVolumes).join(', ')}` });
   }
   db.get(
     `SELECT b.volume, b.siteId, p.name AS productName, b.status
@@ -964,7 +1003,6 @@ app.post('/api/batches/:batchId/package', (req, res) => {
               }
               const newIdentifier = `${batch.productName} ${packageType}`;
               console.log('POST /api/batches/:batchId/package: Checking items table', { newIdentifier });
-              // Check if item exists in items table
               db.get(
                 `SELECT name FROM items WHERE name = ?`,
                 [newIdentifier],
@@ -1013,7 +1051,6 @@ app.post('/api/batches/:batchId/package', (req, res) => {
                       console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
                       return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
                     }
-                    // Record packaging action
                     db.run(
                       `INSERT INTO batch_packaging (batchId, packageType, quantity, volume, locationId, date, siteId)
                        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -2448,6 +2485,16 @@ app.patch('/api/items', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: `Items ${enabled ? 'enabled' : 'disabled'} successfully`, updated: names });
   });
+});
+
+app.get('/api/package-types', (req, res) => {
+  const packageTypes = Object.entries(packageVolumes).map(([name, volume]) => ({
+    name,
+    volume,
+    enabled: 1
+  }));
+  console.log('GET /api/package-types, returning:', packageTypes);
+  res.json(packageTypes);
 });
 
 // Vendors endpoints
