@@ -458,6 +458,10 @@ useEffect(() => {
       setError('Cannot progress to Packaging: existing packaging actions must be deleted first');
       return;
     }
+    if (batch?.status === 'Completed') {
+      setError('Cannot progress a completed batch');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/equipment`, {
         method: 'POST',
@@ -1003,6 +1007,7 @@ useEffect(() => {
             setStage(newStage);
           }}
           style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+          disabled={batch?.status === 'Completed'}
         >
           <option value="">Select Stage</option>
           {validStages.map((s) => (
@@ -1011,63 +1016,73 @@ useEffect(() => {
         </select>
         <select
           value={selectedEquipmentId || ''}
-          onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
+          onChange={(e) => {
+            const newEquipmentId = parseInt(e.target.value) || null;
+            console.log('Dropdown onChange: Selected equipmentId:', newEquipmentId);
+            setSelectedEquipmentId(newEquipmentId);
+          }}
           style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          disabled={stage === 'Completed' || stage === 'Packaging' || !stage}
+          disabled={stage === 'Completed' || stage === 'Packaging' || !stage || batch?.status === 'Completed'}
         >
           <option value="">Select Equipment</option>
           {equipment.map((equip) => (
             <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
           ))}
         </select>
-{stage === 'Packaging' && (
+        {stage === 'Packaging' && (
   <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <h4 style={{ margin: '0', fontSize: '16px' }}>Package Batch</h4>
-      <select
-        value={packageType}
-        onChange={(e) => setPackageType(e.target.value)}
-        style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-      >
-        <option value="">Select Package Type</option>
-        <option value="1/2 BBL Keg">1/2 BBL Keg (15.5 gal)</option>
-        <option value="1/6 BBL Keg">1/6 BBL Keg (5.16 gal)</option>
-        <option value="750ml Bottle">750ml Bottle</option>
-      </select>
-      <input
-        type="number"
-        value={packageQuantity || ''}
-        onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
-        placeholder="Quantity"
-        min="1"
-        style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-      />
-      <select
-        value={packageLocation}
-        onChange={(e) => setPackageLocation(e.target.value)}
-        style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-      >
-        <option value="">Select Location</option>
-        {locations.map((loc) => (
-          <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-        ))}
-      </select>
-      <button
-        onClick={handlePackage}
-        disabled={!packageType || packageQuantity <= 0 || !packageLocation}
-        style={{
-          backgroundColor: !packageType || packageQuantity <= 0 || !packageLocation ? '#ccc' : '#28A745',
-          color: '#fff',
-          padding: '10px 20px',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: !packageType || packageQuantity <= 0 || !packageLocation ? 'not-allowed' : 'pointer',
-          fontSize: '16px',
-          width: '100%',
-        }}
-      >
-        Package
-      </button>
+      {batch?.status === 'Completed' ? (
+        <p style={{ color: '#555' }}>Cannot package a completed batch.</p>
+      ) : (
+        <>
+          <select
+            value={packageType}
+            onChange={(e) => setPackageType(e.target.value)}
+            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+          >
+            <option value="">Select Package Type</option>
+            <option value="1/2 BBL Keg">1/2 BBL Keg (15.5 gal)</option>
+            <option value="1/6 BBL Keg">1/6 BBL Keg (5.16 gal)</option>
+            <option value="750ml Bottle">750ml Bottle</option>
+          </select>
+          <input
+            type="number"
+            value={packageQuantity || ''}
+            onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
+            placeholder="Quantity"
+            min="1"
+            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+          />
+          <select
+            value={packageLocation}
+            onChange={(e) => setPackageLocation(e.target.value)}
+            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+          >
+            <option value="">Select Location</option>
+            {locations.map((loc) => (
+              <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={handlePackage}
+            disabled={!packageType || packageQuantity <= 0 || !packageLocation}
+            style={{
+              backgroundColor: !packageType || packageQuantity <= 0 || !packageLocation ? '#ccc' : '#28A745',
+              color: '#fff',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: !packageType || packageQuantity <= 0 || !packageLocation ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              width: '100%',
+            }}
+          >
+            Package
+          </button>
+        </>
+      )}
     </div>
     <div style={{ marginTop: '20px' }}>
       <h4 style={{ margin: '0', fontSize: '16px' }}>Packaging Actions</h4>
@@ -1092,35 +1107,41 @@ useEffect(() => {
                 <td style={{ padding: '10px' }}>{action.volume.toFixed(3)}</td>
                 <td style={{ padding: '10px' }}>{action.date}</td>
                 <td style={{ padding: '10px' }}>
-                  <button
-                    onClick={() => setEditPackaging(action)}
-                    style={{
-                      backgroundColor: '#2196F3',
-                      color: '#fff',
-                      padding: '8px 12px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      marginRight: '5px',
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeletePackaging(action)}
-                    style={{
-                      backgroundColor: '#F86752',
-                      color: '#fff',
-                      padding: '8px 12px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                    }}
-                  >
-                    Delete
-                  </button>
+                  {batch?.status === 'Completed' ? (
+                    <span style={{ color: '#555' }}>Locked</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setEditPackaging(action)}
+                        style={{
+                          backgroundColor: '#2196F3',
+                          color: '#fff',
+                          padding: '8px 12px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          marginRight: '5px',
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeletePackaging(action)}
+                        style={{
+                          backgroundColor: '#F86752',
+                          color: '#fff',
+                          padding: '8px 12px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
@@ -1132,14 +1153,14 @@ useEffect(() => {
 )}
 <button
   onClick={handleProgressBatch}
-  disabled={!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0)}
+  disabled={!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0) || batch?.status === 'Completed'}
   style={{
-    backgroundColor: (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0)) ? '#ccc' : '#2196F3',
+    backgroundColor: (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0) || batch?.status === 'Completed') ? '#ccc' : '#2196F3',
     color: '#fff',
     padding: '10px 20px',
     border: 'none',
     borderRadius: '4px',
-    cursor: (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0)) ? 'not-allowed' : 'pointer',
+    cursor: (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0) || batch?.status === 'Completed') ? 'not-allowed' : 'pointer',
     fontSize: '16px',
     width: '100%',
   }}
@@ -1153,8 +1174,8 @@ useEffect(() => {
         <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
         <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
         <p><strong>Status:</strong> {batch.status}</p>
-        <p><strong>Current Equipment:</strong> {fermenter?.name || (batch?.fermenterId ? `Fermenter ID: ${batch.fermenterId}` : 'None')}</p>
-        <p><strong>Stage:</strong> {batch.stage || 'Brewing'}</p>
+        <p><strong>Current Equipment:</strong> {fermenter?.name || (batch?.equipmentId ? `Equipment ID: ${batch.equipmentId}` : 'None')}</p>
+        <p><strong>Stage:</strong> {batch.stage || 'None'}</p>
         <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p>
         <p><strong>Date:</strong> {batch.date}</p>
       </div>
@@ -1182,21 +1203,25 @@ useEffect(() => {
                     <td>{ing.unit || 'lbs'}</td>
                     <td>{ing.isRecipe ? 'Recipe' : 'Added'}</td>
                     <td>
-                      <button
-                        onClick={() => handleRemoveIngredient(ing)}
-                        disabled={pendingDeletions.has(deletionKey)}
-                        style={{
-                          backgroundColor: '#F86752',
-                          color: '#fff',
-                          padding: '8px 12px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: pendingDeletions.has(deletionKey) ? 'not-allowed' : 'pointer',
-                          opacity: pendingDeletions.has(deletionKey) ? 0.6 : 1,
-                        }}
-                      >
-                        Remove
-                      </button>
+                      {batch.status === 'Completed' ? (
+                        <span style={{ color: '#555' }}>Locked</span>
+                      ) : (
+                        <button
+                          onClick={() => handleRemoveIngredient(ing)}
+                          disabled={pendingDeletions.has(deletionKey)}
+                          style={{
+                            backgroundColor: '#F86752',
+                            color: '#fff',
+                            padding: '8px 12px',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: pendingDeletions.has(deletionKey) ? 'not-allowed' : 'pointer',
+                            opacity: pendingDeletions.has(deletionKey) ? 0.6 : 1,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1208,52 +1233,56 @@ useEffect(() => {
         )}
         <div style={{ marginTop: '20px' }}>
           <h4>Add Ingredient</h4>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <select
-              value={newIngredient.itemName}
-              onChange={(e) => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
-              style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', flex: '1', minWidth: '150px' }}
-            >
-              <option value="">Select Item</option>
-              {items.filter(item => item.enabled).map((item) => (
-                <option key={item.name} value={item.name}>{item.name}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={newIngredient.quantity || ''}
-              onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) || 0 })}
-              placeholder="Quantity"
-              step="0.01"
-              min="0"
-              style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100px' }}
-            />
-            <select
-              value={newIngredient.unit}
-              onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-              style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', flex: '1', minWidth: '100px' }}
-            >
-              <option value="lbs">lbs</option>
-              <option value="kg">kg</option>
-              <option value="oz">oz</option>
-              <option value="gal">gal</option>
-              <option value="l">l</option>
-            </select>
-            <button
-              onClick={handleAddIngredient}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px',
-              }}
-            >
-              Add
-            </button>
-          </div>
+          {batch?.status === 'Completed' ? (
+            <p style={{ color: '#555' }}>Cannot add ingredients to a completed batch.</p>
+          ) : (
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                value={newIngredient.itemName}
+                onChange={(e) => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', flex: '1', minWidth: '150px' }}
+              >
+                <option value="">Select Item</option>
+                {items.filter(item => item.enabled).map((item) => (
+                  <option key={item.name} value={item.name}>{item.name}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={newIngredient.quantity || ''}
+                onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) || 0 })}
+                placeholder="Quantity"
+                step="0.01"
+                min="0"
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100px' }}
+              />
+              <select
+                value={newIngredient.unit}
+                onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', flex: '1', minWidth: '100px' }}
+              >
+                <option value="lbs">lbs</option>
+                <option value="kg">kg</option>
+                <option value="oz">oz</option>
+                <option value="gal">gal</option>
+                <option value="l">l</option>
+              </select>
+              <button
+                onClick={handleAddIngredient}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Add
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

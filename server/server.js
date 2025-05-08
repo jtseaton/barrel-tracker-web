@@ -798,10 +798,10 @@ app.post('/api/batches', (req, res) => {
                 console.error('Error inserting batch:', err);
                 return res.status(500).json({ error: `Database error inserting batch: ${err.message}` });
               }
-              console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date, volume: calculatedVolume });
+              console.log('Batch created:', { id: this.lastID, batchId, productId, recipeId, siteId, status, date, volume: calculatedVolume, stage: null });
               let remainingUpdates = inventoryUpdates.length;
               if (remainingUpdates === 0) {
-                return res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], volume: calculatedVolume });
+                return res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], volume: calculatedVolume, stage: null });
               }
               inventoryUpdates.forEach(({ itemName, quantity, unit }, index) => {
                 db.run(
@@ -818,7 +818,7 @@ app.post('/api/batches', (req, res) => {
                     console.log(`Inventory deducted: ${quantity}${unit} for ${itemName} at site ${siteId}`);
                     remainingUpdates--;
                     if (remainingUpdates === 0) {
-                      res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], volume: calculatedVolume });
+                      res.json({ id: this.lastID, batchId, productId, recipeId, siteId, status, date, additionalIngredients: [], volume: calculatedVolume, stage: null });
                     }
                   }
                 );
@@ -851,7 +851,7 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
     console.error('POST /api/batches/:batchId/equipment: Invalid stage', { batchId, stage });
     return res.status(400).json({ error: `Invalid stage. Must be one of: ${validStages.join(', ')}` });
   }
-  db.get('SELECT siteId, stage, equipmentId FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
+  db.get('SELECT siteId, stage, equipmentId, status FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
     if (err) {
       console.error('POST /api/batches/:batchId/equipment: Fetch batch error:', err);
       return res.status(500).json({ error: err.message });
@@ -859,6 +859,10 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
     if (!batch) {
       console.error('POST /api/batches/:batchId/equipment: Batch not found', { batchId });
       return res.status(404).json({ error: 'Batch not found' });
+    }
+    if (batch.status === 'Completed') {
+      console.error('POST /api/batches/:batchId/equipment: Cannot modify completed batch', { batchId });
+      return res.status(400).json({ error: 'Cannot modify a completed batch' });
     }
     const currentStage = batch.stage || null;
     const currentStageIndex = currentStage ? validStages.indexOf(currentStage) : -1;
@@ -891,7 +895,7 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           console.log(`POST /api/batches/:batchId/equipment: Updated batch ${batchId} to equipmentId=${equipmentId || null}, stage=${stage}`);
-          res.json({ message: 'Batch equipment and stage updated successfully' });
+          res.json({ message: 'Batch equipment and stage updated successfully', equipmentId: equipmentId || null, stage });
         }
       );
     });
@@ -905,17 +909,8 @@ app.post('/api/batches/:batchId/package', (req, res) => {
     console.error('POST /api/batches/:batchId/package: Missing required fields', { batchId, packageType, quantity, locationId });
     return res.status(400).json({ error: 'packageType, quantity (> 0), and locationId are required' });
   }
-  const packageVolumes = {
-    '1/2 BBL Keg': 0.5, // 15.5 gallons
-    '1/6 BBL Keg': 0.167, // 5.16 gallons
-    '750ml Bottle': 0.006 // ~0.198 gallons
-  };
-  if (!packageVolumes[packageType]) {
-    console.error('POST /api/batches/:batchId/package: Invalid packageType', { packageType });
-    return res.status(400).json({ error: `Invalid packageType. Must be one of: ${Object.keys(packageVolumes).join(', ')}` });
-  }
   db.get(
-    `SELECT b.volume, b.siteId, p.name AS productName
+    `SELECT b.volume, b.siteId, p.name AS productName, b.status
      FROM batches b
      JOIN products p ON b.productId = p.id
      WHERE b.batchId = ?`,
@@ -928,6 +923,10 @@ app.post('/api/batches/:batchId/package', (req, res) => {
       if (!batch) {
         console.error('POST /api/batches/:batchId/package: Batch not found', { batchId });
         return res.status(404).json({ error: 'Batch not found' });
+      }
+      if (batch.status === 'Completed') {
+        console.error('POST /api/batches/:batchId/package: Cannot modify completed batch', { batchId });
+        return res.status(400).json({ error: 'Cannot modify a completed batch' });
       }
       if (batch.volume === null || batch.volume === undefined) {
         console.error('POST /api/batches/:batchId/package: Batch volume not set', { batchId });
@@ -1128,21 +1127,13 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
   const { batchId, packageId } = req.params;
   const { quantity } = req.body;
   console.log('PATCH /api/batches/:batchId/package/:packageId: Received request', { batchId, packageId, quantity });
-
   if (quantity === undefined || quantity < 0) {
     console.error('PATCH /api/batches/:batchId/package/:packageId: Invalid quantity', { quantity });
     return res.status(400).json({ error: 'Quantity must be a non-negative number' });
   }
-
-  const packageVolumes = {
-    '1/2 BBL Keg': 0.5,
-    '1/6 BBL Keg': 0.167,
-    '750ml Bottle': 0.006,
-  };
-
   db.get(
     `SELECT bp.packageType, bp.quantity AS currentQuantity, bp.volume AS currentVolume, bp.locationId, bp.siteId,
-            b.volume AS batchVolume, p.name AS productName
+            b.volume AS batchVolume, p.name AS productName, b.status
      FROM batch_packaging bp
      JOIN batches b ON bp.batchId = b.batchId
      JOIN products p ON b.productId = p.id
@@ -1157,7 +1148,10 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
         console.error('PATCH /api/batches/:batchId/package/:packageId: Packaging record not found', { packageId, batchId });
         return res.status(404).json({ error: 'Packaging record not found' });
       }
-
+      if (row.status === 'Completed') {
+        console.error('PATCH /api/batches/:batchId/package/:packageId: Cannot modify completed batch', { batchId });
+        return res.status(400).json({ error: 'Cannot modify a completed batch' });
+      }
       const { packageType, currentQuantity, currentVolume, locationId, siteId, batchVolume, productName } = row;
       console.log('PATCH /api/batches/:batchId/package/:packageId: Current record', {
         packageType,
@@ -1324,10 +1318,9 @@ app.patch('/api/batches/:batchId/package/:packageId', (req, res) => {
 app.delete('/api/batches/:batchId/package/:packageId', (req, res) => {
   const { batchId, packageId } = req.params;
   console.log('DELETE /api/batches/:batchId/package/:packageId: Received request', { batchId, packageId });
-
   db.get(
     `SELECT bp.packageType, bp.quantity AS currentQuantity, bp.volume AS currentVolume, bp.locationId, bp.siteId,
-            b.volume AS batchVolume, p.name AS productName
+            b.volume AS batchVolume, p.name AS productName, b.status
      FROM batch_packaging bp
      JOIN batches b ON bp.batchId = b.batchId
      JOIN products p ON b.productId = p.id
@@ -1342,7 +1335,10 @@ app.delete('/api/batches/:batchId/package/:packageId', (req, res) => {
         console.error('DELETE /api/batches/:batchId/package/:packageId: Packaging record not found', { packageId, batchId });
         return res.status(404).json({ error: 'Packaging record not found' });
       }
-
+      if (row.status === 'Completed') {
+        console.error('DELETE /api/batches/:batchId/package/:packageId: Cannot modify completed batch', { batchId });
+        return res.status(400).json({ error: 'Cannot modify a completed batch' });
+      }
       const { packageType, currentQuantity, currentVolume, locationId, siteId, batchVolume, productName } = row;
       console.log('DELETE /api/batches/:batchId/package/:packageId: Current record', {
         packageType,
@@ -1615,7 +1611,7 @@ app.get('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
   db.get(`
     SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-           b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId, b.volume
+           b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId, b.volume, b.stage
     FROM batches b
     JOIN products p ON b.productId = p.id
     JOIN recipes r ON b.recipeId = r.id
@@ -1632,7 +1628,6 @@ app.get('/api/batches/:batchId', (req, res) => {
     }
     const recipeIngredients = JSON.parse(row.ingredients || '[]');
     const additionalIngredients = JSON.parse(row.additionalIngredients || '[]');
-    // Filter out excluded recipe ingredients
     const activeRecipeIngredients = recipeIngredients.filter(
       (ing) => !additionalIngredients.some(
         (override) => override.itemName === ing.itemName && 
@@ -1641,11 +1636,9 @@ app.get('/api/batches/:batchId', (req, res) => {
                       (override.quantity === ing.quantity || override.quantity === undefined)
       )
     );
-    // Filter valid additional ingredients
     const filteredAdditionalIngredients = additionalIngredients.filter(
       ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)
     );
-    // Combine active ingredients
     const combinedIngredients = [
       ...activeRecipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
       ...filteredAdditionalIngredients.map(ing => ({ ...ing, isRecipe: false }))
@@ -1653,7 +1646,8 @@ app.get('/api/batches/:batchId', (req, res) => {
     const batch = {
       ...row,
       ingredients: combinedIngredients,
-      additionalIngredients
+      additionalIngredients,
+      stage: row.stage || null
     };
     console.log(`GET /api/batches/${batchId}, recipeIngredients:`, recipeIngredients);
     console.log(`GET /api/batches/${batchId}, additionalIngredients:`, additionalIngredients);
@@ -2003,25 +1997,23 @@ app.patch('/api/batches/:batchId/ingredients', (req, res) => {
   });
 });
 
-// DELETE /api/batches/:batchId/ingredients
 app.delete('/api/batches/:batchId/ingredients', (req, res) => {
   const { batchId } = req.params;
   const { itemName, quantity, unit } = req.body;
   if (!itemName || !quantity || quantity <= 0 || !unit) {
     return res.status(400).json({ error: 'Valid itemName, quantity, and unit required' });
   }
-  db.get(`
-    SELECT b.siteId, b.additionalIngredients, r.ingredients AS recipeIngredients
-    FROM batches b
-    JOIN recipes r ON b.recipeId = r.id
-    WHERE b.batchId = ?
-  `, [batchId], (err, batch) => {
+  db.get('SELECT siteId, status FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
     if (err) {
       console.error('Fetch batch error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
+    }
+    if (batch.status === 'Completed') {
+      console.error('DELETE /api/batches/:batchId/ingredients: Cannot modify completed batch', { batchId });
+      return res.status(400).json({ error: 'Cannot modify a completed batch' });
     }
     const siteId = batch.siteId;
     let additionalIngredients = batch.additionalIngredients ? JSON.parse(batch.additionalIngredients) : [];
