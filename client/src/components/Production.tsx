@@ -24,7 +24,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     productId: 0,
     recipeId: 0,
     siteId: '',
-    fermenterId: null,
   });
   const [newRecipe, setNewRecipe] = useState<{
     name: string;
@@ -145,15 +144,14 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleAddBatch = async () => {
-    if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId || !newBatch.fermenterId) {
+    if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
       console.error('Missing required batch fields:', {
         batchId: newBatch.batchId,
         productId: newBatch.productId,
         recipeId: newBatch.recipeId,
         siteId: newBatch.siteId,
-        fermenterId: newBatch.fermenterId,
       });
-      setError('All fields, including Fermenter, are required');
+      setError('All fields are required');
       return;
     }
     const product = products.find(p => p.id === newBatch.productId);
@@ -175,7 +173,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       siteId: newBatch.siteId,
       status: 'In Progress',
       date: new Date().toISOString().split('T')[0],
-      fermenterId: newBatch.fermenterId,
     };
     try {
       console.log('Submitting batch:', batchData);
@@ -207,7 +204,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       console.log('Batch created successfully:', addedBatch);
       setBatches([...batches, { ...addedBatch, productName: product.name, siteName: sites.find(s => s.siteId === batchData.siteId)?.name }]);
       setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
       setRecipes([]);
       setEquipment([]);
       console.log('handleAddBatch: Refreshing inventory after batch creation', { batchId: batchData.batchId });
@@ -481,131 +478,105 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               Add New Batch
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Batch ID (required):
-                </label>
-                <input
-                  type="text"
-                  value={newBatch.batchId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, batchId: e.target.value })}
-                  placeholder="Enter Batch ID"
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Product (required):
-                </label>
-                <select
-                  value={newBatch.productId || ''}
-                  onChange={(e) => {
-                    const productId = parseInt(e.target.value, 10);
-                    setNewBatch({ ...newBatch, productId, recipeId: 0 });
-                    fetchRecipes(productId);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>{product.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Recipe (required):
-                </label>
-                <select
-                  value={newBatch.recipeId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
-                  disabled={!newBatch.productId}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <option value="">Select Recipe</option>
-                  {recipes.map((recipe) => (
-                    <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Site (required):
-                </label>
-                <select
-                  value={newBatch.siteId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <option value="">Select Site</option>
-                  {sites.map((site) => (
-                    <option key={site.siteId} value={site.siteId}>{site.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                  Fermenter (required):
-                </label>
-                <select
-                  value={newBatch.fermenterId || ''}
-                  onChange={(e) => setNewBatch({ ...newBatch, fermenterId: parseInt(e.target.value, 10) || null })}
-                  disabled={!newBatch.siteId || equipment.length === 0}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                  required
-                >
-                  <option value="">Select Fermenter</option>
-                  {equipment.map((equip) => (
-                    <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Batch ID (required):
+              </label>
+              <input
+                type="text"
+                value={newBatch.batchId || ''}
+                onChange={(e) => setNewBatch({ ...newBatch, batchId: e.target.value })}
+                placeholder="Enter Batch ID"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #CCCCCC',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  boxSizing: 'border-box',
+                  color: '#000000',
+                  backgroundColor: '#FFFFFF',
+                }}
+              />
             </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Product (required):
+              </label>
+              <select
+                value={newBatch.productId || ''}
+                onChange={(e) => {
+                  const productId = parseInt(e.target.value, 10);
+                  setNewBatch({ ...newBatch, productId, recipeId: 0 });
+                  fetchRecipes(productId);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #CCCCCC',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  boxSizing: 'border-box',
+                  color: '#000000',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <option value="">Select Product</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>{product.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Recipe (required):
+              </label>
+              <select
+                value={newBatch.recipeId || ''}
+                onChange={(e) => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
+                disabled={!newBatch.productId}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #CCCCCC',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  boxSizing: 'border-box',
+                  color: '#000000',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <option value="">Select Recipe</option>
+                {recipes.map((recipe) => (
+                  <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Site (required):
+              </label>
+              <select
+                value={newBatch.siteId || ''}
+                onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #CCCCCC',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  boxSizing: 'border-box',
+                  color: '#000000',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <option value="">Select Site</option>
+                {sites.map((site) => (
+                  <option key={site.siteId} value={site.siteId}>{site.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
               <button
                 onClick={handleAddBatch}
