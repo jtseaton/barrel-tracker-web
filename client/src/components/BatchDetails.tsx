@@ -54,58 +54,62 @@ const packageVolumes: { [key: string]: number } = {
 };
 const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packaging', 'Completed']; // Added for stage progression
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const endpoints = [
-          { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
-          { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
-          { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
-          { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
-          { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
-          { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
-        ].filter(endpoint => endpoint.url !== null);
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      const endpoints = [
+        { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
+        { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
+        { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
+        { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
+        { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
+        { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
+      ].filter(endpoint => endpoint.url !== null);
 
-        console.log('Fetching endpoints:', endpoints.map(e => e.url));
+      console.log('Fetching endpoints:', endpoints.map(e => e.url));
 
-        const responses = await Promise.all(
-          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-        );
+      const responses = await Promise.all(
+        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+      );
 
-        for (let i = 0; i < responses.length; i++) {
-          const res = responses[i];
-          const { name, setter, single } = endpoints[i];
-          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+      for (let i = 0; i < responses.length; i++) {
+        const res = responses[i];
+        const { name, setter, single } = endpoints[i];
+        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
 
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
-            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-          }
-
-          const contentType = res.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            const text = await res.text();
-            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
-            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
-          }
-
-          const data = await res.json();
-          setter(single ? data : data);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
 
-        if (batch) {
-          setSelectedEquipmentId(batch.fermenterId || null);
-          setStage(batch.stage || 'Brewing');
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
         }
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Fetch error:', err);
-        setError('Failed to load batch details: ' + errorMessage);
+
+        const data = await res.json();
+        setter(single ? data : data);
       }
-    };
-    fetchData();
-  }, [batchId]);
+
+      if (batch && !stage) {
+        console.log('useEffect: Setting initial stage for batch:', batch.stage || 'Brewing');
+        const currentStage = batch.stage || 'Brewing';
+        const nextStageIndex = validStages.indexOf(currentStage) + 1;
+        const nextStage = nextStageIndex < validStages.length ? validStages[nextStageIndex] : 'Fermentation';
+        setSelectedEquipmentId(batch.fermenterId || null);
+        setStage(nextStage as typeof stage);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Fetch error:', err);
+      setError('Failed to load batch details: ' + errorMessage);
+    }
+  };
+  fetchData();
+}, [batchId, batch, stage]);
 
   useEffect(() => {
     if (!batch?.siteId) return;
@@ -461,7 +465,7 @@ const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packag
   };
 
   const handleProgressBatch = async () => {
-    console.log('handleProgressBatch: Selected stage:', stage); // Debug log
+    console.log('handleProgressBatch: Selected stage:', stage);
     if (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId)) {
       setError('Please select stage and equipment (if not Completed or Packaging)');
       return;
@@ -1005,9 +1009,13 @@ const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packag
       <div style={{ marginTop: '20px' }}>
         <h3>Progress Batch</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
-<select
+        <select
   value={stage}
-  onChange={(e) => setStage(e.target.value as typeof stage)}
+  onChange={(e) => {
+    const newStage = e.target.value as typeof stage;
+    console.log('Dropdown onChange: Selected stage:', newStage);
+    setStage(newStage);
+  }}
   style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
 >
   {validStages.slice(validStages.indexOf(batch?.stage || 'Brewing') + 1).map((s) => (
