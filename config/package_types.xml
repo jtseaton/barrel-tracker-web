@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<packageTypes>
+  <packageType name="1/2 BBL Keg" volume="0.5" enabled="1" />
+  <packageType name="1/4 BBL Keg" volume="0.25" enabled="1" />
+  <packageType name="1/4 BBL Slim Keg" volume="0.25" enabled="1" />
+  <packageType name="1/6 BBL Keg" volume="0.166" enabled="1" />
+  <packageType name="Cornelius Keg" volume="0.161" enabled="1" />
+  <packageType name="Mini Keg" volume="0.0426" enabled="1" />
+  <packageType name="50L Keg" volume="0.426" enabled="1" />
+  <packageType name="30L Keg" volume="0.256" enabled="1" />
+  <packageType name="750ml Bottle" volume="0.00639" enabled="1" />
+  <packageType name="330ml Bottle" volume="0.00281" enabled="1" />
+  <packageType name="500ml Bottle" volume="0.00426" enabled="1" />
+  <packageType name="375ml Bottle" volume="0.00319" enabled="1" />
+  <packageType name="12oz Bottle" volume="0.00303" enabled="1" />
+  <packageType name="22oz Bottle" volume="0.00558" enabled="1" />
+  <packageType name="32oz Bottle" volume="0.00806" enabled="1" />
+  <packageType name="7oz Bottle" volume="0.00177" enabled="1" />
+  <packageType name="40oz Bottle" volume="0.0101" enabled="1" />
+  <packageType name="1L Bottle" volume="0.00852" enabled="1" />
+  <packageType name="12oz Can" volume="0.00303" enabled="1" />
+  <packageType name="16oz Can" volume="0.00403" enabled="1" />
+  <packageType name="500ml Can" volume="0.00426" enabled="1" />
+  <packageType name="330ml Can" volume="0.00281" enabled="1" />
+  <packageType name="Pin Cask" volume="0.145" enabled="1" />
+  <packageType name="Firkin" volume="0.29" enabled="1" />
+  <packageType name="1.5L Bottle" volume="0.0128" enabled="1" />
+  <packageType name="3L Bottle" volume="0.0256" enabled="1" />
+  <packageType name="5L Bag-in-Box" volume="0.0426" enabled="1" />
+</packageTypes>
