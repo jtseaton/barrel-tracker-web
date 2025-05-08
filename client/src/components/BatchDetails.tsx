@@ -93,15 +93,6 @@ useEffect(() => {
         const data = await res.json();
         setter(single ? data : data);
       }
-
-      if (batch && !stage) {
-        console.log('useEffect: Setting initial stage for batch:', batch.stage || 'Brewing');
-        const currentStage = batch.stage || 'Brewing';
-        const nextStageIndex = validStages.indexOf(currentStage) + 1;
-        const nextStage = nextStageIndex < validStages.length ? validStages[nextStageIndex] : 'Fermentation';
-        setSelectedEquipmentId(batch.fermenterId || null);
-        setStage(nextStage as typeof stage);
-      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Fetch error:', err);
@@ -109,7 +100,7 @@ useEffect(() => {
     }
   };
   fetchData();
-}, [batchId, batch, stage]);
+}, [batchId]);
 
   useEffect(() => {
     if (!batch?.siteId) return;
@@ -489,6 +480,9 @@ useEffect(() => {
       }
       const data = await res.json();
       setBatch((prev) => prev ? { ...prev, fermenterId: stage === 'Completed' || stage === 'Packaging' ? prev.fermenterId : selectedEquipmentId, stage } : null);
+      const nextStageIndex = validStages.indexOf(stage) + 1;
+      const nextStage = nextStageIndex < validStages.length ? validStages[nextStageIndex] : 'Completed';
+      setStage(nextStage as typeof stage);
       setSuccessMessage(data.message || 'Batch progressed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
