@@ -483,7 +483,7 @@ const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packag
         throw new Error(`Failed to progress batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      setBatch((prev) => prev ? { ...prev, fermenterId: stage === 'Completed' || stage === 'Packaging' ? prev.fermenterId : selectedEquipmentId, stage } : null);
+      setBatch((prev) => prev ? { ...prev, fermenterId: stage === 'Completed' || stage === 'Packaging' ? prev.fermenterId : selectedEquipmentId, stage } : prev);
       setSuccessMessage(data.message || 'Batch progressed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
@@ -1148,7 +1148,7 @@ const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packag
     width: '100%',
   }}
 >
-  Progress to {stage}
+  Progress to {stage === 'Completed' ? 'Completed' : validStages[validStages.indexOf(batch?.stage || 'Brewing') + 1] || 'Completed'}
 </button>
         </div>
       </div>
