@@ -29,7 +29,6 @@ const [sites, setSites] = useState<Site[]>([]);
 const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
 const [actions, setActions] = useState<BatchAction[]>([]);
 const [equipment, setEquipment] = useState<Equipment[]>([]);
-const [fermenter, setFermenter] = useState<Equipment | null>(null); // Added for TS2304
 const [locations, setLocations] = useState<Location[]>([]);
 const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
 const [newAction, setNewAction] = useState('');
@@ -134,19 +133,6 @@ useEffect(() => {
         const data = await res.json();
         setter(data);
       }
-      // Fetch current equipment details
-      if (batch.equipmentId) {
-        const equipRes = await fetch(`${API_BASE_URL}/api/equipment?equipmentId=${batch.equipmentId}`, {
-          headers: { Accept: 'application/json' },
-        });
-        if (!equipRes.ok) {
-          const text = await equipRes.text();
-          throw new Error(`Failed to fetch equipment: HTTP ${equipRes.status}, Response: ${text.slice(0, 50)}`);
-        }
-        const equipData = await equipRes.json();
-        console.log('Fetched equipment:', equipData);
-        setFermenter(equipData[0] || null);
-      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Fetch site data error:', err);
@@ -154,7 +140,7 @@ useEffect(() => {
     }
   };
   fetchSiteData();
-}, [batch?.siteId, batch?.equipmentId]);
+}, [batch?.siteId]);
 
   const handleAddAction = async () => {
     if (!newAction) {
@@ -194,13 +180,13 @@ useEffect(() => {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Completed' }),
+        body: JSON.stringify({ status: 'Completed', stage: 'Completed' }), // Add stage
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
+      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed' } : null);
       setError(null);
       setSuccessMessage('Batch completed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -219,14 +205,14 @@ useEffect(() => {
         const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ status: 'Completed' }),
+          body: JSON.stringify({ status: 'Completed', stage: 'Completed' }), // Add stage
         });
         if (!res.ok) {
           const text = await res.text();
           console.error('handleLossConfirmation: Complete batch failed', { status: res.status, response: text });
           throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-        setBatch((prev) => prev ? { ...prev, status: 'Completed' } : null);
+        setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed' } : null);
         setSuccessMessage('Batch completed without recording loss');
         setTimeout(() => setSuccessMessage(null), 2000);
         setError(null);
@@ -241,8 +227,8 @@ useEffect(() => {
       const lossPayload = {
         identifier: batch.batchId,
         quantityLost: showLossPrompt.volume,
-        proofGallonsLost: 0, // Non-spirits (beer)
-        reason: 'Fermentation loss due to trub/spillage', // TTB-specific
+        proofGallonsLost: 0,
+        reason: 'Fermentation loss due to trub/spillage',
         date: new Date().toISOString().split('T')[0],
         dspNumber: 'DSP-AL-20010',
       };
@@ -265,7 +251,6 @@ useEffect(() => {
       }
       const responseData = await res.json();
       console.log('handleLossConfirmation: Loss recorded', responseData);
-      // Update batch volume to 0
       const updateRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -276,18 +261,17 @@ useEffect(() => {
         console.error('handleLossConfirmation: Update batch volume failed', { status: updateRes.status, response: text });
         throw new Error(`Failed to update batch volume: HTTP ${updateRes.status}, Response: ${text.slice(0, 50)}`);
       }
-      // Complete the batch
       const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Completed' }),
+        body: JSON.stringify({ status: 'Completed', stage: 'Completed' }), // Add stage
       });
       if (!completeRes.ok) {
         const text = await completeRes.text();
         console.error('handleLossConfirmation: Complete batch failed', { status: completeRes.status, response: text });
         throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: 'Completed', volume: 0 } : null);
+      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', volume: 0 } : null);
       setShowLossPrompt(null);
       setSuccessMessage('Loss recorded and batch completed');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -478,6 +462,7 @@ useEffect(() => {
         throw new Error(`Failed to progress batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
+      console.log('handleProgressBatch: API response:', data);
       setBatch((prev) => prev ? { ...prev, equipmentId: stage === 'Completed' || stage === 'Packaging' ? null : selectedEquipmentId, stage } : null);
       setStage('');
       setSelectedEquipmentId(null);
@@ -745,8 +730,7 @@ useEffect(() => {
       const brewLog = await batchRes.json();
       const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
       const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
-      const fermenterName = fermenter?.name || (batchData.fermenterId ? `Fermenter ID: ${batchData.fermenterId}` : 'None');
-  
+      const fermenterName = batchData.equipmentId ? equipment.find((e) => e.equipmentId === batchData.equipmentId)?.name || `Equipment ID: ${batchData.equipmentId}` : 'None';  
       const doc = new jsPDF();
       const margin = 8;
       let y = margin;
@@ -1179,7 +1163,7 @@ useEffect(() => {
         <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
         <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
         <p><strong>Status:</strong> {batch.status}</p>
-        <p><strong>Current Equipment:</strong> {fermenter?.name || (batch?.equipmentId ? `Equipment ID: ${batch.equipmentId}` : 'None')}</p>
+        <p><strong>Current Equipment:</strong> {batch?.equipmentId ? equipment.find((e) => e.equipmentId === batch.equipmentId)?.name || `Equipment ID: ${batch.equipmentId}` : 'None'}</p>
         <p><strong>Stage:</strong> {batch.stage || 'None'}</p>
         <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p>
         <p><strong>Date:</strong> {batch.date}</p>

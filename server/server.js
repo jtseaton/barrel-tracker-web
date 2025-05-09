@@ -2157,69 +2157,36 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
 
 app.patch('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
-  const { status, volume } = req.body;
-  console.log('PATCH /api/batches/:batchId: Processing update', { batchId, status, volume });
-
-  if (!status && volume === undefined) {
-    console.error('PATCH /api/batches/:batchId: No valid fields provided', { batchId });
-    return res.status(400).json({ error: 'At least one of status or volume is required' });
+  const updates = req.body;
+  const allowedFields = ['batchId', 'status', 'volume', 'stage'];
+  const fields = Object.keys(updates).filter(field => allowedFields.includes(field));
+  if (fields.length === 0) {
+    return res.status(400).json({ error: 'No valid fields provided for update' });
   }
-
-  // Fetch current batch
-  db.get(
-    `SELECT status, volume FROM batches WHERE batchId = ?`,
-    [batchId],
-    (err, row) => {
+  // Automatically set stage to Completed if status is Completed
+  if (updates.status === 'Completed' && !updates.stage) {
+    updates.stage = 'Completed';
+    fields.push('stage');
+  }
+  const setClause = fields.map(field => `${field} = ?`).join(', ');
+  const values = fields.map(field => updates[field]);
+  values.push(batchId);
+  db.run(
+    `UPDATE batches SET ${setClause} WHERE batchId = ?`,
+    values,
+    function(err) {
       if (err) {
-        console.error('PATCH /api/batches/:batchId: Fetch batch error:', err);
-        return res.status(500).json({ error: `Failed to fetch batch: ${err.message}` });
+        console.error('PATCH /api/batches/:batchId: Update error:', err);
+        return res.status(500).json({ error: err.message });
       }
-      if (!row) {
-        console.error('PATCH /api/batches/:batchId: Batch not found', { batchId });
-        return res.status(404).json({ error: `Batch not found: ${batchId}` });
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Batch not found' });
       }
-
-      const currentStatus = row.status;
-      const currentVolume = parseFloat(row.volume) || 0;
-
-      // Validate status change
-      if (status) {
-        if (currentStatus === 'Completed' && status !== 'In Progress') {
-          console.error('PATCH /api/batches/:batchId: Cannot modify completed batch', { batchId, currentStatus });
-          return res.status(400).json({ error: `Batch ${batchId} is already completed` });
-        }
-        if (status === 'Completed' && currentVolume > 0) {
-          console.error('PATCH /api/batches/:batchId: Unpackaged volume detected', { batchId, currentVolume });
-          return res.status(400).json({ error: 'Unpackaged volume detected. Record loss or adjust volume before completing.' });
-        }
-      }
-
-      // Build update query
-      const updates = [];
-      const params = [];
-      if (status) {
-        updates.push('status = ?');
-        params.push(status);
-      }
-      if (volume !== undefined) {
-        updates.push('volume = ?');
-        params.push(volume);
-      }
-      if (updates.length === 0) {
-        console.error('PATCH /api/batches/:batchId: No updates to apply', { batchId });
-        return res.status(400).json({ error: 'No valid updates provided' });
-      }
-
-      params.push(batchId);
-      const query = `UPDATE batches SET ${updates.join(', ')} WHERE batchId = ?`;
-
-      db.run(query, params, (err) => {
+      db.get('SELECT * FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
         if (err) {
-          console.error('PATCH /api/batches/:batchId: Update batch error:', err);
-          return res.status(500).json({ error: `Failed to update batch: ${err.message}` });
+          return res.status(500).json({ error: err.message });
         }
-        console.log('PATCH /api/batches/:batchId: Success', { batchId, status, volume });
-        res.json({ message: 'Batch updated successfully' });
+        res.json(batch);
       });
     }
   );
