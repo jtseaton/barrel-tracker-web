@@ -1040,18 +1040,18 @@ useEffect(() => {
       ) : (
         <>
           <select
-            value={packageType}
-            onChange={(e) => setPackageType(e.target.value)}
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          >
-            <option value="">Select Package Type</option>
-            {packageTypes
-              .filter((pkg) => pkg.enabled)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((pkg) => (
-                <option key={pkg.name} value={pkg.name}>{`${pkg.name} (${(pkg.volume * 31).toFixed(2)} gal)`}</option>
-              ))}
-          </select>
+  value={packageType}
+  onChange={(e) => setPackageType(e.target.value)}
+  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+>
+  <option value="">Select Package Type</option>
+  {packageTypes
+    .filter((pkg) => pkg.enabled)
+    .sort((a, b) => a.name.localeCompare(b.name)) // Ensure client-side sorting
+    .map((pkg) => (
+      <option key={pkg.name} value={pkg.name}>{`${pkg.name} (${(pkg.volume * 31).toFixed(2)} gal)`}</option>
+    ))}
+</select>
           <input
             type="number"
             value={packageQuantity || ''}
