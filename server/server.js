@@ -27,7 +27,7 @@ const loadPackageTypesFromXML = () => {
       packageVolumes = {};
       packageTypes.forEach((pkg) => {
         const attributes = pkg.$ || {};
-        const name = String(attributes.name || '').replace(/[^a-zA-Z0-9\s]/g, '');
+        const name = String(attributes.name || '').replace(/[^\w\s\/-]/g, ''); // Preserve slashes
         const volume = parseFloat(attributes.volume || '0');
         const enabled = parseInt(attributes.enabled || '1', 10);
         if (name && volume > 0 && enabled === 1) {
@@ -2488,11 +2488,13 @@ app.patch('/api/items', (req, res) => {
 });
 
 app.get('/api/package-types', (req, res) => {
-  const packageTypes = Object.entries(packageVolumes).map(([name, volume]) => ({
-    name,
-    volume,
-    enabled: 1
-  }));
+  const packageTypes = Object.entries(packageVolumes)
+    .map(([name, volume]) => ({
+      name,
+      volume,
+      enabled: 1
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
   console.log('GET /api/package-types, returning:', packageTypes);
   res.json(packageTypes);
 });
