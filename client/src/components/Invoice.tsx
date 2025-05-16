@@ -1,0 +1,242 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Customer, InventoryItem, Invoice } from '../types/interfaces';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+
+interface InvoiceItem {
+  id?: number;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  hasKegDeposit: boolean;
+}
+
+const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory: () => Promise<void> }> = ({ inventory, refreshInventory }) => {
+  const { invoiceId } = useParams<{ invoiceId: string }>();
+  const navigate = useNavigate();
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchInvoice = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch invoice: HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setInvoice(data);
+        setItems(data.items);
+      } catch (err: any) {
+        setError('Failed to load invoice: ' + err.message);
+      }
+    };
+    fetchInvoice();
+  }, [invoiceId]);
+
+  const addItem = () => {
+    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false }]);
+  };
+
+  const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
+    const updatedItems = [...items];
+    updatedItems[index] = { ...updatedItems[index], [field]: value };
+    setItems(updatedItems);
+  };
+
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async () => {
+    if (items.some(item => !item.itemName || item.quantity <= 0 || !item.unit)) {
+      setError('All items must have valid itemName, quantity, and unit');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to update invoice: ${text}`);
+      }
+      setSuccessMessage('Invoice updated successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      setError('Failed to update invoice: ' + err.message);
+    }
+  };
+
+  const handlePost = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/post`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to post invoice: ${text}`);
+      }
+      await refreshInventory();
+      setInvoice((prev) => prev ? { ...prev, status: 'Posted', postedDate: new Date().toISOString().split('T')[0] } : null);
+      setSuccessMessage('Invoice posted successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      setError('Failed to post invoice: ' + err.message);
+    }
+  };
+
+  const handleEmail = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/email`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to send email: ${text}`);
+      }
+      setSuccessMessage('Email sent successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      setError('Failed to send email: ' + err.message);
+    }
+  };
+
+  if (!invoice) return <div>Loading...</div>;
+
+  return (
+    <div className="page-container">
+      <h2>Invoice {invoice.invoiceId}</h2>
+      {error && <div className="error">{error}</div>}
+      {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
+      <div style={{ marginBottom: '20px' }}>
+        <p><strong>Customer:</strong> {invoice.customerName}</p>
+        <p><strong>Status:</strong> {invoice.status}</p>
+        <p><strong>Created Date:</strong> {invoice.createdDate}</p>
+        {invoice.postedDate && <p><strong>Posted Date:</strong> {invoice.postedDate}</p>}
+      </div>
+      <h3>Items</h3>
+      {invoice.status === 'Draft' ? (
+        <>
+          {items.map((item, index) => (
+            <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+              <select
+                value={item.itemName}
+                onChange={(e) => updateItem(index, 'itemName', e.target.value)}
+                style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              >
+                <option value="">Select Item</option>
+                {inventory.filter(i => i.type === 'Finished Goods' || i.type === 'Marketing').map((inv) => (
+                  <option key={inv.identifier} value={inv.identifier}>{inv.identifier}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={item.quantity || ''}
+                onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                placeholder="Quantity"
+                min="0"
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              />
+              <select
+                value={item.unit}
+                onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              >
+                <option value="Units">Units</option>
+                <option value="Kegs">Kegs</option>
+                <option value="Bottles">Bottles</option>
+                <option value="Cans">Cans</option>
+              </select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={item.hasKegDeposit}
+                  onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                />
+                Keg Deposit
+              </label>
+              <button
+                onClick={() => removeItem(index)}
+                style={{ backgroundColor: '#F86752', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addItem}
+            style={{ backgroundColor: '#2196F3', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Add Item
+          </button>
+        </>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginTop: '10px' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Item</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit</th>
+              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Keg Deposit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id}>
+                <td style={{ padding: '10px' }}>{item.itemName}</td>
+                <td style={{ padding: '10px' }}>{item.quantity}</td>
+                <td style={{ padding: '10px' }}>{item.unit}</td>
+                <td style={{ padding: '10px' }}>{item.hasKegDeposit ? 'Yes' : 'No'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+        {invoice.status === 'Draft' && (
+          <>
+            <button
+              onClick={handleSave}
+              style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Save Invoice
+            </button>
+            <button
+              onClick={handlePost}
+              style={{ backgroundColor: '#28A745', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Post Invoice
+            </button>
+          </>
+        )}
+        <button
+          onClick={handleEmail}
+          style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Email Invoice
+        </button>
+        <button
+          onClick={() => navigate('/invoices')}
+          style={{ backgroundColor: '#F86752', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default InvoiceComponent;
