@@ -180,13 +180,13 @@ useEffect(() => {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Completed', stage: 'Completed' }), // Add stage
+        body: JSON.stringify({ status: 'Completed', stage: 'Completed', equipmentId: null }),
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed' } : null);
+      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null } : null);
       setError(null);
       setSuccessMessage('Batch completed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -196,7 +196,8 @@ useEffect(() => {
       setError('Failed to complete batch: ' + errorMessage);
     }
   };
-
+  
+  // handleLossConfirmation (line ~400)
   const handleLossConfirmation = async (confirm: boolean) => {
     if (!showLossPrompt || !batch) return;
     if (!confirm) {
@@ -205,14 +206,14 @@ useEffect(() => {
         const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ status: 'Completed', stage: 'Completed' }), // Add stage
+          body: JSON.stringify({ status: 'Completed', stage: 'Completed', equipmentId: null }),
         });
         if (!res.ok) {
           const text = await res.text();
           console.error('handleLossConfirmation: Complete batch failed', { status: res.status, response: text });
           throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-        setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed' } : null);
+        setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null } : null);
         setSuccessMessage('Batch completed without recording loss');
         setTimeout(() => setSuccessMessage(null), 2000);
         setError(null);
@@ -264,14 +265,14 @@ useEffect(() => {
       const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Completed', stage: 'Completed' }), // Add stage
+        body: JSON.stringify({ status: 'Completed', stage: 'Completed', equipmentId: null }),
       });
       if (!completeRes.ok) {
         const text = await completeRes.text();
         console.error('handleLossConfirmation: Complete batch failed', { status: completeRes.status, response: text });
         throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', volume: 0 } : null);
+      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null, volume: 0 } : null);
       setShowLossPrompt(null);
       setSuccessMessage('Loss recorded and batch completed');
       setTimeout(() => setSuccessMessage(null), 2000);
