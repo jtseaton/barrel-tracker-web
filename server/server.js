@@ -619,6 +619,33 @@ app.get('/api/sales-orders', (req, res) => {
   });
 });
 
+// Add GET /api/sales-orders/:orderId
+app.get('/api/sales-orders/:orderId', (req, res) => {
+  const { orderId } = req.params;
+  db.get(`
+    SELECT so.*, c.name AS customerName
+    FROM sales_orders so
+    JOIN customers c ON so.customerId = c.customerId
+    WHERE so.orderId = ?
+  `, [orderId], (err, order) => {
+    if (err) {
+      console.error('GET /api/sales-orders/:orderId: Database error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!order) {
+      return res.status(404).json({ error: 'Sales order not found' });
+    }
+    db.all('SELECT * FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      order.items = items;
+      console.log('GET /api/sales-orders/:orderId: Returning', order);
+      res.json(order);
+    });
+  });
+});
+
 app.post('/api/sales-orders', (req, res) => {
   const { customerId, poNumber, items } = req.body;
   if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
