@@ -78,6 +78,28 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     fetchData();
   }, []);
 
+  const refreshProducts = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/products`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch products: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        console.error('Invalid products data: expected array, got', data);
+        throw new Error('Invalid products response: expected array');
+      }
+      console.log('Refreshed products:', data);
+      setProducts(data);
+    } catch (err: any) {
+      console.error('Refresh products error:', err);
+      setError('Failed to refresh products: ' + err.message);
+    }
+  };
+
   useEffect(() => {
     if (newBatch.siteId) {
       const fetchFermenters = async () => {
@@ -235,6 +257,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setError('Recipe name, product, valid quantity, unit, and ingredients with units are required');
       return;
     }
+    // Verify product exists in products state
+    const product = products.find(p => p.id === newRecipe.productId);
+    if (!product) {
+      console.error('Selected product not found:', newRecipe.productId);
+      setError('Selected product is invalid or not found. Please try refreshing or selecting another product.');
+      return;
+    }
     try {
       console.log('Submitting recipe:', newRecipe);
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
@@ -247,7 +276,15 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Add recipe error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        let errorMessage = `Add recipe error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`;
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          console.error('Failed to parse error response:', text);
+        }
+        console.error('Recipe creation error:', errorMessage);
+        throw new Error(errorMessage);
       }
       const contentType = res.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -367,7 +404,30 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       {error && <div className="error">{error}</div>}
       <div className="inventory-actions">
         <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
-        <button onClick={() => setShowAddRecipeModal(true)}>Add Recipe</button>
+        <div className="inventory-actions">
+  <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
+  <button
+    onClick={() => {
+      refreshProducts().then(() => setShowAddRecipeModal(true));
+    }}
+  >
+    Add Recipe
+  </button>
+  <button
+    onClick={handleOpenBatchActions}
+    disabled={selectedBatchIds.length === 0}
+    style={{
+      backgroundColor: selectedBatchIds.length > 0 ? '#2196F3' : '#ccc',
+      color: '#fff',
+      padding: '10px 20px',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: selectedBatchIds.length > 0 ? 'pointer' : 'not-allowed',
+    }}
+  >
+    Batch Actions
+  </button>
+</div>
         <button
           onClick={handleOpenBatchActions}
           disabled={selectedBatchIds.length === 0}
