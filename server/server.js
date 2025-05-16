@@ -2158,15 +2158,21 @@ app.delete('/api/batches/:batchId/ingredients', (req, res) => {
 app.patch('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
   const updates = req.body;
-  const allowedFields = ['batchId', 'status', 'volume', 'stage'];
+  const allowedFields = ['batchId', 'status', 'volume', 'stage', 'equipmentId'];
   const fields = Object.keys(updates).filter(field => allowedFields.includes(field));
   if (fields.length === 0) {
     return res.status(400).json({ error: 'No valid fields provided for update' });
   }
-  // Automatically set stage to Completed if status is Completed
-  if (updates.status === 'Completed' && !updates.stage) {
-    updates.stage = 'Completed';
-    fields.push('stage');
+  // Automatically set stage and equipmentId when status is Completed
+  if (updates.status === 'Completed') {
+    if (!updates.stage) {
+      updates.stage = 'Completed';
+      fields.push('stage');
+    }
+    if (!updates.equipmentId) {
+      updates.equipmentId = null;
+      fields.push('equipmentId');
+    }
   }
   const setClause = fields.map(field => `${field} = ?`).join(', ');
   const values = fields.map(field => updates[field]);
