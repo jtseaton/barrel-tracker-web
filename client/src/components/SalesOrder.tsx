@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Customer, InventoryItem, SalesOrder } from '../types/interfaces';
 import { MaterialType } from '../types/enums';
 
@@ -20,6 +20,7 @@ interface NewCustomer {
 
 const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ inventory }) => {
   const navigate = useNavigate();
+  const { orderId } = useParams<{ orderId: string }>();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesOrder, setSalesOrder] = useState<Partial<SalesOrder>>({
     customerId: 0,
@@ -49,7 +50,29 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
       }
     };
     fetchData();
-  }, []);
+
+    if (orderId) {
+      const fetchOrder = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/sales-orders/${orderId}`, {
+            headers: { Accept: 'application/json' },
+          });
+          console.log('fetchOrder: /api/sales-orders/:orderId response status', res.status);
+          if (!res.ok) {
+            throw new Error(`Failed to fetch sales order: HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          console.log('fetchOrder: /api/sales-orders/:orderId data', data);
+          setSalesOrder(data);
+          setItems(data.items || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false }]);
+        } catch (err: any) {
+          console.error('fetchOrder error:', err);
+          setError('Failed to load sales order: ' + err.message);
+        }
+      };
+      fetchOrder();
+    }
+  }, [orderId]);
 
   const addItem = () => {
     setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false }]);
@@ -81,10 +104,13 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         throw new Error(`Failed to save sales order: ${text}`);
       }
       const data = await res.json();
+      console.log('handleSave: Created sales order', data);
+      setSalesOrder(data);
+      setItems(data.items || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false }]);
       setSuccessMessage('Sales order created successfully');
       setTimeout(() => {
         setSuccessMessage(null);
-        navigate('/sales-orders');
+        navigate(`/sales-orders/${data.orderId}`);
       }, 2000);
       setError(null);
     } catch (err: any) {
@@ -143,7 +169,9 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
 
   return (
     <div className="page-container">
-      <h2 style={{ color: '#333', fontSize: '24px', marginBottom: '20px' }}>Create Sales Order</h2>
+      <h2 style={{ color: '#333', fontSize: '24px', marginBottom: '20px' }}>
+        {orderId ? `Sales Order ${orderId}` : 'Create Sales Order'}
+      </h2>
       {error && <div className="error">{error}</div>}
       {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px', maxWidth: '500px' }}>
@@ -156,6 +184,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
               value={salesOrder.customerId || ''}
               onChange={(e) => setSalesOrder({ ...salesOrder, customerId: parseInt(e.target.value) })}
               style={{ width: '100%', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              disabled={salesOrder.status === 'Approved'}
             >
               <option value="">Select Customer</option>
               {customers.map((customer) => (
@@ -172,6 +201,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                 borderRadius: '4px',
                 cursor: 'pointer',
               }}
+              disabled={salesOrder.status === 'Approved'}
             >
               Add Customer
             </button>
@@ -187,6 +217,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             onChange={(e) => setSalesOrder({ ...salesOrder, poNumber: e.target.value })}
             placeholder="Enter PO Number"
             style={{ width: '100%', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+            disabled={salesOrder.status === 'Approved'}
           />
         </div>
         <div>
@@ -199,6 +230,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                 value={item.itemName}
                 onChange={(e) => updateItem(index, 'itemName', e.target.value)}
                 style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved'}
               >
                 <option value="">Select Item</option>
                 {inventory.filter(i => i.type === MaterialType.FinishedGoods || i.type === MaterialType.Marketing).map((inv) => (
@@ -212,11 +244,13 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                 placeholder="Quantity"
                 min="0"
                 style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved'}
               />
               <select
                 value={item.unit}
                 onChange={(e) => updateItem(index, 'unit', e.target.value)}
                 style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved'}
               >
                 <option value="Units">Units</option>
                 <option value="Kegs">Kegs</option>
@@ -228,12 +262,14 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                   type="checkbox"
                   checked={item.hasKegDeposit}
                   onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                  disabled={salesOrder.status === 'Approved'}
                 />
                 Keg Deposit
               </label>
               <button
                 onClick={() => removeItem(index)}
                 style={{ backgroundColor: '#F86752', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                disabled={salesOrder.status === 'Approved'}
               >
                 Remove
               </button>
@@ -242,32 +278,36 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
           <button
             onClick={addItem}
             style={{ backgroundColor: '#2196F3', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            disabled={salesOrder.status === 'Approved'}
           >
             Add Item
           </button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-        <button
-          onClick={handleSave}
-          style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          Save Sales Order
-        </button>
-        <button
-          onClick={handleApprove}
-          disabled={!salesOrder.orderId}
-          style={{
-            backgroundColor: salesOrder.orderId ? '#28A745' : '#ccc',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: salesOrder.orderId ? 'pointer' : 'not-allowed',
-          }}
-        >
-          Approve Sales Order
-        </button>
+        {!orderId && (
+          <button
+            onClick={handleSave}
+            style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Save Sales Order
+          </button>
+        )}
+        {salesOrder.orderId && salesOrder.status !== 'Approved' && (
+          <button
+            onClick={handleApprove}
+            style={{
+              backgroundColor: '#28A745',
+              color: '#fff',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Approve Sales Order
+          </button>
+        )}
         <button
           onClick={() => navigate('/sales-orders')}
           style={{ backgroundColor: '#F86752', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
