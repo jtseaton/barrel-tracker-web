@@ -177,7 +177,103 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             </button>
           </div>
         </div>
-        {/* ... rest of the form ... */}
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            PO Number (optional):
+          </label>
+          <input
+            type="text"
+            value={salesOrder.poNumber || ''}
+            onChange={(e) => setSalesOrder({ ...salesOrder, poNumber: e.target.value })}
+            placeholder="Enter PO Number"
+            style={{ width: '100%', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+          />
+        </div>
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+            Items (required):
+          </label>
+          {items.map((item, index) => (
+            <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+              <select
+                value={item.itemName}
+                onChange={(e) => updateItem(index, 'itemName', e.target.value)}
+                style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              >
+                <option value="">Select Item</option>
+                {inventory.filter(i => i.type === MaterialType.FinishedGoods || i.type === MaterialType.Marketing).map((inv) => (
+                  <option key={inv.identifier} value={inv.identifier}>{inv.identifier}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={item.quantity || ''}
+                onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                placeholder="Quantity"
+                min="0"
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              />
+              <select
+                value={item.unit}
+                onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+              >
+                <option value="Units">Units</option>
+                <option value="Kegs">Kegs</option>
+                <option value="Bottles">Bottles</option>
+                <option value="Cans">Cans</option>
+              </select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={item.hasKegDeposit}
+                  onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                />
+                Keg Deposit
+              </label>
+              <button
+                onClick={() => removeItem(index)}
+                style={{ backgroundColor: '#F86752', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addItem}
+            style={{ backgroundColor: '#2196F3', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Add Item
+          </button>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+        <button
+          onClick={handleSave}
+          style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Save Sales Order
+        </button>
+        <button
+          onClick={handleApprove}
+          disabled={!salesOrder.orderId}
+          style={{
+            backgroundColor: salesOrder.orderId ? '#28A745' : '#ccc',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: salesOrder.orderId ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Approve Sales Order
+        </button>
+        <button
+          onClick={() => navigate('/sales-orders')}
+          style={{ backgroundColor: '#F86752', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
       </div>
       {showAddCustomerModal && (
         <div
