@@ -569,13 +569,37 @@ db.serialize(() => {
     });
 });
 
-// Customers
+app.post('/api/customers', (req, res) => {
+  const { name, email, address, enabled } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ error: 'Name and email are required' });
+  }
+  db.run(
+    'INSERT INTO customers (name, email, address, enabled) VALUES (?, ?, ?, ?)',
+    [name, email, address || null, enabled !== undefined ? enabled : 1],
+    function(err) {
+      if (err) {
+        console.error('POST /api/customers: Insert error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      db.get('SELECT * FROM customers WHERE customerId = ?', [this.lastID], (err, customer) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json(customer);
+      });
+    }
+  );
+});
+
+// Ensure GET /api/customers exists (from previous response, May 15, 2025)
 app.get('/api/customers', (req, res) => {
   db.all('SELECT * FROM customers WHERE enabled = 1', (err, rows) => {
     if (err) {
       console.error('GET /api/customers: Database error:', err);
       return res.status(500).json({ error: err.message });
     }
+    console.log('GET /api/customers: Returning', rows);
     res.json(rows);
   });
 });
