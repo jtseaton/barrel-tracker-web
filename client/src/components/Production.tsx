@@ -404,31 +404,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       {error && <div className="error">{error}</div>}
       <div className="inventory-actions">
         <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
-        <div className="inventory-actions">
-  <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
-  <button
-    onClick={() => {
-      refreshProducts().then(() => setShowAddRecipeModal(true));
-    }}
-  >
-    Add Recipe
-  </button>
-  <button
-    onClick={handleOpenBatchActions}
-    disabled={selectedBatchIds.length === 0}
-    style={{
-      backgroundColor: selectedBatchIds.length > 0 ? '#2196F3' : '#ccc',
-      color: '#fff',
-      padding: '10px 20px',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: selectedBatchIds.length > 0 ? 'pointer' : 'not-allowed',
-    }}
-  >
-    Batch Actions
-  </button>
-</div>
-        <button
+        <button onClick={() => { refreshProducts().then(() => setShowAddRecipeModal(true));}}>Add Recipe</button>
+          <button
           onClick={handleOpenBatchActions}
           disabled={selectedBatchIds.length === 0}
           style={{

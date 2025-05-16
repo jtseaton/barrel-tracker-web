@@ -62,7 +62,66 @@ const transporter = nodemailer.createTransport({
 db.serialize(() => {
   
   loadPackageTypesFromXML();
-
+  db.run(`
+    CREATE TABLE IF NOT EXISTS customers (
+      customerId INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      address TEXT,
+      enabled INTEGER DEFAULT 1
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sales_orders (
+      orderId INTEGER PRIMARY KEY AUTOINCREMENT,
+      customerId INTEGER NOT NULL,
+      poNumber TEXT,
+      status TEXT NOT NULL DEFAULT 'Draft', -- Draft, Approved, Cancelled
+      createdDate TEXT NOT NULL,
+      FOREIGN KEY (customerId) REFERENCES customers(customerId)
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sales_order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      orderId INTEGER NOT NULL,
+      itemName TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit TEXT NOT NULL,
+      hasKegDeposit INTEGER DEFAULT 0, -- 0: No, 1: Yes
+      FOREIGN KEY (orderId) REFERENCES sales_orders(orderId)
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      invoiceId INTEGER PRIMARY KEY AUTOINCREMENT,
+      orderId INTEGER NOT NULL,
+      customerId INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Draft', -- Draft, Posted, Cancelled
+      createdDate TEXT NOT NULL,
+      postedDate TEXT,
+      FOREIGN KEY (orderId) REFERENCES sales_orders(orderId),
+      FOREIGN KEY (customerId) REFERENCES customers(customerId)
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoiceId INTEGER NOT NULL,
+      itemName TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit TEXT NOT NULL,
+      hasKegDeposit INTEGER DEFAULT 0,
+      FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId)
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      settingId INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      value TEXT NOT NULL
+    )
+  `);
   db.run(`
     CREATE TABLE IF NOT EXISTS inventory (
       identifier TEXT,
@@ -508,6 +567,360 @@ db.serialize(() => {
         console.log('Added volume column to batches table');
       }
     });
+});
+
+// Customers
+app.get('/api/customers', (req, res) => {
+  db.all('SELECT * FROM customers WHERE enabled = 1', (err, rows) => {
+    if (err) {
+      console.error('GET /api/customers: Database error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Sales Orders
+app.get('/api/sales-orders', (req, res) => {
+  db.all(`
+    SELECT so.*, c.name AS customerName
+    FROM sales_orders so
+    JOIN customers c ON so.customerId = c.customerId
+    WHERE so.status != 'Cancelled'
+  `, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/sales-orders', (req, res) => {
+  const { customerId, poNumber, items } = req.body;
+  if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'customerId and items are required' });
+  }
+  db.get('SELECT customerId FROM customers WHERE customerId = ? AND enabled = 1', [customerId], (err, customer) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!customer) {
+      return res.status(400).json({ error: `Invalid customerId: ${customerId}` });
+    }
+    const createdDate = new Date().toISOString().split('T')[0];
+    db.run(
+      'INSERT INTO sales_orders (customerId, poNumber, status, createdDate) VALUES (?, ?, ?, ?)',
+      [customerId, poNumber || null, 'Draft', createdDate],
+      function(err) {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        const orderId = this.lastID;
+        const insertItem = (item, callback) => {
+          const { itemName, quantity, unit, hasKegDeposit } = item;
+          if (!itemName || quantity <= 0 || !unit) {
+            return callback(new Error('Invalid item: itemName, quantity, and unit are required'));
+          }
+          db.run(
+            'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, hasKegDeposit) VALUES (?, ?, ?, ?, ?)',
+            [orderId, itemName, quantity, unit, hasKegDeposit ? 1 : 0],
+            callback
+          );
+        };
+        let remaining = items.length;
+        items.forEach(item => {
+          insertItem(item, err => {
+            if (err) {
+              db.run('DELETE FROM sales_orders WHERE orderId = ?', [orderId]);
+              return res.status(400).json({ error: err.message });
+            }
+            if (--remaining === 0) {
+              db.get(`
+                SELECT so.*, c.name AS customerName
+                FROM sales_orders so
+                JOIN customers c ON so.customerId = c.customerId
+                WHERE so.orderId = ?
+              `, [orderId], (err, order) => {
+                if (err) {
+                  return res.status(500).json({ error: err.message });
+                }
+                res.json(order);
+              });
+            }
+          });
+        });
+      }
+    );
+  });
+});
+
+app.patch('/api/sales-orders/:orderId', (req, res) => {
+  const { orderId } = req.params;
+  const { status } = req.body;
+  if (!status) {
+    return res.status(400).json({ error: 'Status is required' });
+  }
+  if (status === 'Approved') {
+    db.get('SELECT * FROM sales_orders WHERE orderId = ? AND status = ?', [orderId, 'Draft'], (err, order) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (!order) {
+        return res.status(404).json({ error: 'Sales order not found or not in Draft status' });
+      }
+      db.run('UPDATE sales_orders SET status = ? WHERE orderId = ?', [status, orderId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        // Create invoice
+        const createdDate = new Date().toISOString().split('T')[0];
+        db.run(
+          'INSERT INTO invoices (orderId, customerId, status, createdDate) VALUES (?, ?, ?, ?)',
+          [orderId, order.customerId, 'Draft', createdDate],
+          function(err) {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            const invoiceId = this.lastID;
+            db.all('SELECT * FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+              if (err) {
+                return res.status(500).json({ error: err.message });
+              }
+              let remaining = items.length;
+              items.forEach(item => {
+                db.run(
+                  'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, hasKegDeposit) VALUES (?, ?, ?, ?, ?)',
+                  [invoiceId, item.itemName, item.quantity, item.unit, item.hasKegDeposit],
+                  err => {
+                    if (err) {
+                      return res.status(500).json({ error: err.message });
+                    }
+                    if (--remaining === 0) {
+                      res.json({ message: 'Sales order approved, invoice created', invoiceId });
+                    }
+                  }
+                );
+              });
+            });
+          }
+        );
+      });
+    });
+  } else {
+    db.run('UPDATE sales_orders SET status = ? WHERE orderId = ?', [status, orderId], function(err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ message: 'Sales order updated' });
+    });
+  }
+});
+
+// Invoices
+app.get('/api/invoices', (req, res) => {
+  db.all(`
+    SELECT i.*, c.name AS customerName
+    FROM invoices i
+    JOIN customers c ON i.customerId = c.customerId
+    WHERE i.status != 'Cancelled'
+  `, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+app.get('/api/invoices/:invoiceId', (req, res) => {
+  const { invoiceId } = req.params;
+  db.get(`
+    SELECT i.*, c.name AS customerName, c.email AS customerEmail
+    FROM invoices i
+    JOIN customers c ON i.customerId = c.customerId
+    WHERE i.invoiceId = ?
+  `, [invoiceId], (err, invoice) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    db.all('SELECT * FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ ...invoice, items });
+    });
+  });
+});
+
+app.patch('/api/invoices/:invoiceId', (req, res) => {
+  const { invoiceId } = req.params;
+  const { items } = req.body;
+  if (!items || !Array.isArray(items)) {
+    return res.status(400).json({ error: 'Items are required' });
+  }
+  db.get('SELECT * FROM invoices WHERE invoiceId = ? AND status = ?', [invoiceId, 'Draft'], (err, invoice) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
+    }
+    db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], err => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      let remaining = items.length;
+      items.forEach(item => {
+        const { itemName, quantity, unit, hasKegDeposit } = item;
+        if (!itemName || quantity <= 0 || !unit) {
+          return res.status(400).json({ error: 'Invalid item: itemName, quantity, and unit are required' });
+        }
+        db.run(
+          'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, hasKegDeposit) VALUES (?, ?, ?, ?, ?)',
+          [invoiceId, itemName, quantity, unit, hasKegDeposit ? 1 : 0],
+          err => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            if (--remaining === 0) {
+              res.json({ message: 'Invoice updated' });
+            }
+          }
+        );
+      });
+    });
+  });
+});
+
+app.post('/api/invoices/:invoiceId/post', (req, res) => {
+  const { invoiceId } = req.params;
+  db.get('SELECT * FROM invoices WHERE invoiceId = ? AND status = ?', [invoiceId, 'Draft'], (err, invoice) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
+    }
+    db.all('SELECT * FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION', err => {
+          if (err) {
+            return res.status(500).json({ error: 'Failed to start transaction' });
+          }
+          let remaining = items.length;
+          items.forEach(item => {
+            db.get(
+              'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
+              [item.itemName, 'Finished Goods', 'Marketing'],
+              (err, row) => {
+                if (err) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: err.message });
+                }
+                if (!row || row.quantity < item.quantity) {
+                  db.run('ROLLBACK');
+                  return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
+                }
+                db.run(
+                  'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND type IN (?, ?)',
+                  [item.quantity, item.itemName, 'Finished Goods', 'Marketing'],
+                  err => {
+                    if (err) {
+                      db.run('ROLLBACK');
+                      return res.status(500).json({ error: err.message });
+                    }
+                    if (--remaining === 0) {
+                      const postedDate = new Date().toISOString().split('T')[0];
+                      db.run(
+                        'UPDATE invoices SET status = ?, postedDate = ? WHERE invoiceId = ?',
+                        ['Posted', postedDate, invoiceId],
+                        err => {
+                          if (err) {
+                            db.run('ROLLBACK');
+                            return res.status(500).json({ error: err.message });
+                          }
+                          db.run('COMMIT', err => {
+                            if (err) {
+                              return res.status(500).json({ error: 'Failed to commit transaction' });
+                            }
+                            res.json({ message: 'Invoice posted, inventory updated' });
+                          });
+                        }
+                      );
+                    }
+                  }
+                );
+              }
+            );
+          });
+        });
+      });
+    });
+  });
+});
+
+app.post('/api/invoices/:invoiceId/email', (req, res) => {
+  const { invoiceId } = req.params;
+  db.get(`
+    SELECT i.*, c.name AS customerName, c.email AS customerEmail
+    FROM invoices i
+    JOIN customers c ON i.customerId = c.customerId
+    WHERE i.invoiceId = ?
+  `, [invoiceId], (err, invoice) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    db.all('SELECT * FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      db.get('SELECT value FROM system_settings WHERE key = ?', ['invoice_email_body'], (err, setting) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        const emailBody = setting ? setting.value : 'Please find your new invoice from Dothan Brewpub.';
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+        const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: invoice.customerEmail,
+          subject: `Invoice ${invoiceId} from Dothan Brewpub`,
+          text: `${emailBody}\n\nInvoice ID: ${invoiceId}\nCustomer: ${invoice.customerName}\nItems:\n${items.map(item => `- ${item.quantity} ${item.unit} ${item.itemName} ${item.hasKegDeposit ? '(Keg Deposit)' : ''}`).join('\n')}`,
+        };
+        transporter.sendMail(mailOptions, (err, info) => {
+          if (err) {
+            console.error('Email send error:', err);
+            return res.status(500).json({ error: 'Failed to send email' });
+          }
+          res.json({ message: 'Email sent successfully', info });
+        });
+      });
+    });
+  });
+});
+
+// System Settings
+app.get('/api/system-settings', (req, res) => {
+  db.all('SELECT key, value FROM system_settings', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    const settings = rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+    res.json(settings);
+  });
 });
 
 // GET /api/users
