@@ -51,6 +51,7 @@ const CustomerDetails: React.FC = () => {
     try {
       const method = customerId && customerId !== 'new' ? 'PATCH' : 'POST';
       const url = customerId && customerId !== 'new' ? `${API_BASE_URL}/api/customers/${customerId}` : `${API_BASE_URL}/api/customers`;
+      console.log('Saving customer:', { method, url, payload: customer });
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -61,6 +62,7 @@ const CustomerDetails: React.FC = () => {
         throw new Error(`Failed to save customer: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
+      console.log('Saved customer response:', data);
       setSuccessMessage(customerId ? 'Customer updated successfully' : 'Customer created successfully');
       setTimeout(() => {
         setSuccessMessage(null);
@@ -69,6 +71,7 @@ const CustomerDetails: React.FC = () => {
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Save customer error:', err);
       setError('Failed to save customer: ' + errorMessage);
     }
   };
