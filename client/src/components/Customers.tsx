@@ -16,15 +16,26 @@ const Customers: React.FC = () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/customers`, {
           headers: { Accept: 'application/json' },
+          credentials: 'include', // Include cookies for authentication
         });
+        console.log('Fetch /api/customers: Status:', res.status, 'OK:', res.ok);
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Failed to fetch customers: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          console.error('Fetch /api/customers: Error Response:', text);
+          throw new Error(`Failed to fetch customers: HTTP ${res.status}, Response: ${text.slice(0, 100)}`);
+        }
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error('Fetch /api/customers: Invalid content-type:', contentType, 'Response:', text);
+          throw new Error(`Invalid response: Expected JSON, got ${contentType || 'none'}`);
         }
         const data = await res.json();
+        console.log('Fetch /api/customers: Success, Data:', data);
         setCustomers(data);
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Fetch customers error:', err);
         setError('Failed to load customers: ' + errorMessage);
       }
     };

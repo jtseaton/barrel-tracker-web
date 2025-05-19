@@ -598,6 +598,18 @@ app.post('/api/customers', (req, res) => {
   );
 });
 
+app.get('/api/customers', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  db.all('SELECT * FROM customers WHERE enabled = 1', (err, rows) => {
+    if (err) {
+      console.error('GET /api/customers: Database error:', err);
+      return res.status(500).json({ error: 'Failed to fetch customers: ' + err.message });
+    }
+    console.log('GET /api/customers: Returning', rows);
+    res.json(rows);
+  });
+});
+
 // GET /api/customers/:id
 app.get('/api/customers/:id', (req, res) => {
   const { id } = req.params;
