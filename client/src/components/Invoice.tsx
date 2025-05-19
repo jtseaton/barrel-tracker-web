@@ -1,18 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Customer, InventoryItem, Invoice } from '../types/interfaces';
+import { InventoryItem, Invoice, InvoiceItem } from '../types/interfaces';
+import { MaterialType } from '../types/enums';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
-interface InvoiceItem {
-  id?: number;
-  itemName: string;
-  quantity: number;
-  unit: string;
-  hasKegDeposit: boolean;
-}
-
-const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory: () => Promise<void> }> = ({ inventory, refreshInventory }) => {
+const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory: () => Promise<void> }> = ({
+  inventory,
+  refreshInventory,
+}) => {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const navigate = useNavigate();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -31,7 +27,12 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
         }
         const data = await res.json();
         setInvoice(data);
-        setItems(data.items);
+        setItems(
+          data.items.map((item: InvoiceItem) => ({
+            ...item,
+            price: item.price || '0.00',
+          }))
+        );
       } catch (err: any) {
         setError('Failed to load invoice: ' + err.message);
       }
@@ -40,12 +41,19 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
   }, [invoiceId]);
 
   const addItem = () => {
-    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false }]);
+    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
   };
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
     const updatedItems = [...items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
+    if (field === 'itemName') {
+      const selectedItem = inventory.find((inv) => inv.identifier === value);
+      if (selectedItem) {
+        updatedItems[index].price = selectedItem.price || '0.00';
+        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem || false;
+      }
+    }
     setItems(updatedItems);
   };
 
@@ -54,8 +62,18 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
   };
 
   const handleSave = async () => {
-    if (items.some(item => !item.itemName || item.quantity <= 0 || !item.unit)) {
-      setError('All items must have valid itemName, quantity, and unit');
+    if (
+      items.some(
+        (item) =>
+          !item.itemName ||
+          item.quantity <= 0 ||
+          !item.unit ||
+          !item.price ||
+          isNaN(parseFloat(item.price)) ||
+          parseFloat(item.price) < 0
+      )
+    ) {
+      setError('All items must have valid itemName, quantity, unit, and price');
       return;
     }
     try {
@@ -87,7 +105,9 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
         throw new Error(`Failed to post invoice: ${text}`);
       }
       await refreshInventory();
-      setInvoice((prev) => prev ? { ...prev, status: 'Posted', postedDate: new Date().toISOString().split('T')[0] } : null);
+      setInvoice((prev) =>
+        prev ? { ...prev, status: 'Posted', postedDate: new Date().toISOString().split('T')[0] } : null
+      );
       setSuccessMessage('Invoice posted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
@@ -118,79 +138,185 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
 
   return (
     <div className="page-container">
-      <h2>Invoice {invoice.invoiceId}</h2>
+      <h2 style={{ color: '#EEC930' }}>Invoice {invoice.invoiceId}</h2>
       {error && <div className="error">{error}</div>}
-      {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
+      {successMessage && (
+        <div
+          style={{
+            color: '#28A745',
+            backgroundColor: '#e6ffe6',
+            padding: '10px',
+            borderRadius: '4px',
+            marginBottom: '10px',
+            textAlign: 'center',
+          }}
+        >
+          {successMessage}
+        </div>
+      )}
       <div style={{ marginBottom: '20px' }}>
-        <p><strong>Customer:</strong> {invoice.customerName}</p>
-        <p><strong>Status:</strong> {invoice.status}</p>
-        <p><strong>Created Date:</strong> {invoice.createdDate}</p>
-        {invoice.postedDate && <p><strong>Posted Date:</strong> {invoice.postedDate}</p>}
+        <p>
+          <strong>Customer:</strong> {invoice.customerName}
+        </p>
+        <p>
+          <strong>Status:</strong> {invoice.status}
+        </p>
+        <p>
+          <strong>Created Date:</strong> {invoice.createdDate}
+        </p>
+        {invoice.postedDate && (
+          <p>
+            <strong>Posted Date:</strong> {invoice.postedDate}
+          </p>
+        )}
       </div>
-      <h3>Items</h3>
+      <h3 style={{ color: '#EEC930' }}>Items</h3>
       {invoice.status === 'Draft' ? (
         <>
-          {items.map((item, index) => (
-            <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-              <select
-                value={item.itemName}
-                onChange={(e) => updateItem(index, 'itemName', e.target.value)}
-                style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-              >
-                <option value="">Select Item</option>
-                {inventory.filter(i => i.type === 'Finished Goods' || i.type === 'Marketing').map((inv) => (
-                  <option key={inv.identifier} value={inv.identifier}>{inv.identifier}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={item.quantity || ''}
-                onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                placeholder="Quantity"
-                min="0"
-                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-              />
-              <select
-                value={item.unit}
-                onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-              >
-                <option value="Units">Units</option>
-                <option value="Kegs">Kegs</option>
-                <option value="Bottles">Bottles</option>
-                <option value="Cans">Cans</option>
-              </select>
-              <label>
+          {items.map((item, index) => {
+            const selectedItem = inventory.find((inv) => inv.identifier === item.itemName);
+            return (
+              <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                <select
+                  value={item.itemName}
+                  onChange={(e) => updateItem(index, 'itemName', e.target.value)}
+                  style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                >
+                  <option value="">Select Item</option>
+                  {inventory
+                    .filter((i) => i.type === MaterialType.FinishedGoods || i.type === MaterialType.Marketing)
+                    .map((inv) => (
+                      <option key={inv.identifier} value={inv.identifier}>
+                        {inv.identifier}
+                      </option>
+                    ))}
+                </select>
                 <input
-                  type="checkbox"
-                  checked={item.hasKegDeposit}
-                  onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                  type="number"
+                  value={item.quantity || ''}
+                  onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                  placeholder="Quantity"
+                  min="0"
+                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
                 />
-                Keg Deposit
-              </label>
-              <button
-                onClick={() => removeItem(index)}
-                style={{ backgroundColor: '#F86752', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
+                <select
+                  value={item.unit}
+                  onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                >
+                  <option value="Units">Units</option>
+                  <option value="Kegs">Kegs</option>
+                  <option value="Bottles">Bottles</option>
+                  <option value="Cans">Cans</option>
+                </select>
+                <input
+                  type="text"
+                  value={item.price}
+                  onChange={(e) => updateItem(index, 'price', e.target.value)}
+                  placeholder="Price"
+                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                />
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={item.hasKegDeposit}
+                    onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                    disabled={selectedItem && selectedItem.isKegDepositItem}
+                  />
+                  Keg Deposit
+                </label>
+                <button
+                  onClick={() => removeItem(index)}
+                  style={{
+                    backgroundColor: '#F86752',
+                    color: '#fff',
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            );
+          })}
           <button
             onClick={addItem}
-            style={{ backgroundColor: '#2196F3', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            style={{
+              backgroundColor: '#2196F3',
+              color: '#fff',
+              padding: '8px 12px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
           >
             Add Item
           </button>
         </>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginTop: '10px' }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            marginTop: '10px',
+          }}
+        >
           <thead>
             <tr>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Item</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Keg Deposit</th>
+              <th
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f5f5f5',
+                  borderBottom: '1px solid #ddd',
+                  color: '#555',
+                }}
+              >
+                Item
+              </th>
+              <th
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f5f5f5',
+                  borderBottom: '1px solid #ddd',
+                  color: '#555',
+                }}
+              >
+                Quantity
+              </th>
+              <th
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f5f5f5',
+                  borderBottom: '1px solid #ddd',
+                  color: '#555',
+                }}
+              >
+                Unit
+              </th>
+              <th
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f5f5f5',
+                  borderBottom: '1px solid #ddd',
+                  color: '#555',
+                }}
+              >
+                Price
+              </th>
+              <th
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f5f5f5',
+                  borderBottom: '1px solid #ddd',
+                  color: '#555',
+                }}
+              >
+                Keg Deposit
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -199,6 +325,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
                 <td style={{ padding: '10px' }}>{item.itemName}</td>
                 <td style={{ padding: '10px' }}>{item.quantity}</td>
                 <td style={{ padding: '10px' }}>{item.unit}</td>
+                <td style={{ padding: '10px' }}>${parseFloat(item.price).toFixed(2)}</td>
                 <td style={{ padding: '10px' }}>{item.hasKegDeposit ? 'Yes' : 'No'}</td>
               </tr>
             ))}
@@ -210,13 +337,27 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
           <>
             <button
               onClick={handleSave}
-              style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{
+                backgroundColor: '#2196F3',
+                color: '#fff',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
             >
               Save Invoice
             </button>
             <button
               onClick={handlePost}
-              style={{ backgroundColor: '#28A745', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{
+                backgroundColor: '#28A745',
+                color: '#fff',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
             >
               Post Invoice
             </button>
@@ -224,13 +365,27 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
         )}
         <button
           onClick={handleEmail}
-          style={{ backgroundColor: '#2196F3', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
         >
           Email Invoice
         </button>
         <button
           onClick={() => navigate('/invoices')}
-          style={{ backgroundColor: '#F86752', color: '#fff', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
         >
           Cancel
         </button>
