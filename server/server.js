@@ -68,7 +68,13 @@ db.serialize(() => {
       name TEXT NOT NULL,
       email TEXT NOT NULL,
       address TEXT,
-      enabled INTEGER DEFAULT 1
+      phone TEXT,
+      contactPerson TEXT,
+      licenseNumber TEXT,
+      notes TEXT,
+      enabled INTEGER DEFAULT 1,
+      createdDate TEXT,
+      updatedDate TEXT
     )
   `);
   db.run(`
@@ -592,15 +598,81 @@ app.post('/api/customers', (req, res) => {
   );
 });
 
-// Ensure GET /api/customers exists (from previous response, May 15, 2025)
-app.get('/api/customers', (req, res) => {
-  db.all('SELECT * FROM customers WHERE enabled = 1', (err, rows) => {
+// GET /api/customers/:id
+app.get('/api/customers/:id', (req, res) => {
+  const { id } = req.params;
+  db.get('SELECT * FROM customers WHERE customerId = ?', [id], (err, row) => {
     if (err) {
-      console.error('GET /api/customers: Database error:', err);
+      console.error('GET /api/customers/:id: Database error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('GET /api/customers: Returning', rows);
-    res.json(rows);
+    if (!row) {
+      console.log(`GET /api/customers/${id}: Customer not found`);
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    console.log('GET /api/customers/:id: Returning', row);
+    res.json(row);
+  });
+});
+
+// PATCH /api/customers/:id
+app.patch('/api/customers/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, email, address, phone, contactPerson, licenseNumber, notes, enabled } = req.body;
+  if (!name || !email) {
+    console.error('PATCH /api/customers/:id: Missing required fields', { name, email });
+    return res.status(400).json({ error: 'Name and email are required' });
+  }
+  db.run(
+    `UPDATE customers SET name = ?, email = ?, address = ?, phone = ?, contactPerson = ?, 
+     licenseNumber = ?, notes = ?, enabled = ?, updatedDate = ? WHERE customerId = ?`,
+    [
+      name,
+      email,
+      address || null,
+      phone || null,
+      contactPerson || null,
+      licenseNumber || null,
+      notes || null,
+      enabled !== undefined ? enabled : 1,
+      new Date().toISOString().split('T')[0],
+      id,
+    ],
+    function (err) {
+      if (err) {
+        console.error('PATCH /api/customers/:id: Update error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        console.log(`PATCH /api/customers/${id}: Customer not found`);
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      db.get('SELECT * FROM customers WHERE customerId = ?', [id], (err, row) => {
+        if (err) {
+          console.error('PATCH /api/customers/:id: Fetch updated customer error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('PATCH /api/customers/:id: Updated', row);
+        res.json(row);
+      });
+    }
+  );
+});
+
+// DELETE /api/customers/:id
+app.delete('/api/customers/:id', (req, res) => {
+  const { id } = req.params;
+  db.run('DELETE FROM customers WHERE customerId = ?', [id], function (err) {
+    if (err) {
+      console.error('DELETE /api/customers/:id: Delete error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      console.log(`DELETE /api/customers/${id}: Customer not found`);
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    console.log(`DELETE /api/customers/${id}: Customer deleted`);
+    res.status(204).send();
   });
 });
 
