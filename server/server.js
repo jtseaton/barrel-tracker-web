@@ -576,22 +576,38 @@ db.serialize(() => {
 });
 
 app.post('/api/customers', (req, res) => {
-  const { name, email, address, enabled } = req.body;
+  const { name, email, address, phone, contactPerson, licenseNumber, notes, enabled } = req.body;
   if (!name || !email) {
+    console.error('POST /api/customers: Missing required fields', { name, email });
     return res.status(400).json({ error: 'Name and email are required' });
   }
+  const createdDate = new Date().toISOString().split('T')[0];
   db.run(
-    'INSERT INTO customers (name, email, address, enabled) VALUES (?, ?, ?, ?)',
-    [name, email, address || null, enabled !== undefined ? enabled : 1],
-    function(err) {
+    `INSERT INTO customers (name, email, address, phone, contactPerson, licenseNumber, notes, enabled, createdDate, updatedDate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      name,
+      email,
+      address || null,
+      phone || null,
+      contactPerson || null,
+      licenseNumber || null,
+      notes || null,
+      enabled !== undefined ? enabled : 1,
+      createdDate,
+      createdDate,
+    ],
+    function (err) {
       if (err) {
         console.error('POST /api/customers: Insert error:', err);
         return res.status(500).json({ error: err.message });
       }
       db.get('SELECT * FROM customers WHERE customerId = ?', [this.lastID], (err, customer) => {
         if (err) {
+          console.error('POST /api/customers: Fetch new customer error:', err);
           return res.status(500).json({ error: err.message });
         }
+        console.log('POST /api/customers: Created', customer);
         res.json(customer);
       });
     }
@@ -610,7 +626,6 @@ app.get('/api/customers', (req, res) => {
   });
 });
 
-// GET /api/customers/:id
 app.get('/api/customers/:id', (req, res) => {
   const { id } = req.params;
   db.get('SELECT * FROM customers WHERE customerId = ?', [id], (err, row) => {
@@ -627,7 +642,6 @@ app.get('/api/customers/:id', (req, res) => {
   });
 });
 
-// PATCH /api/customers/:id
 app.patch('/api/customers/:id', (req, res) => {
   const { id } = req.params;
   const { name, email, address, phone, contactPerson, licenseNumber, notes, enabled } = req.body;
@@ -635,6 +649,7 @@ app.patch('/api/customers/:id', (req, res) => {
     console.error('PATCH /api/customers/:id: Missing required fields', { name, email });
     return res.status(400).json({ error: 'Name and email are required' });
   }
+  const updatedDate = new Date().toISOString().split('T')[0];
   db.run(
     `UPDATE customers SET name = ?, email = ?, address = ?, phone = ?, contactPerson = ?, 
      licenseNumber = ?, notes = ?, enabled = ?, updatedDate = ? WHERE customerId = ?`,
@@ -647,7 +662,7 @@ app.patch('/api/customers/:id', (req, res) => {
       licenseNumber || null,
       notes || null,
       enabled !== undefined ? enabled : 1,
-      new Date().toISOString().split('T')[0],
+      updatedDate,
       id,
     ],
     function (err) {
