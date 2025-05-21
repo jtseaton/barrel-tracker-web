@@ -109,6 +109,7 @@ db.serialize(() => {
       FOREIGN KEY (orderId) REFERENCES sales_orders(orderId)
     )
   `);
+
   db.run(`
     CREATE TABLE IF NOT EXISTS invoices (
       invoiceId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +133,27 @@ db.serialize(() => {
       FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId)
     )
   `);
+  db.run(`ALTER TABLE sales_order_items ADD COLUMN price TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding price column to sales_order_items:', err);
+    } else {
+      console.log('Added price column to sales_order_items table');
+    }
+  });
+  db.run(`ALTER TABLE invoice_items ADD COLUMN price TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding price column to invoice_items:', err);
+    } else {
+      console.log('Added price column to invoice_items table');
+    }
+  });
+  db.run(`ALTER TABLE invoices ADD COLUMN total TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding total column to invoices:', err);
+    } else {
+      console.log('Added total column to invoices table');
+    }
+  });
   db.run(`
     CREATE TABLE IF NOT EXISTS system_settings (
       settingId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -743,87 +765,152 @@ app.get('/api/sales-orders', (req, res) => {
   });
 });
 
-// Add GET /api/sales-orders/:orderId
 app.get('/api/sales-orders/:orderId', (req, res) => {
   const { orderId } = req.params;
-  db.get(`
-    SELECT so.*, c.name AS customerName
-    FROM sales_orders so
-    JOIN customers c ON so.customerId = c.customerId
-    WHERE so.orderId = ?
-  `, [orderId], (err, order) => {
-    if (err) {
-      console.error('GET /api/sales-orders/:orderId: Database error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!order) {
-      return res.status(404).json({ error: 'Sales order not found' });
-    }
-    db.all('SELECT * FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+  console.log('GET /api/sales-orders/:orderId: Received request', { orderId });
+  db.get(
+    `SELECT so.*, c.name AS customerName
+     FROM sales_orders so
+     JOIN customers c ON so.customerId = c.customerId
+     WHERE so.orderId = ?`,
+    [orderId],
+    (err, order) => {
       if (err) {
+        console.error('GET /api/sales-orders/:orderId: Database error:', err);
         return res.status(500).json({ error: err.message });
       }
-      order.items = items;
-      console.log('GET /api/sales-orders/:orderId: Returning', order);
-      res.json(order);
-    });
-  });
+      if (!order) {
+        console.error('GET /api/sales-orders/:orderId: Order not found', { orderId });
+        return res.status(404).json({ error: 'Sales order not found' });
+      }
+      db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+        if (err) {
+          console.error('GET /api/sales-orders/:orderId: Fetch items error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+          if (err) {
+            console.error('GET /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          order.items = items;
+          order.keg_deposit_price = setting ? setting.value : '0.00';
+          console.log('GET /api/sales-orders/:orderId: Success', order);
+          res.json(order);
+        });
+      });
+    }
+  );
 });
 
 app.post('/api/sales-orders', (req, res) => {
   const { customerId, poNumber, items } = req.body;
+  console.log('POST /api/sales-orders: Received request', { customerId, poNumber, items });
   if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
+    console.error('POST /api/sales-orders: Missing required fields', { customerId, items });
     return res.status(400).json({ error: 'customerId and items are required' });
   }
+
   db.get('SELECT customerId FROM customers WHERE customerId = ? AND enabled = 1', [customerId], (err, customer) => {
     if (err) {
+      console.error('POST /api/sales-orders: Fetch customer error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!customer) {
+      console.error('POST /api/sales-orders: Invalid customerId', { customerId });
       return res.status(400).json({ error: `Invalid customerId: ${customerId}` });
     }
+
     const createdDate = new Date().toISOString().split('T')[0];
     db.run(
       'INSERT INTO sales_orders (customerId, poNumber, status, createdDate) VALUES (?, ?, ?, ?)',
       [customerId, poNumber || null, 'Draft', createdDate],
-      function(err) {
+      function (err) {
         if (err) {
+          console.error('POST /api/sales-orders: Insert sales order error:', err);
           return res.status(500).json({ error: err.message });
         }
         const orderId = this.lastID;
-        const insertItem = (item, callback) => {
+
+        let remaining = items.length;
+        const errors = [];
+        items.forEach((item, index) => {
           const { itemName, quantity, unit, hasKegDeposit } = item;
           if (!itemName || quantity <= 0 || !unit) {
-            return callback(new Error('Invalid item: itemName, quantity, and unit are required'));
+            errors.push(`Invalid item at index ${index}: itemName, quantity, and unit are required`);
+            remaining--;
+            if (remaining === 0) finish();
+            return;
           }
-          db.run(
-            'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, hasKegDeposit) VALUES (?, ?, ?, ?, ?)',
-            [orderId, itemName, quantity, unit, hasKegDeposit ? 1 : 0],
-            callback
-          );
-        };
-        let remaining = items.length;
-        items.forEach(item => {
-          insertItem(item, err => {
-            if (err) {
-              db.run('DELETE FROM sales_orders WHERE orderId = ?', [orderId]);
-              return res.status(400).json({ error: err.message });
+
+          db.get(
+            `SELECT ppt.price, ppt.isKegDepositItem 
+             FROM product_package_types ppt 
+             JOIN products p ON ppt.productId = p.id 
+             WHERE p.name = ? AND ppt.type = ?`,
+            [itemName.split(' ').slice(0, -2).join(' '), itemName.split(' ').slice(-2).join(' ')],
+            (err, priceRow) => {
+              if (err) {
+                console.error('POST /api/sales-orders: Fetch price error:', err);
+                errors.push(`Failed to fetch price for ${itemName}: ${err.message}`);
+                remaining--;
+                if (remaining === 0) finish();
+                return;
+              }
+              if (!priceRow) {
+                console.error('POST /api/sales-orders: Price not found', { itemName });
+                errors.push(`Price not found for ${itemName}. Ensure it is defined in product package types.`);
+                remaining--;
+                if (remaining === 0) finish();
+                return;
+              }
+
+              db.run(
+                'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                [orderId, itemName, quantity, unit, priceRow.price, hasKegDeposit ? 1 : 0],
+                (err) => {
+                  if (err) {
+                    console.error('POST /api/sales-orders: Insert item error:', err);
+                    errors.push(`Failed to insert item ${itemName}: ${err.message}`);
+                  }
+                  remaining--;
+                  if (remaining === 0) finish();
+                }
+              );
             }
-            if (--remaining === 0) {
-              db.get(`
-                SELECT so.*, c.name AS customerName
-                FROM sales_orders so
-                JOIN customers c ON so.customerId = c.customerId
-                WHERE so.orderId = ?
-              `, [orderId], (err, order) => {
+          );
+        });
+
+        function finish() {
+          if (errors.length > 0) {
+            db.run('DELETE FROM sales_orders WHERE orderId = ?', [orderId]);
+            console.error('POST /api/sales-orders: Errors occurred', errors);
+            return res.status(400).json({ error: errors.join('; ') });
+          }
+
+          db.get(
+            `SELECT so.*, c.name AS customerName
+             FROM sales_orders so
+             JOIN customers c ON so.customerId = c.customerId
+             WHERE so.orderId = ?`,
+            [orderId],
+            (err, order) => {
+              if (err) {
+                console.error('POST /api/sales-orders: Fetch order error:', err);
+                return res.status(500).json({ error: err.message });
+              }
+              db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
                 if (err) {
+                  console.error('POST /api/sales-orders: Fetch items error:', err);
                   return res.status(500).json({ error: err.message });
                 }
+                order.items = items;
+                console.log('POST /api/sales-orders: Success', order);
                 res.json(order);
               });
             }
-          });
-        });
+          );
+        }
       }
     );
   });
@@ -908,59 +995,94 @@ app.get('/api/invoices', (req, res) => {
 
 app.get('/api/invoices/:invoiceId', (req, res) => {
   const { invoiceId } = req.params;
-  db.get(`
-    SELECT i.*, c.name AS customerName, c.email AS customerEmail
-    FROM invoices i
-    JOIN customers c ON i.customerId = c.customerId
-    WHERE i.invoiceId = ?
-  `, [invoiceId], (err, invoice) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!invoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
-    }
-    db.all('SELECT * FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+  console.log('GET /api/invoices/:invoiceId: Received request', { invoiceId });
+  db.get(
+    `SELECT i.*, c.name AS customerName, c.email AS customerEmail
+     FROM invoices i
+     JOIN customers c ON i.customerId = c.customerId
+     WHERE i.invoiceId = ?`,
+    [invoiceId],
+    (err, invoice) => {
       if (err) {
+        console.error('GET /api/invoices/:invoiceId: Fetch invoice error:', err);
         return res.status(500).json({ error: err.message });
       }
-      res.json({ ...invoice, items });
-    });
-  });
+      if (!invoice) {
+        console.error('GET /api/invoices/:invoiceId: Invoice not found', { invoiceId });
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+      db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+        if (err) {
+          console.error('GET /api/invoices/:invoiceId: Fetch items error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+          if (err) {
+            console.error('GET /api/invoices/:invoiceId: Fetch keg_deposit_price error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          invoice.items = items;
+          invoice.keg_deposit_price = setting ? setting.value : '0.00';
+          console.log('GET /api/invoices/:invoiceId: Success', invoice);
+          res.json(invoice);
+        });
+      });
+    }
+  );
 });
 
 app.patch('/api/invoices/:invoiceId', (req, res) => {
   const { invoiceId } = req.params;
   const { items } = req.body;
+  console.log('PATCH /api/invoices/:invoiceId: Received request', { invoiceId, items });
   if (!items || !Array.isArray(items)) {
-    return res.status(400).json({ error: 'Items are required' });
+    console.error('PATCH /api/invoices/:invoiceId: Invalid items', { items });
+    return res.status(400).json({ error: 'Items are required and must be an array' });
   }
   db.get('SELECT * FROM invoices WHERE invoiceId = ? AND status = ?', [invoiceId, 'Draft'], (err, invoice) => {
     if (err) {
+      console.error('PATCH /api/invoices/:invoiceId: Fetch invoice error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!invoice) {
+      console.error('PATCH /api/invoices/:invoiceId: Invoice not found or not in Draft', { invoiceId });
       return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
     }
-    db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], err => {
+    db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err) => {
       if (err) {
+        console.error('PATCH /api/invoices/:invoiceId: Delete items error:', err);
         return res.status(500).json({ error: err.message });
       }
       let remaining = items.length;
-      items.forEach(item => {
-        const { itemName, quantity, unit, hasKegDeposit } = item;
-        if (!itemName || quantity <= 0 || !unit) {
-          return res.status(400).json({ error: 'Invalid item: itemName, quantity, and unit are required' });
+      let total = 0;
+      items.forEach((item) => {
+        const { itemName, quantity, unit, price, hasKegDeposit } = item;
+        if (!itemName || quantity <= 0 || !unit || !price) {
+          console.error('PATCH /api/invoices/:invoiceId: Invalid item', { item });
+          return res.status(400).json({ error: 'Each item must have itemName, quantity, unit, and price' });
         }
         db.run(
-          'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, hasKegDeposit) VALUES (?, ?, ?, ?, ?)',
-          [invoiceId, itemName, quantity, unit, hasKegDeposit ? 1 : 0],
-          err => {
+          'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+          [invoiceId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
+          (err) => {
             if (err) {
+              console.error('PATCH /api/invoices/:invoiceId: Insert item error:', err);
               return res.status(500).json({ error: err.message });
             }
+            total += parseFloat(price) * quantity;
             if (--remaining === 0) {
-              res.json({ message: 'Invoice updated' });
+              db.run(
+                'UPDATE invoices SET total = ? WHERE invoiceId = ?',
+                [total.toFixed(2), invoiceId],
+                (err) => {
+                  if (err) {
+                    console.error('PATCH /api/invoices/:invoiceId: Update total error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  console.log('PATCH /api/invoices/:invoiceId: Success', { invoiceId, total });
+                  res.json({ message: 'Invoice updated', total: total.toFixed(2) });
+                }
+              );
             }
           }
         );
@@ -971,59 +1093,72 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
 
 app.post('/api/invoices/:invoiceId/post', (req, res) => {
   const { invoiceId } = req.params;
+  console.log('POST /api/invoices/:invoiceId/post: Received request', { invoiceId });
   db.get('SELECT * FROM invoices WHERE invoiceId = ? AND status = ?', [invoiceId, 'Draft'], (err, invoice) => {
     if (err) {
+      console.error('POST /api/invoices/:invoiceId/post: Fetch invoice error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!invoice) {
+      console.error('POST /api/invoices/:invoiceId/post: Invoice not found or not in Draft', { invoiceId });
       return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
     }
     db.all('SELECT * FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
       if (err) {
+        console.error('POST /api/invoices/:invoiceId/post: Fetch invoice items error:', err);
         return res.status(500).json({ error: err.message });
       }
       db.serialize(() => {
-        db.run('BEGIN TRANSACTION', err => {
+        db.run('BEGIN TRANSACTION', (err) => {
           if (err) {
+            console.error('POST /api/invoices/:invoiceId/post: Begin transaction error:', err);
             return res.status(500).json({ error: 'Failed to start transaction' });
           }
           let remaining = items.length;
-          items.forEach(item => {
+          let total = 0;
+          items.forEach((item) => {
             db.get(
               'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
               [item.itemName, 'Finished Goods', 'Marketing'],
               (err, row) => {
                 if (err) {
                   db.run('ROLLBACK');
+                  console.error('POST /api/invoices/:invoiceId/post: Fetch inventory error:', err);
                   return res.status(500).json({ error: err.message });
                 }
                 if (!row || row.quantity < item.quantity) {
                   db.run('ROLLBACK');
+                  console.error('POST /api/invoices/:invoiceId/post: Insufficient inventory', { itemName: item.itemName });
                   return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
                 }
                 db.run(
                   'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND type IN (?, ?)',
                   [item.quantity, item.itemName, 'Finished Goods', 'Marketing'],
-                  err => {
+                  (err) => {
                     if (err) {
                       db.run('ROLLBACK');
+                      console.error('POST /api/invoices/:invoiceId/post: Update inventory error:', err);
                       return res.status(500).json({ error: err.message });
                     }
+                    total += parseFloat(item.price || 0) * item.quantity;
                     if (--remaining === 0) {
                       const postedDate = new Date().toISOString().split('T')[0];
                       db.run(
-                        'UPDATE invoices SET status = ?, postedDate = ? WHERE invoiceId = ?',
-                        ['Posted', postedDate, invoiceId],
-                        err => {
+                        'UPDATE invoices SET status = ?, postedDate = ?, total = ? WHERE invoiceId = ?',
+                        ['Posted', postedDate, total.toFixed(2), invoiceId],
+                        (err) => {
                           if (err) {
                             db.run('ROLLBACK');
+                            console.error('POST /api/invoices/:invoiceId/post: Update invoice error:', err);
                             return res.status(500).json({ error: err.message });
                           }
-                          db.run('COMMIT', err => {
+                          db.run('COMMIT', (err) => {
                             if (err) {
+                              console.error('POST /api/invoices/:invoiceId/post: Commit transaction error:', err);
                               return res.status(500).json({ error: 'Failed to commit transaction' });
                             }
-                            res.json({ message: 'Invoice posted, inventory updated' });
+                            console.log('POST /api/invoices/:invoiceId/post: Success', { invoiceId, total });
+                            res.json({ message: 'Invoice posted, inventory updated', total: total.toFixed(2) });
                           });
                         }
                       );
@@ -1095,6 +1230,75 @@ app.get('/api/system-settings', (req, res) => {
     }
     const settings = rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
     res.json(settings);
+  });
+});
+
+app.get('/api/settings', (req, res) => {
+  console.log('GET /api/settings: Received request');
+  db.all('SELECT key, value FROM system_settings', (err, rows) => {
+    if (err) {
+      console.error('GET /api/settings: Fetch settings error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    const settings = rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+    console.log('GET /api/settings: Success', settings);
+    res.json(settings);
+  });
+});
+
+app.put('/api/settings', (req, res) => {
+  const settings = req.body;
+  console.log('PUT /api/settings: Received request', settings);
+  if (!settings || typeof settings !== 'object') {
+    console.error('PUT /api/settings: Invalid settings', settings);
+    return res.status(400).json({ error: 'Settings object is required' });
+  }
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION', (err) => {
+      if (err) {
+        console.error('PUT /api/settings: Begin transaction error:', err);
+        return res.status(500).json({ error: `Failed to start transaction: ${err.message}` });
+      }
+
+      let remaining = Object.keys(settings).length;
+      if (remaining === 0) {
+        db.run('COMMIT', () => {
+          console.log('PUT /api/settings: Success, no settings to update');
+          res.json({ message: 'Settings updated' });
+        });
+        return;
+      }
+
+      for (const [key, value] of Object.entries(settings)) {
+        if (key === 'keg_deposit_price' && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) {
+          db.run('ROLLBACK');
+          console.error('PUT /api/settings: Invalid keg_deposit_price', { value });
+          return res.status(400).json({ error: 'keg_deposit_price must be a non-negative number' });
+        }
+        db.run(
+          'INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)',
+          [key, value],
+          (err) => {
+            if (err) {
+              db.run('ROLLBACK');
+              console.error('PUT /api/settings: Insert setting error:', err);
+              return res.status(500).json({ error: `Failed to update setting ${key}: ${err.message}` });
+            }
+            if (--remaining === 0) {
+              db.run('COMMIT', (err) => {
+                if (err) {
+                  console.error('PUT /api/settings: Commit transaction error:', err);
+                  return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
+                }
+                console.log('PUT /api/settings: Success', settings);
+                res.json({ message: 'Settings updated' });
+              });
+            }
+          }
+        );
+      }
+    });
   });
 });
 
