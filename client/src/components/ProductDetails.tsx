@@ -96,43 +96,52 @@ const ProductDetails: React.FC = () => {
   }, [id]);
 
   const handleSave = async () => {
-    if (!product?.name || packageTypes.some((pt) => !pt.type || !pt.price || isNaN(parseFloat(pt.price)) || parseFloat(pt.price) < 0)) {
-      setError('Product name and valid package types with prices are required');
-      return;
+  if (!product?.name) {
+    setError('Product name is required');
+    return;
+  }
+  const validPackageTypes = packageTypes.filter(pt => pt.type && !isNaN(parseFloat(pt.price)) && parseFloat(pt.price) >= 0);
+  if (packageTypes.length !== validPackageTypes.length) {
+    setError('All package types must have a valid type and non-negative price');
+    return;
+  }
+  try {
+    const method = id ? 'PATCH' : 'POST';
+    const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
+    console.log('handleSave: Sending PATCH/POST request', { url, payload: { ...product, packageTypes: validPackageTypes } });
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ ...product, packageTypes: validPackageTypes }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to save product: ${text}`);
     }
-    try {
-      const method = id ? 'PATCH' : 'POST';
-      const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
-      const res = await fetch(url, {
-        method,
+    const savedProduct = await res.json();
+    console.log('handleSave: Received response', savedProduct);
+
+    for (const pt of validPackageTypes) {
+      const itemName = `${product.name} ${pt.type}`;
+      console.log('handleSave: Creating item', { itemName });
+      await fetch(`${API_BASE_URL}/api/items`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ...product, packageTypes }),
+        body: JSON.stringify({ name: itemName, type: 'Finished Goods', enabled: 1 }),
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to save product: ${text}`);
-      }
-      const savedProduct = await res.json();
-
-      for (const pt of packageTypes) {
-        const itemName = `${product.name} ${pt.type}`;
-        await fetch(`${API_BASE_URL}/api/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ name: itemName, type: 'Finished Goods', enabled: 1 }),
-        });
-      }
-
-      setSuccessMessage('Product and items saved successfully');
-      setTimeout(() => {
-        setSuccessMessage(null);
-        navigate('/products');
-      }, 2000);
-      setError(null);
-    } catch (err: any) {
-      setError('Failed to save product: ' + err.message);
     }
-  };
+
+    setSuccessMessage('Product and items saved successfully');
+    setTimeout(() => {
+      setSuccessMessage(null);
+      navigate('/products');
+    }, 2000);
+    setError(null);
+  } catch (err: any) {
+    console.error('handleSave: Error', err);
+    setError('Failed to save product: ' + err.message);
+  }
+};
 
   const handleAddRecipe = async () => {
     if (
