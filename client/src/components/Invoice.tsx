@@ -146,22 +146,50 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
   };
 
   const handleEmail = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/email`, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to send email: ${text}`);
-      }
-      setSuccessMessage('Email sent successfully');
-      setTimeout(() => setSuccessMessage(null), 2000);
-      setError(null);
-    } catch (err: any) {
-      setError('Failed to send email: ' + err.message);
+  try {
+    console.log('handleEmail: Sending email for invoice', { invoiceId });
+    const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/email`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to send email: ${text}`);
     }
-  };
+    console.log('handleEmail: Email sent successfully', { invoiceId });
+    setSuccessMessage('Email sent successfully');
+    setTimeout(() => setSuccessMessage(null), 2000);
+    setError(null);
+    // Refresh invoice data to verify totals
+    const refreshRes = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!refreshRes.ok) {
+      throw new Error(`Failed to refresh invoice: HTTP ${refreshRes.status}`);
+    }
+    const refreshedInvoice = await refreshRes.json();
+    console.log('handleEmail: Refreshed invoice data', {
+      invoiceId,
+      total: refreshedInvoice.total,
+      subtotal: refreshedInvoice.subtotal,
+      keg_deposit_total: refreshedInvoice.keg_deposit_total,
+      items: refreshedInvoice.items,
+    });
+    setInvoice(refreshedInvoice);
+    setItems(
+      refreshedInvoice.items && Array.isArray(refreshedInvoice.items)
+        ? refreshedInvoice.items.map((item: InvoiceItem) => ({
+            ...item,
+            price: item.price || '0.00',
+            hasKegDeposit: !!item.hasKegDeposit,
+          }))
+        : items
+    );
+  } catch (err: any) {
+    console.error('handleEmail: Error', { invoiceId, error: err.message });
+    setError('Failed to send email: ' + err.message);
+  }
+};
 
   if (!invoice) return <div>Loading...</div>;
 
