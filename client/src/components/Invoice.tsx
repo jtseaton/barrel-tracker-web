@@ -104,9 +104,19 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
         const text = await res.text();
         throw new Error(`Failed to post invoice: ${text}`);
       }
+      const data = await res.json();
       await refreshInventory();
       setInvoice((prev) =>
-        prev ? { ...prev, status: 'Posted', postedDate: new Date().toISOString().split('T')[0] } : null
+        prev
+          ? {
+              ...prev,
+              status: 'Posted',
+              postedDate: new Date().toISOString().split('T')[0],
+              total: data.total,
+              subtotal: data.subtotal,
+              keg_deposit_total: data.keg_deposit_total,
+            }
+          : null
       );
       setSuccessMessage('Invoice posted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -138,7 +148,9 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
 
   return (
     <div className="page-container">
-      <h2 style={{ color: '#EEC930' }}>Invoice {invoice.invoiceId}</h2>
+      <h2 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px' }}>
+        Invoice {invoice.invoiceId}
+      </h2>
       {error && <div className="error">{error}</div>}
       {successMessage && (
         <div
@@ -155,22 +167,14 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
         </div>
       )}
       <div style={{ marginBottom: '20px' }}>
-        <p>
-          <strong>Customer:</strong> {invoice.customerName}
-        </p>
-        <p>
-          <strong>Status:</strong> {invoice.status}
-        </p>
-        <p>
-          <strong>Created Date:</strong> {invoice.createdDate}
-        </p>
-        {invoice.postedDate && (
-          <p>
-            <strong>Posted Date:</strong> {invoice.postedDate}
-          </p>
-        )}
+        <p><strong>Customer:</strong> {invoice.customerName}</p>
+        <p><strong>Email:</strong> {invoice.customerEmail}</p>
+        <p><strong>Status:</strong> {invoice.status}</p>
+        <p><strong>Created Date:</strong> {invoice.createdDate}</p>
+        {invoice.postedDate && <p><strong>Posted Date:</strong> {invoice.postedDate}</p>}
+        {invoice.total && <p><strong>Total:</strong> ${parseFloat(invoice.total).toFixed(2)}</p>}
       </div>
-      <h3 style={{ color: '#EEC930' }}>Items</h3>
+      <h3 style={{ color: '#EEC930', marginBottom: '10px' }}>Items</h3>
       {invoice.status === 'Draft' ? (
         <>
           {items.map((item, index) => {
@@ -210,10 +214,12 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
                   <option value="Cans">Cans</option>
                 </select>
                 <input
-                  type="text"
-                  value={item.price}
+                  type="number"
+                  value={parseFloat(item.price)}
                   onChange={(e) => updateItem(index, 'price', e.target.value)}
                   placeholder="Price"
+                  step="0.01"
+                  min="0"
                   style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
                 />
                 <label>
@@ -221,7 +227,6 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
                     type="checkbox"
                     checked={item.hasKegDeposit}
                     onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
-                    disabled={selectedItem && selectedItem.isKegDepositItem}
                   />
                   Keg Deposit
                 </label>
@@ -315,6 +320,16 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
                   color: '#555',
                 }}
               >
+                Subtotal
+              </th>
+              <th
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f5f5f5',
+                  borderBottom: '1px solid #ddd',
+                  color: '#555',
+                }}
+              >
                 Keg Deposit
               </th>
             </tr>
@@ -322,15 +337,23 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <td style={{ padding: '10px' }}>{item.itemName}</td>
-                <td style={{ padding: '10px' }}>{item.quantity}</td>
-                <td style={{ padding: '10px' }}>{item.unit}</td>
-                <td style={{ padding: '10px' }}>${parseFloat(item.price).toFixed(2)}</td>
-                <td style={{ padding: '10px' }}>{item.hasKegDeposit ? 'Yes' : 'No'}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.itemName}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.quantity}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.unit}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>${parseFloat(item.price).toFixed(2)}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.hasKegDeposit ? 'Yes' : 'No'}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+      {invoice.status !== 'Draft' && (
+        <div style={{ marginTop: '20px' }}>
+          <p><strong>Subtotal:</strong> ${invoice.subtotal ? parseFloat(invoice.subtotal).toFixed(2) : '0.00'}</p>
+          <p><strong>Keg Deposit Total:</strong> ${invoice.keg_deposit_total ? parseFloat(invoice.keg_deposit_total).toFixed(2) : '0.00'}</p>
+          <p><strong>Invoice Total:</strong> ${invoice.total ? parseFloat(invoice.total).toFixed(2) : '0.00'}</p>
+        </div>
       )}
       <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
         {invoice.status === 'Draft' && (
