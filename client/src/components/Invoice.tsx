@@ -66,43 +66,31 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleSave = async () => {
-    if (
-      items.some(
-        (item) =>
-          !item.itemName ||
-          item.quantity <= 0 ||
-          !item.unit ||
-          !item.price ||
-          isNaN(parseFloat(item.price)) ||
-          parseFloat(item.price) < 0
-      )
-    ) {
-      setError('All items must have valid itemName, quantity, unit, and price');
-      return;
+const handleSave = async () => {
+  try {
+    console.log('handleSave: Saving invoice', { invoiceId, items });
+    const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to save invoice: ${text}`);
     }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          items: items.map(item => ({
-            ...item,
-            hasKegDeposit: item.hasKegDeposit ? 1 : 0, // Convert boolean to number for backend
-          }))
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to update invoice: ${text}`);
-      }
-      setSuccessMessage('Invoice updated successfully');
-      setTimeout(() => setSuccessMessage(null), 2000);
-      setError(null);
-    } catch (err: any) {
-      setError('Failed to update invoice: ' + err.message);
-    }
-  };
+    const updatedInvoice = await res.json();
+    console.log('handleSave: Invoice saved successfully', updatedInvoice);
+    setInvoice(updatedInvoice);
+    setItems(updatedInvoice.items || []);
+    setSuccessMessage('Invoice saved successfully');
+    setTimeout(() => setSuccessMessage(null), 2000);
+    setError(null);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('handleSave: Error', { invoiceId, error: errorMessage });
+    setError('Failed to save invoice: ' + errorMessage);
+  }
+};
 
   const handlePost = async () => {
     try {
