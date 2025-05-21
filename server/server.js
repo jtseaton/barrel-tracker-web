@@ -1085,8 +1085,8 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
 
                       // Insert invoice
                       db.run(
-                        'INSERT INTO invoices (orderId, customerId, status, createdDate, total) VALUES (?, ?, ?, ?, ?)',
-                        [orderId, customerId, 'Draft', new Date().toISOString().split('T')[0], total.toFixed(2)],
+                        'INSERT INTO invoices (orderId, customerId, status, createdDate, total, subtotal, keg_deposit_total, keg_deposit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        [orderId, customerId, 'Draft', new Date().toISOString().split('T')[0], total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), kegDepositPrice.toFixed(2)],
                         function (err) {
                           if (err) {
                             db.run('ROLLBACK');
@@ -1377,7 +1377,11 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
           console.error('POST /api/invoices/:invoiceId/post: Fetch keg_deposit_price error:', err);
           return res.status(500).json({ error: err.message });
         }
-        const kegDepositPrice = setting ? parseFloat(setting.value) : 0.00;
+        if (!setting) {
+          console.error('POST /api/invoices/:invoiceId/post: Keg deposit price not set in system_settings');
+          return res.status(500).json({ error: 'Keg deposit price not configured' });
+        }
+        const kegDepositPrice = parseFloat(setting.value);
         console.log('POST /api/invoices/:invoiceId/post: Keg deposit price', { kegDepositPrice });
         db.serialize(() => {
           db.run('BEGIN TRANSACTION', (err) => {
@@ -1391,7 +1395,7 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
                 console.error('POST /api/invoices/:invoiceId/post: Delete invoice items error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              let remaining = orderItems.length + 1;
+              let remaining = orderItems.length;
               let subtotal = 0;
               let kegDepositTotal = 0;
               let kegDepositCount = 0;
@@ -1401,76 +1405,75 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
                 if (!item.price || isNaN(parseFloat(item.price))) {
                   console.error('POST /api/invoices/:invoiceId/post: Invalid price for item', { itemName: item.itemName, price: item.price });
                   db.run('ROLLBACK');
-                  return res.status(400).json({ error: `Invalid price for item ${item.itemName}` });
+                  return res.status(400).json({ error: `Invalid price for item ${item.itemName || 'Unknown'}` });
                 }
-                db.get(
-                  'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
-                  [item.itemName, 'Finished Goods', 'Marketing'],
-                  (err, row) => {
-                    if (err) {
-                      db.run('ROLLBACK');
-                      console.error('POST /api/invoices/:invoiceId/post: Fetch inventory error:', err);
-                      return res.status(500).json({ error: err.message });
-                    }
-                    if (!row || parseFloat(row.quantity) < item.quantity) {
-                      db.run('ROLLBACK');
-                      console.error('POST /api/invoices/:invoiceId/post: Insufficient inventory', { itemName: item.itemName, available: row?.quantity, needed: item.quantity });
-                      return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
-                    }
-                    db.run(
-                      'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND type IN (?, ?)',
-                      [item.quantity, item.itemName, 'Finished Goods', 'Marketing'],
-                      (err) => {
-                        if (err) {
-                          db.run('ROLLBACK');
-                          console.error('POST /api/invoices/:invoiceId/post: Update inventory error:', err);
-                          return res.status(500).json({ error: err.message });
-                        }
-                        db.run(
-                          'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                          [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
-                          (err) => {
-                            if (err) {
-                              db.run('ROLLBACK');
-                              console.error('POST /api/invoices/:invoiceId/post: Insert invoice item error:', err);
-                              return res.status(500).json({ error: err.message });
-                            }
-                            subtotal += parseFloat(item.price) * item.quantity;
-                            if (item.hasKegDeposit && item.itemName !== 'Keg Deposit') {
-                              kegDepositCount += item.quantity;
-                              kegDepositTotal += item.quantity * kegDepositPrice;
-                            }
-                            if (--remaining === 0) {
-                              commitTransaction();
-                            }
-                          }
-                        );
+                if (item.itemName === 'Keg Deposit') {
+                  // Skip inventory check for Keg Deposit
+                  db.run(
+                    'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                    [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                    (err) => {
+                      if (err) {
+                        db.run('ROLLBACK');
+                        console.error('POST /api/invoices/:invoiceId/post: Insert keg deposit item error:', err);
+                        return res.status(500).json({ error: err.message });
                       }
-                    );
-                  }
-                );
-              });
-
-              if (kegDepositCount > 0) {
-                db.run(
-                  'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                  [invoiceId, 'Keg Deposit', kegDepositCount, 'Units', kegDepositPrice.toFixed(2), 0],
-                  (err) => {
-                    if (err) {
-                      db.run('ROLLBACK');
-                      console.error('POST /api/invoices/:invoiceId/post: Insert keg deposit item error:', err);
-                      return res.status(500).json({ error: err.message });
+                      subtotal += parseFloat(item.price) * item.quantity;
+                      if (--remaining === 0) {
+                        commitTransaction();
+                      }
                     }
-                    if (--remaining === 0) {
-                      commitTransaction();
+                  );
+                } else {
+                  // Check inventory for non-Keg Deposit items
+                  db.get(
+                    'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
+                    [item.itemName, 'Finished Goods', 'Marketing'],
+                    (err, row) => {
+                      if (err) {
+                        db.run('ROLLBACK');
+                        console.error('POST /api/invoices/:invoiceId/post: Fetch inventory error:', err);
+                        return res.status(500).json({ error: err.message });
+                      }
+                      if (!row || parseFloat(row.quantity) < item.quantity) {
+                        db.run('ROLLBACK');
+                        console.error('POST /api/invoices/:invoiceId/post: Insufficient inventory', { itemName: item.itemName, available: row?.quantity, needed: item.quantity });
+                        return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
+                      }
+                      db.run(
+                        'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND type IN (?, ?)',
+                        [item.quantity, item.itemName, 'Finished Goods', 'Marketing'],
+                        (err) => {
+                          if (err) {
+                            db.run('ROLLBACK');
+                            console.error('POST /api/invoices/:invoiceId/post: Update inventory error:', err);
+                            return res.status(500).json({ error: err.message });
+                          }
+                          db.run(
+                            'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                            [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                            (err) => {
+                              if (err) {
+                                db.run('ROLLBACK');
+                                console.error('POST /api/invoices/:invoiceId/post: Insert invoice item error:', err);
+                                return res.status(500).json({ error: err.message });
+                              }
+                              subtotal += parseFloat(item.price) * item.quantity;
+                              if (item.hasKegDeposit) {
+                                kegDepositCount += item.quantity;
+                                kegDepositTotal += item.quantity * kegDepositPrice;
+                              }
+                              if (--remaining === 0) {
+                                commitTransaction();
+                              }
+                            }
+                          );
+                        }
+                      );
                     }
-                  }
-                );
-              } else {
-                if (--remaining === 0) {
-                  commitTransaction();
+                  );
                 }
-              }
+              });
 
               function commitTransaction() {
                 const total = subtotal + kegDepositTotal;
