@@ -162,6 +162,20 @@ db.serialize(() => {
       FOREIGN KEY (locationId) REFERENCES locations(locationId)
     )
   `);
+  db.run(`ALTER TABLE inventory ADD COLUMN price TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding price column to inventory:', err);
+    } else {
+      console.log('Added price column to inventory table');
+    }
+  });
+  db.run(`ALTER TABLE inventory ADD COLUMN isKegDepositItem INTEGER`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding isKegDepositItem column to inventory:', err);
+    } else {
+      console.log('Added isKegDepositItem column to inventory table');
+    }
+  });
   db.run(`
     CREATE TABLE IF NOT EXISTS items (
       name TEXT PRIMARY KEY,
