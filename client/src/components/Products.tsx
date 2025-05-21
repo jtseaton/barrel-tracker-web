@@ -13,7 +13,7 @@ const Products: React.FC = () => {
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: '',
     abbreviation: '',
-    enabled: true,
+    enabled: 1, // Changed from true to 1
     priority: 1,
     class: '',
     type: '',
@@ -123,7 +123,7 @@ const Products: React.FC = () => {
       setNewProduct({
         name: '',
         abbreviation: '',
-        enabled: true,
+        enabled: 1, // Changed from true to 1
         priority: 1,
         class: '',
         type: '',
@@ -142,7 +142,7 @@ const Products: React.FC = () => {
     setNewProduct({
       name: '',
       abbreviation: '',
-      enabled: true,
+      enabled: 1, // Changed from true to 1
       priority: 1,
       class: '',
       type: '',

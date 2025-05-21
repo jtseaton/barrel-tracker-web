@@ -478,204 +478,130 @@ useEffect(() => {
   };
 
   const handlePackage = async () => {
-    console.log('handlePackage: Attempting to package', { batchId, packageType, packageQuantity, packageLocation });
+  console.log('handlePackage: Attempting to package', { batchId, packageType, packageQuantity, packageLocation });
 
-    if (!packageType || packageQuantity <= 0 || !packageLocation) {
-      console.error('handlePackage: Invalid input', { packageType, packageQuantity, packageLocation });
-      setError('Please select a package type, quantity (> 0), and location');
+  if (!packageType || packageQuantity <= 0 || !packageLocation) {
+    console.error('handlePackage: Invalid input', { packageType, packageQuantity, packageLocation });
+    setError('Please select a package type, quantity (> 0), and location');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        packageType,
+        quantity: packageQuantity,
+        locationId: packageLocation,
+      }),
+    });
+
+    console.log('handlePackage: Response received', { status: res.status, ok: res.ok });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('handlePackage: Failed to package', { status: res.status, response: text.slice(0, 100) });
+      throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+    }
+
+    const data = await res.json();
+    console.log('handlePackage: Response data', data);
+
+    if (data.prompt === 'volumeAdjustment') {
+      setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
       return;
     }
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          packageType,
-          quantity: packageQuantity,
-          locationId: packageLocation,
-        }),
-      });
-
-      console.log('handlePackage: Response received', { status: res.status, ok: res.ok });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('handlePackage: Failed to package', { status: res.status, response: text.slice(0, 100) });
-        throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-      }
-
-      const data = await res.json();
-      console.log('handlePackage: Response data', data);
-
-      if (data.prompt === 'volumeAdjustment') {
-        setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
-        return;
-      }
-
-      // Refresh batch data
-      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
-        headers: { Accept: 'application/json' },
-      });
-      if (!batchRes.ok) {
-        const text = await batchRes.text();
-        console.error('handlePackage: Failed to refresh batch', { status: batchRes.status, response: text });
-        throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}, Response: ${text.slice(0, 50)}`);
-      }
-      const updatedBatch = await batchRes.json();
-      setBatch(updatedBatch);
-
-      // Refresh packaging actions
-      const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
-        headers: { Accept: 'application/json' },
-      });
-      if (packagingRes.ok) {
-        const packagingData = await packagingRes.json();
-        setPackagingActions(packagingData);
-      } else {
-        console.error('handlePackage: Failed to refresh packaging actions', { status: packagingRes.status });
-      }
-
-      // Refresh inventory
-      console.log('handlePackage: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
-      await refreshInventory();
-
-      // Verify inventory update
-      const identifier = `${updatedBatch.productName} ${packageType}`;
-      const inventoryRes = await fetch(
-        `${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(identifier)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`
-      );
-      if (!inventoryRes.ok) {
-        const text = await inventoryRes.text();
-        console.error('handlePackage: Failed to verify inventory update', { status: inventoryRes.status, response: text });
-        throw new Error(`Failed to verify inventory update: HTTP ${inventoryRes.status}, Response: ${text.slice(0, 50)}`);
-      }
-      const inventoryData = await inventoryRes.json();
-      console.log('handlePackage: Inventory fetch after packaging', {
-        identifier,
-        siteId: updatedBatch.siteId,
-        locationId: packageLocation,
-        inventoryData,
-      });
-      if (!inventoryData || inventoryData.length === 0) {
-        console.error('handlePackage: Inventory item not found after packaging', {
-          identifier,
-          siteId: updatedBatch.siteId,
-          locationId: packageLocation,
-        });
-        throw new Error('Packaging succeeded, but inventory item was not created or updated');
-      }
-
-      // Verify item exists in items table
-      const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(identifier)}`);
-      if (!itemRes.ok) {
-        const text = await itemRes.text();
-        console.error('handlePackage: Failed to verify item in items table', { status: itemRes.status, response: text });
-        throw new Error(`Failed to verify item in items table: HTTP ${itemRes.status}, Response: ${text.slice(0, 50)}`);
-      }
-      const itemData = await itemRes.json();
-      if (!itemData || itemData.length === 0) {
-        console.error('handlePackage: Item not found in items table', { identifier });
-        throw new Error('Packaging succeeded, but item was not created in items table');
-      }
-      console.log('handlePackage: Item verified in items table', { identifier, itemData });
-
-      setPackageType('');
-      setPackageQuantity(0);
-      setPackageLocation('');
-      setSuccessMessage(data.message || 'Packaged successfully');
-      setTimeout(() => setSuccessMessage(null), 2000);
-      setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Package error:', err);
-      setError('Failed to package: ' + errorMessage);
+    const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!batchRes.ok) {
+      const text = await batchRes.text();
+      console.error('handlePackage: Failed to refresh batch', { status: batchRes.status, response: text });
+      throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}, Response: ${text.slice(0, 50)}`);
     }
-  };
+    const updatedBatch = await batchRes.json();
+    setBatch(updatedBatch);
+
+    const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (packagingRes.ok) {
+      const packagingData = await packagingRes.json();
+      setPackagingActions(packagingData);
+    } else {
+      console.error('handlePackage: Failed to refresh packaging actions', { status: packagingRes.status });
+    }
+
+    await refreshInventory();
+
+    setPackageType('');
+    setPackageQuantity(0);
+    setPackageLocation('');
+    setSuccessMessage(data.message || 'Packaged successfully');
+    setTimeout(() => setSuccessMessage(null), 2000);
+    setError(null);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Package error:', err);
+    setError('Failed to package: ' + errorMessage);
+  }
+};
 
   const handleVolumeAdjustment = async (confirm: boolean) => {
-    if (!showVolumePrompt) return;
-    if (!confirm) {
-      setShowVolumePrompt(null);
-      setError('Packaging cancelled due to insufficient volume');
-      return;
+  if (!showVolumePrompt) return;
+  if (!confirm) {
+    setShowVolumePrompt(null);
+    setError('Packaging cancelled due to insufficient volume');
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/adjust-volume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ shortfall: showVolumePrompt.shortfall }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to adjust volume: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
     }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/adjust-volume`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ shortfall: showVolumePrompt.shortfall }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to adjust volume: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-      }
-      const packageRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          packageType,
-          quantity: packageQuantity,
-          locationId: packageLocation,
-        }),
-      });
-      if (!packageRes.ok) {
-        const text = await packageRes.text();
-        throw new Error(`Failed to package after adjustment: HTTP ${packageRes.status}, Response: ${text.slice(0, 50)}`);
-      }
-      const data = await packageRes.json();
-      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
-        headers: { Accept: 'application/json' },
-      });
-      if (!batchRes.ok) {
-        throw new Error('Failed to refresh batch');
-      }
-      const updatedBatch = await batchRes.json();
-      setBatch(updatedBatch);
-      console.log('handleVolumeAdjustment: Refreshing inventory after packaging', { batchId, packageType, quantity: packageQuantity });
-      await refreshInventory();
-      const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?identifier=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}&siteId=${updatedBatch.siteId}&locationId=${packageLocation}`);
-      if (!inventoryRes.ok) {
-        throw new Error('Failed to verify inventory update');
-      }
-      const inventoryData = await inventoryRes.json();
-      console.log('handleVolumeAdjustment: Inventory fetch after packaging', {
-        identifier: `${updatedBatch.productName} ${packageType}`,
-        siteId: updatedBatch.siteId,
+    const packageRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        packageType,
+        quantity: packageQuantity,
         locationId: packageLocation,
-        inventoryData,
-      });
-      if (!inventoryData || inventoryData.length === 0) {
-        console.error('handleVolumeAdjustment: Inventory item not found after packaging', {
-          identifier: `${updatedBatch.productName} ${packageType}`,
-          siteId: updatedBatch.siteId,
-          locationId: packageLocation,
-        });
-        throw new Error('Packaging succeeded, but inventory item was not created or updated');
-      }
-      const itemRes = await fetch(`${API_BASE_URL}/api/items?name=${encodeURIComponent(`${updatedBatch.productName} ${packageType}`)}`);
-      if (!itemRes.ok) {
-        throw new Error('Failed to verify item in items table');
-      }
-      const itemData = await itemRes.json();
-      if (!itemData || itemData.length === 0) {
-        console.error('handleVolumeAdjustment: Item not found in items table', { identifier: `${updatedBatch.productName} ${packageType}` });
-        throw new Error('Packaging succeeded, but item was not created in items table');
-      }
-      console.log('handleVolumeAdjustment: Item verified in items table', { identifier: `${updatedBatch.productName} ${packageType}`, itemData });
-      setPackageType('');
-      setPackageQuantity(0);
-      setPackageLocation('');
-      setShowVolumePrompt(null);
-      setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
-      setTimeout(() => setSuccessMessage(null), 2000);
-      setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Volume adjustment error:', err);
-      setError('Failed to adjust volume or package: ' + errorMessage);
+      }),
+    });
+    if (!packageRes.ok) {
+      const text = await packageRes.text();
+      throw new Error(`Failed to package after adjustment: HTTP ${packageRes.status}, Response: ${text.slice(0, 50)}`);
     }
-  };
+    const data = await packageRes.json();
+    const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!batchRes.ok) {
+      throw new Error('Failed to refresh batch');
+    }
+    const updatedBatch = await batchRes.json();
+    setBatch(updatedBatch);
+    await refreshInventory();
+    setPackageType('');
+    setPackageQuantity(0);
+    setPackageLocation('');
+    setShowVolumePrompt(null);
+    setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
+    setTimeout(() => setSuccessMessage(null), 2000);
+    setError(null);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Volume adjustment error:', err);
+    setError('Failed to adjust volume or package: ' + errorMessage);
+  }
+};
 
   const handleDeletePackaging = async (action: PackagingAction) => {
     if (!window.confirm(`Are you sure you want to delete the packaging action for ${action.quantity} ${action.packageType}?`)) return;
