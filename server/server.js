@@ -1851,17 +1851,25 @@ app.get('/api/products', (req, res) => {
 
 app.get('/api/products/:id', (req, res) => {
   const id = parseInt(req.params.id);
+  console.log('GET /api/products/:id: Received request', { id });
   db.get('SELECT * FROM products WHERE id = ?', [id], (err, row) => {
     if (err) {
-      console.error('Fetch product error:', err);
+      console.error('GET /api/products/:id: Fetch product error:', err);
       return res.status(500).json({ error: err.message });
     }
     if (!row) {
-      console.log(`GET /api/products/${id}: Product not found`);
+      console.error('GET /api/products/:id: Product not found', { id });
       return res.status(404).json({ error: 'Product not found' });
     }
-    console.log(`GET /api/products/${id}, returning:`, row);
-    res.json(row);
+    db.all('SELECT type, price, isKegDepositItem FROM product_package_types WHERE productId = ?', [id], (err, packageTypes) => {
+      if (err) {
+        console.error('GET /api/products/:id: Fetch package types error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      const product = { ...row, packageTypes: packageTypes || [] };
+      console.log('GET /api/products/:id: Success', product);
+      res.json(product);
+    });
   });
 });
 
