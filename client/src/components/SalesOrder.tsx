@@ -11,6 +11,12 @@ interface NewCustomer {
   address?: string;
 }
 
+interface PackageType {
+  type: string;
+  price: string;
+  isKegDepositItem: boolean;
+}
+
 const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ inventory }) => {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId: string }>();
@@ -27,6 +33,22 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState<NewCustomer>({ name: '', email: '', address: '' });
+
+  const fetchProductByName = async (productName: string) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/products?name=${encodeURIComponent(productName)}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch product: HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+    } catch (err) {
+      console.error('Fetch product error:', err);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -72,18 +94,31 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
     setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
   };
 
-  const updateItem = (index: number, field: keyof SalesOrderItem, value: any) => {
-    const updatedItems = [...items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
-    if (field === 'itemName') {
-      const selectedItem = inventory.find((inv) => inv.identifier === value);
-      if (selectedItem) {
-        updatedItems[index].price = selectedItem.price || '0.00';
-        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem || false;
+  const updateItem = async (index: number, field: keyof SalesOrderItem, value: any) => {
+  const updatedItems = [...items];
+  updatedItems[index] = { ...updatedItems[index], [field]: value };
+  if (field === 'itemName') {
+    const identifier = value;
+    const parts = identifier.split(' ');
+    const packageType = parts.pop();
+    const productName = parts.join(' ');
+    const product = await fetchProductByName(productName);
+    if (product && packageType) {
+      const pkg = product.packageTypes?.find((pt: PackageType) => pt.type === packageType);
+      if (pkg) {
+        updatedItems[index].price = pkg.price;
+        updatedItems[index].hasKegDeposit = pkg.isKegDepositItem;
+      } else {
+        updatedItems[index].price = '0.00';
+        updatedItems[index].hasKegDeposit = false;
       }
+    } else {
+      updatedItems[index].price = '0.00';
+      updatedItems[index].hasKegDeposit = false;
     }
-    setItems(updatedItems);
-  };
+  }
+  setItems(updatedItems);
+};
 
   const removeItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
