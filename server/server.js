@@ -118,6 +118,9 @@ db.serialize(() => {
       status TEXT NOT NULL DEFAULT 'Draft', -- Draft, Posted, Cancelled
       createdDate TEXT NOT NULL,
       postedDate TEXT,
+      subtotal TEXT,
+      keg_deposit_total TEXT,
+      keg_deposit_price TEXT,
       FOREIGN KEY (orderId) REFERENCES sales_orders(orderId),
       FOREIGN KEY (customerId) REFERENCES customers(customerId)
     )
