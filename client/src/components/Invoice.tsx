@@ -28,11 +28,13 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
         const data = await res.json();
         setInvoice(data);
         setItems(
-          data.items.map((item: InvoiceItem) => ({
-            ...item,
-            price: item.price || '0.00',
-            hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
-          }))
+          data.items && Array.isArray(data.items)
+            ? data.items.map((item: InvoiceItem) => ({
+                ...item,
+                price: item.price || '0.00',
+                hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
+              }))
+            : []
         );
       } catch (err: any) {
         setError('Failed to load invoice: ' + err.message);
@@ -52,7 +54,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
       const selectedItem = inventory.find((inv) => inv.identifier === value);
       if (selectedItem) {
         updatedItems[index].price = selectedItem.price || '0.00';
-        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem === 1; // Fixed: Convert number to boolean
+        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem === 1; // Convert number to boolean
       }
     } else if (field === 'hasKegDeposit' && typeof value === 'boolean') {
       updatedItems[index].hasKegDeposit = value;
@@ -127,11 +129,13 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
           : null
       );
       setItems(
-        data.items.map((item: InvoiceItem) => ({
-          ...item,
-          price: item.price || '0.00',
-          hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
-        }))
+        data.items && Array.isArray(data.items)
+          ? data.items.map((item: InvoiceItem) => ({
+              ...item,
+              price: item.price || '0.00',
+              hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
+            }))
+          : items // Fallback to current items
       );
       setSuccessMessage('Invoice posted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -352,7 +356,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
           <tbody>
             {items.map((item) => (
               <tr key={item.id || `${item.itemName}-${item.quantity}`}>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.itemName}</td>
+                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.itemName || 'Unknown'}</td>
                 <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.quantity}</td>
                 <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.unit}</td>
                 <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>${parseFloat(item.price).toFixed(2)}</td>
