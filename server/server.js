@@ -1019,8 +1019,8 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                 }
 
                 let remaining = items.length;
-                const errors: string[] = [];
-                items.forEach((item: SalesOrderItem, index: number) => {
+                const errors = []; // Removed TypeScript annotation
+                items.forEach((item, index) => {
                   const { itemName, quantity, unit, price, hasKegDeposit } = item;
                   if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
                     errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
