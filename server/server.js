@@ -1173,13 +1173,42 @@ app.post('/api/login', (req, res) => {
 });
 
 app.get('/api/products', (req, res) => {
-  db.all('SELECT * FROM products WHERE enabled = 1', (err, rows) => {
+  const { name } = req.query;
+  let query = 'SELECT * FROM products WHERE enabled = 1';
+  let params = [];
+  if (name) {
+    query += ' AND name = ?';
+    params.push(name);
+  }
+  db.all(query, params, (err, rows) => {
     if (err) {
       console.error('Fetch products error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('GET /api/products, returning:', rows);
-    res.json(rows);
+    const productsWithPackageTypes = [];
+    let remaining = rows.length;
+    if (remaining === 0) {
+      console.log('GET /api/products, returning:', rows);
+      res.json(rows);
+      return;
+    }
+    rows.forEach((product) => {
+      db.all(
+        'SELECT type, price, isKegDepositItem FROM product_package_types WHERE productId = ?',
+        [product.id],
+        (err, packageTypes) => {
+          if (err) {
+            console.error('Fetch package types error:', err);
+            packageTypes = [];
+          }
+          productsWithPackageTypes.push({ ...product, packageTypes });
+          if (--remaining === 0) {
+            console.log('GET /api/products, returning:', productsWithPackageTypes);
+            res.json(productsWithPackageTypes);
+          }
+        }
+      );
+    });
   });
 });
 
@@ -1196,6 +1225,162 @@ app.get('/api/products/:id', (req, res) => {
     }
     console.log(`GET /api/products/${id}, returning:`, row);
     res.json(row);
+  });
+});
+
+app.patch('/api/products/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, abbreviation, enabled = true, priority = 1, class: prodClass, type, style, abv = 0, ibu = 0, packageTypes = [] } = req.body;
+  console.log('PATCH /api/products/:id: Received request', { id, name, abbreviation, type, style, packageTypes });
+
+  if (!name || !abbreviation || !type || !style) {
+    console.error('PATCH /api/products/:id: Missing required fields', { name, abbreviation, type, style });
+    return res.status(400).json({ error: 'Name, abbreviation, type, and style are required' });
+  }
+
+  const validProductTypes = ['Malt', 'Spirits', 'Wine', 'Merchandise', 'Cider', 'Seltzer'];
+  if (!validProductTypes.includes(type)) {
+    console.error('PATCH /api/products/:id: Invalid type', { type });
+    return res.status(400).json({ error: `Invalid product type. Must be one of: ${validProductTypes.join(', ')}` });
+  }
+  if ((type === 'Seltzer' || type === 'Merchandise') && style !== 'Other') {
+    console.error('PATCH /api/products/:id: Invalid style for type', { type, style });
+    return res.status(400).json({ error: 'Style must be "Other" for Seltzer or Merchandise' });
+  }
+
+  if (!Array.isArray(packageTypes)) {
+    console.error('PATCH /api/products/:id: Invalid packageTypes', { packageTypes });
+    return res.status(400).json({ error: 'packageTypes must be an array' });
+  }
+
+  for (const pkg of packageTypes) {
+    if (!pkg.type || !pkg.price || pkg.isKegDepositItem === undefined) {
+      console.error('PATCH /api/products/:id: Invalid package type entry', { pkg });
+      return res.status(400).json({ error: 'Each package type must have type, price, and isKegDepositItem' });
+    }
+    if (!packageVolumes[pkg.type]) {
+      console.error('PATCH /api/products/:id: Invalid package type', { type: pkg.type });
+      return res.status(400).json({ error: `Invalid package type: ${pkg.type}. Must be one of: ${Object.keys(packageVolumes).join(', ')}` });
+    }
+    if (isNaN(parseFloat(pkg.price)) || parseFloat(pkg.price) < 0) {
+      console.error('PATCH /api/products/:id: Invalid price', { price: pkg.price });
+      return res.status(400).json({ error: `Invalid price for ${pkg.type}: ${pkg.price}` });
+    }
+  }
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION', (err) => {
+      if (err) {
+        console.error('PATCH /api/products/:id: Begin transaction error:', err);
+        return res.status(500).json({ error: `Failed to start transaction: ${err.message}` });
+      }
+
+      db.run(
+        `UPDATE products SET name = ?, abbreviation = ?, enabled = ?, priority = ?, class = ?, type = ?, style = ?, abv = ?, ibu = ? WHERE id = ?`,
+        [name, abbreviation, enabled ? 1 : 0, priority, prodClass || null, type, style, abv, ibu, id],
+        function (err) {
+          if (err) {
+            db.run('ROLLBACK');
+            console.error('PATCH /api/products/:id: Update product error:', err);
+            return res.status(500).json({ error: `Failed to update product: ${err.message}` });
+          }
+          if (this.changes === 0) {
+            db.run('ROLLBACK');
+            console.error('PATCH /api/products/:id: Product not found', { id });
+            return res.status(404).json({ error: 'Product not found' });
+          }
+
+          db.run('DELETE FROM product_package_types WHERE productId = ?', [id], (err) => {
+            if (err) {
+              db.run('ROLLBACK');
+              console.error('PATCH /api/products/:id: Delete package types error:', err);
+              return res.status(500).json({ error: `Failed to delete package types: ${err.message}` });
+            }
+
+            let remaining = packageTypes.length;
+            if (remaining === 0) {
+              updateItemsAndCommit();
+              return;
+            }
+
+            packageTypes.forEach((pkg) => {
+              db.run(
+                `INSERT INTO product_package_types (productId, type, price, isKegDepositItem) VALUES (?, ?, ?, ?)`,
+                [id, pkg.type, pkg.price, pkg.isKegDepositItem ? 1 : 0],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('PATCH /api/products/:id: Insert package type error:', err);
+                    return res.status(500).json({ error: `Failed to insert package type ${pkg.type}: ${err.message}` });
+                  }
+                  if (--remaining === 0) {
+                    updateItemsAndCommit();
+                  }
+                }
+              );
+            });
+
+            function updateItemsAndCommit() {
+              const itemInserts = packageTypes.map((pkg) => ({
+                name: `${name} ${pkg.type}`,
+                type: 'Finished Goods',
+                enabled: 1,
+              }));
+
+              let itemRemaining = itemInserts.length;
+              if (itemRemaining === 0) {
+                commitTransaction();
+                return;
+              }
+
+              itemInserts.forEach((item) => {
+                db.run(
+                  `INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)`,
+                  [item.name, item.type, item.enabled],
+                  (err) => {
+                    if (err) {
+                      db.run('ROLLBACK');
+                      console.error('PATCH /api/products/:id: Insert item error:', err);
+                      return res.status(500).json({ error: `Failed to insert item ${item.name}: ${err.message}` });
+                    }
+                    if (--itemRemaining === 0) {
+                      commitTransaction();
+                    }
+                  }
+                );
+              });
+
+              function commitTransaction() {
+                db.run('COMMIT', (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('PATCH /api/products/:id: Commit transaction error:', err);
+                    return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
+                  }
+
+                  db.get('SELECT * FROM products WHERE id = ?', [id], (err, product) => {
+                    if (err) {
+                      console.error('PATCH /api/products/:id: Fetch product error:', err);
+                      return res.status(500).json({ error: `Failed to fetch product: ${err.message}` });
+                    }
+
+                    db.all('SELECT type, price, isKegDepositItem FROM product_package_types WHERE productId = ?', [id], (err, packageTypes) => {
+                      if (err) {
+                        console.error('PATCH /api/products/:id: Fetch package types error:', err);
+                        return res.status(500).json({ error: `Failed to fetch package types: ${err.message}` });
+                      }
+
+                      console.log('PATCH /api/products/:id: Success', { id, product, packageTypes });
+                      res.json({ ...product, packageTypes });
+                    });
+                  });
+                });
+              }
+            }
+          });
+        }
+      );
+    });
   });
 });
 
