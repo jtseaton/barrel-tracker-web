@@ -7,10 +7,11 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 interface Ingredient {
   itemName: string;
   quantity: number;
+  unit: string;
 }
 
 interface PackageType {
-  type: string; // e.g., "1/2 BBL Keg", "750ml Bottle"
+  type: string;
   price: string;
   isKegDepositItem: boolean;
 }
@@ -21,9 +22,7 @@ const ProductDetails: React.FC = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
-  const [packageTypes, setPackageTypes] = useState<PackageType[]>([
-    { type: '', price: '0.00', isKegDepositItem: false },
-  ]);
+  const [packageTypes, setPackageTypes] = useState<PackageType[]>([]);
   const [availablePackageTypes, setAvailablePackageTypes] = useState<{ name: string; volume: number; enabled: number }[]>([]);
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [newRecipe, setNewRecipe] = useState<{
@@ -35,7 +34,7 @@ const ProductDetails: React.FC = () => {
   }>({
     name: '',
     productId: parseInt(id || '0', 10),
-    ingredients: [{ itemName: '', quantity: 0 }],
+    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
     quantity: 0,
     unit: 'gallons',
   });
@@ -49,7 +48,7 @@ const ProductDetails: React.FC = () => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         setProduct(data);
-        setPackageTypes(data.packageTypes || [{ type: '', price: '0.00', isKegDepositItem: false }]);
+        setPackageTypes(data.packageTypes || []);
       } catch (err: any) {
         setError('Failed to fetch product: ' + err.message);
       }
@@ -102,8 +101,10 @@ const ProductDetails: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/api/products${id ? `/${id}` : ''}`, {
-        method: id ? 'PATCH' : 'POST',
+      const method = id ? 'PATCH' : 'POST';
+      const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...product, packageTypes }),
       });
@@ -111,7 +112,18 @@ const ProductDetails: React.FC = () => {
         const text = await res.text();
         throw new Error(`Failed to save product: ${text}`);
       }
-      setSuccessMessage('Product saved successfully');
+      const savedProduct = await res.json();
+
+      for (const pt of packageTypes) {
+        const itemName = `${product.name} ${pt.type}`;
+        await fetch(`${API_BASE_URL}/api/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ name: itemName, type: 'Finished Goods', enabled: 1 }),
+        });
+      }
+
+      setSuccessMessage('Product and items saved successfully');
       setTimeout(() => {
         setSuccessMessage(null);
         navigate('/products');
@@ -128,7 +140,7 @@ const ProductDetails: React.FC = () => {
       !newRecipe.productId ||
       newRecipe.quantity <= 0 ||
       !newRecipe.unit ||
-      newRecipe.ingredients.some((ing) => !ing.itemName || ing.quantity <= 0)
+      newRecipe.ingredients.some((ing) => !ing.itemName || ing.quantity <= 0 || !ing.unit)
     ) {
       setError('Recipe name, product, quantity, unit, and valid ingredients are required');
       return;
@@ -146,7 +158,7 @@ const ProductDetails: React.FC = () => {
       const addedRecipe = await res.json();
       setRecipes([...recipes, addedRecipe]);
       setShowAddRecipeModal(false);
-      setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0 }], quantity: 0, unit: 'gallons' });
+      setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'gallons' });
       setError(null);
     } catch (err: any) {
       setError('Failed to add recipe: ' + err.message);
@@ -156,7 +168,7 @@ const ProductDetails: React.FC = () => {
   const addIngredient = () => {
     setNewRecipe({
       ...newRecipe,
-      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0 }],
+      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0, unit: 'lbs' }],
     });
   };
 
@@ -232,8 +244,8 @@ const ProductDetails: React.FC = () => {
               <label style={{ fontWeight: 'bold', color: '#555' }}>Enabled:</label>
               <input
                 type="checkbox"
-                checked={product?.enabled ?? true}
-                onChange={(e) => setProduct({ ...product!, enabled: e.target.checked })}
+                checked={product?.enabled === 1}
+                onChange={(e) => setProduct({ ...product!, enabled: e.target.checked ? 1 : 0 })}
                 style={{ marginLeft: '10px' }}
               />
             </div>
@@ -379,7 +391,7 @@ const ProductDetails: React.FC = () => {
                       {recipe.ingredients && recipe.ingredients.length > 0 ? (
                         <ul style={{ margin: 0, paddingLeft: '20px' }}>
                           {recipe.ingredients.map((ing, idx) => (
-                            <li key={idx}>{ing.itemName}: {ing.quantity}</li>
+                            <li key={idx}>{ing.itemName}: {ing.quantity} {ing.unit}</li>
                           ))}
                         </ul>
                       ) : (
@@ -591,6 +603,23 @@ const ProductDetails: React.FC = () => {
                         fontSize: '16px',
                       }}
                     />
+                    <select
+                      value={ingredient.unit}
+                      onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
+                      style={{
+                        width: '100px',
+                        padding: '10px',
+                        border: '1px solid #CCCCCC',
+                        borderRadius: '4px',
+                        fontSize: '16px',
+                      }}
+                    >
+                      <option value="lbs">lbs</option>
+                      <option value="kg">kg</option>
+                      <option value="oz">oz</option>
+                      <option value="gal">gal</option>
+                      <option value="l">l</option>
+                    </select>
                     <button
                       onClick={() => removeIngredient(index)}
                       style={{
@@ -638,7 +667,7 @@ const ProductDetails: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddRecipeModal(false);
-                  setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0 }], quantity: 0, unit: 'gallons' });
+                  setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'gallons' });
                   setError(null);
                 }}
                 style={{
