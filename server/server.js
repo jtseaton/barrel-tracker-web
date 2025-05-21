@@ -967,8 +967,8 @@ app.post('/api/sales-orders', (req, res) => {
 
 app.patch('/api/sales-orders/:orderId', (req, res) => {
   const { orderId } = req.params;
-  const { customerId, poNumber, items } = req.body;
-  console.log('PATCH /api/sales-orders/:orderId: Received request', { orderId, customerId, poNumber, items });
+  const { customerId, poNumber, items, status } = req.body;
+  console.log('PATCH /api/sales-orders/:orderId: Received request', { orderId, customerId, poNumber, items, status });
   if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
     console.error('PATCH /api/sales-orders/:orderId: Missing required fields', { customerId, items });
     return res.status(400).json({ error: 'customerId and items are required' });
@@ -989,7 +989,7 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
         console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
         return res.status(500).json({ error: err.message });
       }
-      if (!order) {
+      if (!order && status !== 'Approved') {
         console.error('PATCH /api/sales-orders/:orderId: Order not found or not in Draft', { orderId });
         return res.status(404).json({ error: 'Order not found or not in Draft status' });
       }
@@ -1001,9 +1001,10 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
 
+          // Update sales order
           db.run(
-            'UPDATE sales_orders SET customerId = ?, poNumber = ? WHERE orderId = ?',
-            [customerId, poNumber || null, orderId],
+            'UPDATE sales_orders SET customerId = ?, poNumber = ?, status = ? WHERE orderId = ?',
+            [customerId, poNumber || null, status || 'Draft', orderId],
             (err) => {
               if (err) {
                 db.run('ROLLBACK');
@@ -1011,6 +1012,7 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                 return res.status(500).json({ error: err.message });
               }
 
+              // Delete existing items
               db.run('DELETE FROM sales_order_items WHERE orderId = ?', [orderId], (err) => {
                 if (err) {
                   db.run('ROLLBACK');
@@ -1018,8 +1020,9 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                   return res.status(500).json({ error: err.message });
                 }
 
+                // Insert updated items
                 let remaining = items.length;
-                const errors = []; // Removed TypeScript annotation
+                const errors = [];
                 items.forEach((item, index) => {
                   const { itemName, quantity, unit, price, hasKegDeposit } = item;
                   if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
@@ -1050,42 +1053,157 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                     return res.status(400).json({ error: errors.join('; ') });
                   }
 
-                  db.run('COMMIT', (err) => {
-                    if (err) {
-                      console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
-                      return res.status(500).json({ error: 'Failed to commit transaction' });
-                    }
+                  // If status is Approved, create an invoice
+                  if (status === 'Approved') {
+                    db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                      if (err) {
+                        db.run('ROLLBACK');
+                        console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                        return res.status(500).json({ error: err.message });
+                      }
+                      const kegDepositPrice = setting ? parseFloat(setting.value) : 0.00;
 
-                    db.get(
-                      `SELECT so.*, c.name AS customerName
-                       FROM sales_orders so
-                       JOIN customers c ON so.customerId = c.customerId
-                       WHERE so.orderId = ?`,
-                      [orderId],
-                      (err, order) => {
-                        if (err) {
-                          console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
-                          return res.status(500).json({ error: err.message });
+                      // Calculate totals
+                      let subtotal = 0;
+                      let kegDepositTotal = 0;
+                      let kegDepositCount = 0;
+                      items.forEach(item => {
+                        subtotal += parseFloat(item.price) * item.quantity;
+                        if (item.hasKegDeposit) {
+                          kegDepositCount += item.quantity;
+                          kegDepositTotal += item.quantity * kegDepositPrice;
                         }
-                        db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                      });
+                      const total = subtotal + kegDepositTotal;
+
+                      // Insert invoice
+                      db.run(
+                        'INSERT INTO invoices (orderId, customerId, status, createdDate, total) VALUES (?, ?, ?, ?, ?)',
+                        [orderId, customerId, 'Draft', new Date().toISOString().split('T')[0], total.toFixed(2)],
+                        function (err) {
                           if (err) {
-                            console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
+                            db.run('ROLLBACK');
+                            console.error('PATCH /api/sales-orders/:orderId: Insert invoice error:', err);
                             return res.status(500).json({ error: err.message });
                           }
-                          db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                          const invoiceId = this.lastID;
+
+                          // Insert invoice items
+                          let invoiceItemsRemaining = items.length + (kegDepositCount > 0 ? 1 : 0);
+                          items.forEach(item => {
+                            db.run(
+                              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                              [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                              (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('PATCH /api/sales-orders/:orderId: Insert invoice item error:', err);
+                                  return res.status(500).json({ error: err.message });
+                                }
+                                if (--invoiceItemsRemaining === 0) commit();
+                              }
+                            );
+                          });
+
+                          // Insert keg deposit line
+                          if (kegDepositCount > 0) {
+                            db.run(
+                              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                              [invoiceId, 'Keg Deposit', kegDepositCount, 'Units', kegDepositPrice.toFixed(2), 0],
+                              (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('PATCH /api/sales-orders/:orderId: Insert keg deposit item error:', err);
+                                  return res.status(500).json({ error: err.message });
+                                }
+                                if (--invoiceItemsRemaining === 0) commit();
+                              }
+                            );
+                          }
+
+                          function commit() {
+                            db.run('COMMIT', (err) => {
+                              if (err) {
+                                db.run('ROLLBACK');
+                                console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
+                                return res.status(500).json({ error: 'Failed to commit transaction' });
+                              }
+
+                              // Fetch updated order
+                              db.get(
+                                `SELECT so.*, c.name AS customerName
+                                 FROM sales_orders so
+                                 JOIN customers c ON so.customerId = c.customerId
+                                 WHERE so.orderId = ?`,
+                                [orderId],
+                                (err, order) => {
+                                  if (err) {
+                                    console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
+                                    return res.status(500).json({ error: err.message });
+                                  }
+                                  db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                                    if (err) {
+                                      console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
+                                      return res.status(500).json({ error: err.message });
+                                    }
+                                    db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                                      if (err) {
+                                        console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                                        return res.status(500).json({ error: err.message });
+                                      }
+                                      order.items = items;
+                                      order.keg_deposit_price = setting ? setting.value : '0.00';
+                                      order.invoiceId = invoiceId; // Include invoiceId
+                                      console.log('PATCH /api/sales-orders/:orderId: Success', order);
+                                      res.json(order);
+                                    });
+                                  });
+                                }
+                              );
+                            });
+                          }
+                        }
+                      );
+                    });
+                  } else {
+                    // Non-Approved case: Commit and return order
+                    db.run('COMMIT', (err) => {
+                      if (err) {
+                        console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
+                        return res.status(500).json({ error: 'Failed to commit transaction' });
+                      }
+
+                      db.get(
+                        `SELECT so.*, c.name AS customerName
+                         FROM sales_orders so
+                         JOIN customers c ON so.customerId = c.customerId
+                         WHERE so.orderId = ?`,
+                        [orderId],
+                        (err, order) => {
+                          if (err) {
+                            console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
+                            return res.status(500).json({ error: err.message });
+                          }
+                          db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
                             if (err) {
-                              console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                              console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
                               return res.status(500).json({ error: err.message });
                             }
-                            order.items = items;
-                            order.keg_deposit_price = setting ? setting.value : '0.00';
-                            console.log('PATCH /api/sales-orders/:orderId: Success', order);
-                            res.json(order);
+                            db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                              if (err) {
+                                console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                                return res.status(500).json({ error: err.message });
+                              }
+                              order.items = items;
+                              order.keg_deposit_price = setting ? setting.value : '0.00';
+                              console.log('PATCH /api/sales-orders/:orderId: Success', order);
+                              res.json(order);
+                            });
                           });
-                        });
-                      }
-                    );
-                  });
+                        }
+                      );
+                    });
+                  }
                 }
               });
             }
