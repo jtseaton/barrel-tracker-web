@@ -125,11 +125,9 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
       let productName: string = '';
 
       if (parts.length >= 3 && parts[parts.length - 1].toLowerCase() === 'keg') {
-        // Handle types like "1/2 BBL Keg"
-        packageType = parts.slice(-3).join(' ').replace(/\s*\/\s*/, '/'); // e.g., "1/2 BBL Keg"
-        productName = parts.slice(0, -3).join(' '); // e.g., "Hazy Train"
+        packageType = parts.slice(-3).join(' ').replace(/\s*\/\s*/, '/');
+        productName = parts.slice(0, -3).join(' ');
       } else {
-        // Handle other types (e.g., "750ml Bottle")
         packageType = parts.slice(-2).join(' ').replace(/\s*\/\s*/, '/');
         productName = parts.slice(0, -2).join(' ');
       }
@@ -141,18 +139,17 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         if (pkg) {
           updatedItems[index].price = pkg.price;
           updatedItems[index].hasKegDeposit = !!pkg.isKegDepositItem;
-          updatedItems[index].unit = 'Units'; // Standardize unit
+          updatedItems[index].unit = 'Units';
         } else {
           updatedItems[index].price = '0.00';
           updatedItems[index].hasKegDeposit = false;
           updatedItems[index].unit = 'Units';
         }
       } else {
-        // Fallback to inventory if product not found
         const invItem = inventory.find(i => i.identifier === value && i.type === MaterialType.FinishedGoods);
         if (invItem && invItem.price) {
           updatedItems[index].price = invItem.price;
-          updatedItems[index].hasKegDeposit = !!invItem.isKegDepositItem;
+          updatedItems[index].hasKegDeposit = invItem.isKegDepositItem === 1; // Fixed: Safe comparison
           updatedItems[index].unit = 'Units';
         } else {
           updatedItems[index].price = '0.00';
@@ -161,10 +158,8 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         }
       }
     } else if (field === 'price' && typeof value === 'string') {
-      // Allow manual price override
       updatedItems[index].price = value;
     } else if (field === 'hasKegDeposit' && typeof value === 'boolean') {
-      // Allow manual keg deposit override
       updatedItems[index].hasKegDeposit = value;
     }
 
@@ -204,7 +199,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             quantity: item.quantity,
             unit: item.unit,
             price: item.price,
-            hasKegDeposit: item.hasKegDeposit
+            hasKegDeposit: item.hasKegDeposit ? 1 : 0 // Convert boolean to number for backend
           }))
         })
       });
@@ -218,6 +213,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         data.items.map((item: SalesOrderItem) => ({
           ...item,
           price: item.price || '0.00',
+          hasKegDeposit: !!item.hasKegDeposit // Convert number to boolean
         })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]
       );
       setSuccessMessage(`Sales order ${orderId ? 'updated' : 'created'} successfully`);
@@ -232,11 +228,26 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   };
 
   const handleApprove = async () => {
+    if (!salesOrder.orderId || !salesOrder.customerId || !items.length) {
+      setError('Cannot approve: Missing order ID, customer, or items');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/sales-orders/${salesOrder.orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Approved' }),
+        body: JSON.stringify({
+          customerId: salesOrder.customerId,
+          poNumber: salesOrder.poNumber || null,
+          items: items.map(item => ({
+            itemName: item.itemName,
+            quantity: item.quantity,
+            unit: item.unit,
+            price: item.price,
+            hasKegDeposit: item.hasKegDeposit ? 1 : 0 // Convert boolean to number for backend
+          })),
+          status: 'Approved'
+        })
       });
       if (!res.ok) {
         const text = await res.text();
