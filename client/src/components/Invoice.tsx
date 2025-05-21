@@ -31,6 +31,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
           data.items.map((item: InvoiceItem) => ({
             ...item,
             price: item.price || '0.00',
+            hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
           }))
         );
       } catch (err: any) {
@@ -41,7 +42,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
   }, [invoiceId]);
 
   const addItem = () => {
-    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
+    setItems([...items, { id: 0, itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
   };
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
@@ -51,8 +52,10 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
       const selectedItem = inventory.find((inv) => inv.identifier === value);
       if (selectedItem) {
         updatedItems[index].price = selectedItem.price || '0.00';
-        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem || false;
+        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem === 1; // Fixed: Convert number to boolean
       }
+    } else if (field === 'hasKegDeposit' && typeof value === 'boolean') {
+      updatedItems[index].hasKegDeposit = value;
     }
     setItems(updatedItems);
   };
@@ -80,7 +83,12 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
       const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({
+          items: items.map(item => ({
+            ...item,
+            hasKegDeposit: item.hasKegDeposit ? 1 : 0, // Convert boolean to number for backend
+          }))
+        }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -117,6 +125,13 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
               keg_deposit_total: data.keg_deposit_total,
             }
           : null
+      );
+      setItems(
+        data.items.map((item: InvoiceItem) => ({
+          ...item,
+          price: item.price || '0.00',
+          hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
+        }))
       );
       setSuccessMessage('Invoice posted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -336,7 +351,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id || `${item.itemName}-${item.quantity}`}>
                 <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.itemName}</td>
                 <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.quantity}</td>
                 <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.unit}</td>
