@@ -17,10 +17,17 @@ interface PackageType {
   isKegDepositItem: boolean;
 }
 
+interface Product {
+  id: number;
+  name: string;
+  packageTypes: PackageType[];
+}
+
 const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ inventory }) => {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId: string }>();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [salesOrder, setSalesOrder] = useState<Partial<SalesOrder>>({
     customerId: 0,
     poNumber: '',
@@ -34,16 +41,16 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState<NewCustomer>({ name: '', email: '', address: '' });
 
-  const fetchProductByName = async (productName: string) => {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/products?name=${encodeURIComponent(productName)}`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to fetch product: HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  const fetchProductByName = async (productName: string): Promise<Product | null> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/products?name=${encodeURIComponent(productName)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch product: HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return Array.isArray(data) && data.length > 0 ? data[0] : null;
     } catch (err) {
       console.error('Fetch product error:', err);
       return null;
@@ -53,14 +60,27 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/customers`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) {
-          throw new Error(`Failed to fetch customers: HTTP ${res.status}`);
+        // Fetch customers
+        const customerRes = await fetch(`${API_BASE_URL}/api/customers`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!customerRes.ok) {
+          throw new Error(`Failed to fetch customers: HTTP ${customerRes.status}`);
         }
-        const data = await res.json();
-        setCustomers(data);
+        const customerData = await customerRes.json();
+        setCustomers(customerData);
+
+        // Fetch products
+        const productRes = await fetch(`${API_BASE_URL}/api/products`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!productRes.ok) {
+          throw new Error(`Failed to fetch products: HTTP ${productRes.status}`);
+        }
+        const productData = await productRes.json();
+        setProducts(productData);
       } catch (err: any) {
-        setError('Failed to load customers: ' + err.message);
+        setError('Failed to load data: ' + err.message);
       }
     };
     fetchData();
@@ -95,30 +115,55 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   };
 
   const updateItem = async (index: number, field: keyof SalesOrderItem, value: any) => {
-  const updatedItems = [...items];
-  updatedItems[index] = { ...updatedItems[index], [field]: value };
-  if (field === 'itemName') {
-    const identifier = value;
-    const parts = identifier.split(' ');
-    const packageType = parts.pop();
-    const productName = parts.join(' ');
-    const product = await fetchProductByName(productName);
-    if (product && packageType) {
-      const pkg = product.packageTypes?.find((pt: PackageType) => pt.type === packageType);
-      if (pkg) {
-        updatedItems[index].price = pkg.price;
-        updatedItems[index].hasKegDeposit = pkg.isKegDepositItem;
+    const updatedItems = [...items];
+    updatedItems[index] = { ...updatedItems[index], [field]: value };
+
+    if (field === 'itemName' && typeof value === 'string') {
+      // Split itemName into product name and package type
+      const parts = value.trim().split(' ');
+      let packageType: string = '';
+      let productName: string = '';
+
+      if (parts.length >= 3 && parts[parts.length - 1].toLowerCase() === 'keg') {
+        // Handle types like "1/2 BBL Keg"
+        packageType = parts.slice(-3).join(' ').replace(/\s*\/\s*/, '/'); // e.g., "1/2 BBL Keg"
+        productName = parts.slice(0, -3).join(' '); // e.g., "Hazy Train"
       } else {
-        updatedItems[index].price = '0.00';
-        updatedItems[index].hasKegDeposit = false;
+        // Handle other types (e.g., "750ml Bottle")
+        packageType = parts.slice(-2).join(' ').replace(/\s*\/\s*/, '/');
+        productName = parts.slice(0, -2).join(' ');
       }
-    } else {
-      updatedItems[index].price = '0.00';
-      updatedItems[index].hasKegDeposit = false;
+
+      // Find product and package type
+      const product = products.find(p => p.name === productName);
+      if (product && packageType) {
+        const pkg = product.packageTypes?.find(pt => pt.type === packageType);
+        if (pkg) {
+          updatedItems[index].price = pkg.price;
+          updatedItems[index].hasKegDeposit = !!pkg.isKegDepositItem;
+          updatedItems[index].unit = 'Units'; // Standardize unit
+        } else {
+          updatedItems[index].price = '0.00';
+          updatedItems[index].hasKegDeposit = false;
+          updatedItems[index].unit = 'Units';
+        }
+      } else {
+        // Fallback to inventory if product not found
+        const invItem = inventory.find(i => i.identifier === value && i.type === MaterialType.FinishedGoods);
+        if (invItem && invItem.price) {
+          updatedItems[index].price = invItem.price;
+          updatedItems[index].hasKegDeposit = !!invItem.isKegDepositItem;
+          updatedItems[index].unit = 'Units';
+        } else {
+          updatedItems[index].price = '0.00';
+          updatedItems[index].hasKegDeposit = false;
+          updatedItems[index].unit = 'Units';
+        }
+      }
     }
-  }
-  setItems(updatedItems);
-};
+
+    setItems(updatedItems);
+  };
 
   const removeItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
@@ -131,20 +176,26 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         (item) =>
           !item.itemName ||
           item.quantity <= 0 ||
-          !item.unit ||
-          !item.price ||
-          isNaN(parseFloat(item.price)) ||
-          parseFloat(item.price) < 0
+          !item.unit
       )
     ) {
-      setError('Customer, valid items, and prices are required');
+      setError('Customer and valid items are required');
       return;
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/sales-orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ...salesOrder, items }),
+        body: JSON.stringify({
+          ...salesOrder,
+          items: items.map(item => ({
+            itemName: item.itemName,
+            quantity: item.quantity,
+            unit: item.unit,
+            hasKegDeposit: item.hasKegDeposit
+            // Omit price to let backend fetch it
+          }))
+        })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -153,7 +204,10 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
       const data = await res.json();
       setSalesOrder(data);
       setItems(
-        data.items || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]
+        data.items.map((item: SalesOrderItem) => ({
+          ...item,
+          price: item.price || '0.00',
+        })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]
       );
       setSuccessMessage('Sales order created successfully');
       setTimeout(() => {
@@ -297,13 +351,11 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                   disabled={salesOrder.status === 'Approved'}
                 >
                   <option value="">Select Item</option>
-                  {inventory
-                    .filter((i) => i.type === MaterialType.FinishedGoods || i.type === MaterialType.Marketing)
-                    .map((inv) => (
-                      <option key={inv.identifier} value={inv.identifier}>
-                        {inv.identifier}
-                      </option>
-                    ))}
+                  {products.map(p => p.packageTypes.map(pt => (
+                    <option key={`${p.name} ${pt.type}`} value={`${p.name} ${pt.type}`}>
+                      {`${p.name} ${pt.type}`}
+                    </option>
+                  )))}
                 </select>
                 <input
                   type="number"
@@ -331,7 +383,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                   onChange={(e) => updateItem(index, 'price', e.target.value)}
                   placeholder="Price"
                   style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                  disabled={salesOrder.status === 'Approved'}
+                  disabled // Backend controls price
                 />
                 <label>
                   <input
