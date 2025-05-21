@@ -621,6 +621,9 @@ db.serialize(() => {
       }
     });
 });
+db.all('SELECT * FROM products WHERE name = "Hazy Train"', (err, rows) => console.log('Products:', rows));
+db.all('SELECT * FROM product_package_types WHERE productId IN (SELECT id FROM products WHERE name = "Hazy Train")', (err, rows) => console.log('Package types for Hazy Train:', rows));
+db.all('SELECT * FROM items WHERE name = "Hazy Train 1/2 BBL Keg"', (err, rows) => console.log('Items:', rows));
 
 app.post('/api/customers', (req, res) => {
   const { name, email, address, phone, contactPerson, licenseNumber, notes, enabled } = req.body;
@@ -835,7 +838,7 @@ app.post('/api/sales-orders', (req, res) => {
         let remaining = items.length;
         const errors = [];
         items.forEach((item, index) => {
-          const { itemName, quantity, unit, hasKegDeposit } = item;
+          const { itemName, quantity, unit, price, hasKegDeposit } = item;
           if (!itemName || quantity <= 0 || !unit) {
             errors.push(`Invalid item at index ${index}: itemName, quantity, and unit are required`);
             remaining--;
@@ -843,42 +846,78 @@ app.post('/api/sales-orders', (req, res) => {
             return;
           }
 
-          db.get(
-            `SELECT ppt.price, ppt.isKegDepositItem 
-             FROM product_package_types ppt 
-             JOIN products p ON ppt.productId = p.id 
-             WHERE p.name = ? AND ppt.type = ?`,
-            [itemName.split(' ').slice(0, -2).join(' '), itemName.split(' ').slice(-2).join(' ')],
-            (err, priceRow) => {
-              if (err) {
-                console.error('POST /api/sales-orders: Fetch price error:', err);
-                errors.push(`Failed to fetch price for ${itemName}: ${err.message}`);
-                remaining--;
-                if (remaining === 0) finish();
-                return;
-              }
-              if (!priceRow) {
-                console.error('POST /api/sales-orders: Price not found', { itemName });
-                errors.push(`Price not found for ${itemName}. Ensure it is defined in product package types.`);
-                remaining--;
-                if (remaining === 0) finish();
-                return;
-              }
+          // Normalize itemName for parsing
+          const parts = itemName.trim().split(' ');
+          const packageType = parts.slice(-2).join(' ').replace(/\s*\/\s*/, '/'); // Normalize slashes
+          const productName = parts.slice(0, -2).join(' ');
+          console.log('POST /api/sales-orders: Processing item', { itemName, productName, packageType });
 
-              db.run(
-                'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                [orderId, itemName, quantity, unit, priceRow.price, hasKegDeposit ? 1 : 0],
-                (err) => {
-                  if (err) {
-                    console.error('POST /api/sales-orders: Insert item error:', err);
-                    errors.push(`Failed to insert item ${itemName}: ${err.message}`);
-                  }
+          if (price && !isNaN(parseFloat(price)) && parseFloat(price) >= 0) {
+            // Use provided price if valid
+            insertItem(price, hasKegDeposit);
+          } else {
+            // Try product_package_types first
+            db.get(
+              `SELECT ppt.price, ppt.isKegDepositItem 
+               FROM product_package_types ppt 
+               JOIN products p ON ppt.productId = p.id 
+               WHERE p.name = ? AND ppt.type = ?`,
+              [productName, packageType],
+              (err, priceRow) => {
+                if (err) {
+                  console.error('POST /api/sales-orders: Fetch price error:', err);
+                  errors.push(`Failed to fetch price for ${itemName}: ${err.message}`);
                   remaining--;
                   if (remaining === 0) finish();
+                  return;
                 }
-              );
-            }
-          );
+                if (priceRow) {
+                  insertItem(priceRow.price, hasKegDeposit ?? priceRow.isKegDepositItem);
+                } else {
+                  // Fallback to inventory
+                  console.log('POST /api/sales-orders: Falling back to inventory for price', { itemName });
+                  db.get(
+                    `SELECT price, isKegDepositItem 
+                     FROM inventory 
+                     WHERE identifier = ? AND type = 'Finished Goods'`,
+                    [itemName],
+                    (err, invRow) => {
+                      if (err) {
+                        console.error('POST /api/sales-orders: Fetch inventory price error:', err);
+                        errors.push(`Failed to fetch inventory price for ${itemName}: ${err.message}`);
+                        remaining--;
+                        if (remaining === 0) finish();
+                        return;
+                      }
+                      if (invRow) {
+                        insertItem(invRow.price, hasKegDeposit ?? invRow.isKegDepositItem);
+                      } else {
+                        console.error('POST /api/sales-orders: Price not found', { itemName, productName, packageType });
+                        errors.push(`Price not found for ${itemName}. Ensure it is defined in product package types or inventory.`);
+                        remaining--;
+                        if (remaining === 0) finish();
+                      }
+                    }
+                  );
+                }
+              }
+            );
+          }
+
+          function insertItem(itemPrice, itemHasKegDeposit) {
+            db.run(
+              'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+              [orderId, itemName, quantity, unit, itemPrice, itemHasKegDeposit ? 1 : 0],
+              (err) => {
+                if (err) {
+                  console.error('POST /api/sales-orders: Insert item error:', err);
+                  errors.push(`Failed to insert item ${itemName}: ${err.message}`);
+                }
+                remaining--;
+                if (remaining === 0) finish();
+              }
+            );
+          }
         });
 
         function finish() {
@@ -904,9 +943,16 @@ app.post('/api/sales-orders', (req, res) => {
                   console.error('POST /api/sales-orders: Fetch items error:', err);
                   return res.status(500).json({ error: err.message });
                 }
-                order.items = items;
-                console.log('POST /api/sales-orders: Success', order);
-                res.json(order);
+                db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                  if (err) {
+                    console.error('POST /api/sales-orders: Fetch keg_deposit_price error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  order.items = items;
+                  order.keg_deposit_price = setting ? setting.value : '0.00';
+                  console.log('POST /api/sales-orders: Success', order);
+                  res.json(order);
+                });
               });
             }
           );
