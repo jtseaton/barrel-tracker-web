@@ -160,6 +160,12 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
           updatedItems[index].unit = 'Units';
         }
       }
+    } else if (field === 'price' && typeof value === 'string') {
+      // Allow manual price override
+      updatedItems[index].price = value;
+    } else if (field === 'hasKegDeposit' && typeof value === 'boolean') {
+      // Allow manual keg deposit override
+      updatedItems[index].hasKegDeposit = value;
     }
 
     setItems(updatedItems);
@@ -176,15 +182,20 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         (item) =>
           !item.itemName ||
           item.quantity <= 0 ||
-          !item.unit
+          !item.unit ||
+          !item.price ||
+          isNaN(parseFloat(item.price)) ||
+          parseFloat(item.price) < 0
       )
     ) {
-      setError('Customer and valid items are required');
+      setError('Customer and valid items with prices are required');
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/api/sales-orders`, {
-        method: 'POST',
+      const method = orderId ? 'PATCH' : 'POST';
+      const url = orderId ? `${API_BASE_URL}/api/sales-orders/${orderId}` : `${API_BASE_URL}/api/sales-orders`;
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           ...salesOrder,
@@ -192,8 +203,8 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             itemName: item.itemName,
             quantity: item.quantity,
             unit: item.unit,
+            price: item.price,
             hasKegDeposit: item.hasKegDeposit
-            // Omit price to let backend fetch it
           }))
         })
       });
@@ -209,10 +220,10 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
           price: item.price || '0.00',
         })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]
       );
-      setSuccessMessage('Sales order created successfully');
+      setSuccessMessage(`Sales order ${orderId ? 'updated' : 'created'} successfully`);
       setTimeout(() => {
         setSuccessMessage(null);
-        navigate(`/sales-orders/${data.orderId}`);
+        navigate(`/sales-orders/${data.orderId || orderId}`);
       }, 2000);
       setError(null);
     } catch (err: any) {
@@ -378,19 +389,21 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                   <option value="Cans">Cans</option>
                 </select>
                 <input
-                  type="text"
-                  value={item.price}
+                  type="number"
+                  value={parseFloat(item.price)}
                   onChange={(e) => updateItem(index, 'price', e.target.value)}
                   placeholder="Price"
+                  step="0.01"
+                  min="0"
                   style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                  disabled // Backend controls price
+                  disabled={salesOrder.status === 'Approved'}
                 />
                 <label>
                   <input
                     type="checkbox"
                     checked={item.hasKegDeposit}
                     onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
-                    disabled={salesOrder.status === 'Approved' || (selectedItem && selectedItem.isKegDepositItem)}
+                    disabled={salesOrder.status === 'Approved'}
                   />
                   Keg Deposit
                 </label>
@@ -428,21 +441,20 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         </div>
       </div>
       <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-        {!orderId && (
-          <button
-            onClick={handleSave}
-            style={{
-              backgroundColor: '#2196F3',
-              color: '#fff',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Save Sales Order
-          </button>
-        )}
+        <button
+          onClick={handleSave}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+          disabled={salesOrder.status === 'Approved'}
+        >
+          Save Sales Order
+        </button>
         {salesOrder.orderId && salesOrder.status !== 'Approved' && (
           <button
             onClick={handleApprove}

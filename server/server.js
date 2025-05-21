@@ -967,64 +967,133 @@ app.post('/api/sales-orders', (req, res) => {
 
 app.patch('/api/sales-orders/:orderId', (req, res) => {
   const { orderId } = req.params;
-  const { status } = req.body;
-  if (!status) {
-    return res.status(400).json({ error: 'Status is required' });
+  const { customerId, poNumber, items } = req.body;
+  console.log('PATCH /api/sales-orders/:orderId: Received request', { orderId, customerId, poNumber, items });
+  if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
+    console.error('PATCH /api/sales-orders/:orderId: Missing required fields', { customerId, items });
+    return res.status(400).json({ error: 'customerId and items are required' });
   }
-  if (status === 'Approved') {
+
+  db.get('SELECT customerId FROM customers WHERE customerId = ? AND enabled = 1', [customerId], (err, customer) => {
+    if (err) {
+      console.error('PATCH /api/sales-orders/:orderId: Fetch customer error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!customer) {
+      console.error('PATCH /api/sales-orders/:orderId: Invalid customerId', { customerId });
+      return res.status(400).json({ error: `Invalid customerId: ${customerId}` });
+    }
+
     db.get('SELECT * FROM sales_orders WHERE orderId = ? AND status = ?', [orderId, 'Draft'], (err, order) => {
       if (err) {
+        console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
         return res.status(500).json({ error: err.message });
       }
       if (!order) {
-        return res.status(404).json({ error: 'Sales order not found or not in Draft status' });
+        console.error('PATCH /api/sales-orders/:orderId: Order not found or not in Draft', { orderId });
+        return res.status(404).json({ error: 'Order not found or not in Draft status' });
       }
-      db.run('UPDATE sales_orders SET status = ? WHERE orderId = ?', [status, orderId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        // Create invoice
-        const createdDate = new Date().toISOString().split('T')[0];
-        db.run(
-          'INSERT INTO invoices (orderId, customerId, status, createdDate) VALUES (?, ?, ?, ?)',
-          [orderId, order.customerId, 'Draft', createdDate],
-          function(err) {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
-            const invoiceId = this.lastID;
-            db.all('SELECT * FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (err) => {
+          if (err) {
+            console.error('PATCH /api/sales-orders/:orderId: Begin transaction error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+
+          db.run(
+            'UPDATE sales_orders SET customerId = ?, poNumber = ? WHERE orderId = ?',
+            [customerId, poNumber || null, orderId],
+            (err) => {
               if (err) {
+                db.run('ROLLBACK');
+                console.error('PATCH /api/sales-orders/:orderId: Update order error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              let remaining = items.length;
-              items.forEach(item => {
-                db.run(
-                  'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, hasKegDeposit) VALUES (?, ?, ?, ?, ?)',
-                  [invoiceId, item.itemName, item.quantity, item.unit, item.hasKegDeposit],
-                  err => {
-                    if (err) {
-                      return res.status(500).json({ error: err.message });
-                    }
-                    if (--remaining === 0) {
-                      res.json({ message: 'Sales order approved, invoice created', invoiceId });
-                    }
+
+              db.run('DELETE FROM sales_order_items WHERE orderId = ?', [orderId], (err) => {
+                if (err) {
+                  db.run('ROLLBACK');
+                  console.error('PATCH /api/sales-orders/:orderId: Delete items error:', err);
+                  return res.status(500).json({ error: err.message });
+                }
+
+                let remaining = items.length;
+                const errors: string[] = [];
+                items.forEach((item: SalesOrderItem, index: number) => {
+                  const { itemName, quantity, unit, price, hasKegDeposit } = item;
+                  if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+                    errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
+                    remaining--;
+                    if (remaining === 0) finish();
+                    return;
                   }
-                );
+
+                  db.run(
+                    'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                    [orderId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
+                    (err) => {
+                      if (err) {
+                        console.error('PATCH /api/sales-orders/:orderId: Insert item error:', err);
+                        errors.push(`Failed to insert item ${itemName}: ${err.message}`);
+                      }
+                      remaining--;
+                      if (remaining === 0) finish();
+                    }
+                  );
+                });
+
+                function finish() {
+                  if (errors.length > 0) {
+                    db.run('ROLLBACK');
+                    console.error('PATCH /api/sales-orders/:orderId: Errors occurred', errors);
+                    return res.status(400).json({ error: errors.join('; ') });
+                  }
+
+                  db.run('COMMIT', (err) => {
+                    if (err) {
+                      console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
+                      return res.status(500).json({ error: 'Failed to commit transaction' });
+                    }
+
+                    db.get(
+                      `SELECT so.*, c.name AS customerName
+                       FROM sales_orders so
+                       JOIN customers c ON so.customerId = c.customerId
+                       WHERE so.orderId = ?`,
+                      [orderId],
+                      (err, order) => {
+                        if (err) {
+                          console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
+                          return res.status(500).json({ error: err.message });
+                        }
+                        db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                          if (err) {
+                            console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
+                            return res.status(500).json({ error: err.message });
+                          }
+                          db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                            if (err) {
+                              console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                              return res.status(500).json({ error: err.message });
+                            }
+                            order.items = items;
+                            order.keg_deposit_price = setting ? setting.value : '0.00';
+                            console.log('PATCH /api/sales-orders/:orderId: Success', order);
+                            res.json(order);
+                          });
+                        });
+                      }
+                    );
+                  });
+                }
               });
-            });
-          }
-        );
+            }
+          );
+        });
       });
     });
-  } else {
-    db.run('UPDATE sales_orders SET status = ? WHERE orderId = ?', [status, orderId], function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ message: 'Sales order updated' });
-    });
-  }
+  });
 });
 
 // Invoices
@@ -1072,7 +1141,6 @@ app.get('/api/invoices/:invoiceId', (req, res) => {
           }
           invoice.items = items;
           invoice.keg_deposit_price = setting ? setting.value : '0.00';
-          // Calculate subtotal and keg deposit total for display
           let subtotal = 0;
           let kegDepositTotal = 0;
           items.forEach(item => {
@@ -1204,7 +1272,7 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
                       console.error('POST /api/invoices/:invoiceId/post: Fetch inventory error:', err);
                       return res.status(500).json({ error: err.message });
                     }
-                    if (!row || row.quantity < item.quantity) {
+                    if (!row || parseFloat(row.quantity) < item.quantity) {
                       db.run('ROLLBACK');
                       console.error('POST /api/invoices/:invoiceId/post: Insufficient inventory', { itemName: item.itemName });
                       return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
