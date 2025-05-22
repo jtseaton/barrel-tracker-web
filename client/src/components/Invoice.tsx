@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { InventoryItem, Invoice, InvoiceItem } from '../types/interfaces';
 import { MaterialType } from '../types/enums';
+import '../App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -32,7 +33,13 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
             ? data.items.map((item: InvoiceItem) => ({
                 ...item,
                 price: item.price || '0.00',
-                hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
+                hasKegDeposit: !!item.hasKegDeposit,
+                kegDeposit: item.kegDeposit ? {
+                  ...item.kegDeposit,
+                  price: item.kegDeposit.price || '0.00',
+                  hasKegDeposit: !!item.kegDeposit.hasKegDeposit,
+                  isSubCharge: item.kegDeposit.isSubCharge || false,
+                } : null,
               }))
             : []
         );
@@ -44,7 +51,7 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
   }, [invoiceId]);
 
   const addItem = () => {
-    setItems([...items, { id: 0, itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
+    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
   };
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
@@ -54,9 +61,9 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
       const selectedItem = inventory.find((inv) => inv.identifier === value);
       if (selectedItem) {
         updatedItems[index].price = selectedItem.price || '0.00';
-        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem === 1; // Convert number to boolean
+        updatedItems[index].hasKegDeposit = selectedItem.isKegDepositItem === 1;
       }
-    } else if (field === 'hasKegDeposit' && typeof value === 'boolean') {
+    } else if (field === 'hasKegDeposit') {
       updatedItems[index].hasKegDeposit = value;
     }
     setItems(updatedItems);
@@ -66,31 +73,54 @@ const InvoiceComponent: React.FC<{ inventory: InventoryItem[], refreshInventory:
     setItems(items.filter((_, i) => i !== index));
   };
 
-const handleSave = async () => {
-  try {
-    console.log('handleSave: Saving invoice', { invoiceId, items });
-    const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ items }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to save invoice: ${text}`);
+  const handleSave = async () => {
+    try {
+      console.log('handleSave: Saving invoice', { invoiceId, items });
+      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          items: items.map(({ id, itemName, quantity, unit, price, hasKegDeposit }) => ({
+            id,
+            itemName,
+            quantity,
+            unit,
+            price,
+            hasKegDeposit,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to save invoice: ${text}`);
+      }
+      const updatedInvoice = await res.json();
+      console.log('handleSave: Invoice saved successfully', updatedInvoice);
+      setInvoice(updatedInvoice);
+      setItems(
+        updatedInvoice.items && Array.isArray(updatedInvoice.items)
+          ? updatedInvoice.items.map((item: InvoiceItem) => ({
+              ...item,
+              price: item.price || '0.00',
+              hasKegDeposit: !!item.hasKegDeposit,
+              kegDeposit: item.kegDeposit ? {
+                ...item.kegDeposit,
+                price: item.kegDeposit.price || '0.00',
+                hasKegDeposit: !!item.kegDeposit.hasKegDeposit,
+                isSubCharge: item.kegDeposit.isSubCharge || false,
+              } : null,
+            }))
+          : []
+      );
+      setSuccessMessage('Invoice saved successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('handleSave: Error', { invoiceId, error: errorMessage });
+      setError('Failed to save invoice: ' + errorMessage);
     }
-    const updatedInvoice = await res.json();
-    console.log('handleSave: Invoice saved successfully', updatedInvoice);
-    setInvoice(updatedInvoice);
-    setItems(updatedInvoice.items || []);
-    setSuccessMessage('Invoice saved successfully');
-    setTimeout(() => setSuccessMessage(null), 2000);
-    setError(null);
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    console.error('handleSave: Error', { invoiceId, error: errorMessage });
-    setError('Failed to save invoice: ' + errorMessage);
-  }
-};
+  };
 
   const handlePost = async () => {
     try {
@@ -121,9 +151,15 @@ const handleSave = async () => {
           ? data.items.map((item: InvoiceItem) => ({
               ...item,
               price: item.price || '0.00',
-              hasKegDeposit: !!item.hasKegDeposit, // Convert number to boolean
+              hasKegDeposit: !!item.hasKegDeposit,
+              kegDeposit: item.kegDeposit ? {
+                ...item.kegDeposit,
+                price: item.kegDeposit.price || '0.00',
+                hasKegDeposit: !!item.kegDeposit.hasKegDeposit,
+                isSubCharge: item.kegDeposit.isSubCharge || false,
+              } : null,
             }))
-          : items // Fallback to current items
+          : items
       );
       setSuccessMessage('Invoice posted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -134,50 +170,55 @@ const handleSave = async () => {
   };
 
   const handleEmail = async () => {
-  try {
-    console.log('handleEmail: Sending email for invoice', { invoiceId });
-    const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/email`, {
-      method: 'POST',
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to send email: ${text}`);
+    try {
+      console.log('handleEmail: Sending email for invoice', { invoiceId });
+      const res = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/email`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to send email: ${text}`);
+      }
+      console.log('handleEmail: Email sent successfully', { invoiceId });
+      setSuccessMessage('Email sent successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+      const refreshRes = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!refreshRes.ok) {
+        throw new Error(`Failed to refresh invoice: HTTP ${refreshRes.status}`);
+      }
+      const refreshedInvoice = await refreshRes.json();
+      console.log('handleEmail: Refreshed invoice data', {
+        invoiceId,
+        total: refreshedInvoice.total,
+        subtotal: refreshedInvoice.subtotal,
+        keg_deposit_total: refreshedInvoice.keg_deposit_total,
+        items: refreshedInvoice.items,
+      });
+      setInvoice(refreshedInvoice);
+      setItems(
+        refreshedInvoice.items && Array.isArray(refreshedInvoice.items)
+          ? refreshedInvoice.items.map((item: InvoiceItem) => ({
+              ...item,
+              price: item.price || '0.00',
+              hasKegDeposit: !!item.hasKegDeposit,
+              kegDeposit: item.kegDeposit ? {
+                ...item.kegDeposit,
+                price: item.kegDeposit.price || '0.00',
+                hasKegDeposit: !!item.kegDeposit.hasKegDeposit,
+                isSubCharge: item.kegDeposit.isSubCharge || false,
+              } : null,
+            }))
+          : items
+      );
+    } catch (err: any) {
+      console.error('handleEmail: Error', { invoiceId, error: err.message });
+      setError('Failed to send email: ' + err.message);
     }
-    console.log('handleEmail: Email sent successfully', { invoiceId });
-    setSuccessMessage('Email sent successfully');
-    setTimeout(() => setSuccessMessage(null), 2000);
-    setError(null);
-    // Refresh invoice data to verify totals
-    const refreshRes = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (!refreshRes.ok) {
-      throw new Error(`Failed to refresh invoice: HTTP ${refreshRes.status}`);
-    }
-    const refreshedInvoice = await refreshRes.json();
-    console.log('handleEmail: Refreshed invoice data', {
-      invoiceId,
-      total: refreshedInvoice.total,
-      subtotal: refreshedInvoice.subtotal,
-      keg_deposit_total: refreshedInvoice.keg_deposit_total,
-      items: refreshedInvoice.items,
-    });
-    setInvoice(refreshedInvoice);
-    setItems(
-      refreshedInvoice.items && Array.isArray(refreshedInvoice.items)
-        ? refreshedInvoice.items.map((item: InvoiceItem) => ({
-            ...item,
-            price: item.price || '0.00',
-            hasKegDeposit: !!item.hasKegDeposit,
-          }))
-        : items
-    );
-  } catch (err: any) {
-    console.error('handleEmail: Error', { invoiceId, error: err.message });
-    setError('Failed to send email: ' + err.message);
-  }
-};
+  };
 
   if (!invoice) return <div>Loading...</div>;
 
@@ -188,16 +229,7 @@ const handleSave = async () => {
       </h2>
       {error && <div className="error">{error}</div>}
       {successMessage && (
-        <div
-          style={{
-            color: '#28A745',
-            backgroundColor: '#e6ffe6',
-            padding: '10px',
-            borderRadius: '4px',
-            marginBottom: '10px',
-            textAlign: 'center',
-          }}
-        >
+        <div className="error" style={{ color: '#28A745', backgroundColor: '#e6ffe6' }}>
           {successMessage}
         </div>
       )}
@@ -212,75 +244,113 @@ const handleSave = async () => {
       <h3 style={{ color: '#EEC930', marginBottom: '10px' }}>Items</h3>
       {invoice.status === 'Draft' ? (
         <>
-          {items.map((item, index) => {
-            const selectedItem = inventory.find((inv) => inv.identifier === item.itemName);
-            return (
-              <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                <select
-                  value={item.itemName}
-                  onChange={(e) => updateItem(index, 'itemName', e.target.value)}
-                  style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                >
-                  <option value="">Select Item</option>
-                  {inventory
-                    .filter((i) => i.type === MaterialType.FinishedGoods || i.type === MaterialType.Marketing)
-                    .map((inv) => (
-                      <option key={inv.identifier} value={inv.identifier}>
-                        {inv.identifier}
-                      </option>
-                    ))}
-                </select>
-                <input
-                  type="number"
-                  value={item.quantity || ''}
-                  onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                  placeholder="Quantity"
-                  min="0"
-                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                />
-                <select
-                  value={item.unit}
-                  onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                >
-                  <option value="Units">Units</option>
-                  <option value="Kegs">Kegs</option>
-                  <option value="Bottles">Bottles</option>
-                  <option value="Cans">Cans</option>
-                </select>
-                <input
-                  type="number"
-                  value={parseFloat(item.price)}
-                  onChange={(e) => updateItem(index, 'price', e.target.value)}
-                  placeholder="Price"
-                  step="0.01"
-                  min="0"
-                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                />
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={item.hasKegDeposit}
-                    onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
-                  />
-                  Keg Deposit
-                </label>
-                <button
-                  onClick={() => removeItem(index)}
-                  style={{
-                    backgroundColor: '#F86752',
-                    color: '#fff',
-                    padding: '8px 12px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            );
-          })}
+          <table className="inventory-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Unit</th>
+                <th>Price</th>
+                <th>Subtotal</th>
+                <th>Keg Deposit</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, index) => (
+                <React.Fragment key={index}>
+                  <tr>
+                    <td>
+                      <select
+                        value={item.itemName}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateItem(index, 'itemName', e.target.value)}
+                        style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                      >
+                        <option value="">Select Item</option>
+                        {inventory
+                          .filter((i) => (i.type === MaterialType.FinishedGoods || i.type === MaterialType.Marketing) && i.identifier !== 'Keg Deposit')
+                          .map((inv) => (
+                            <option key={inv.identifier} value={inv.identifier}>
+                              {inv.identifier}
+                            </option>
+                          ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={item.quantity || ''}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                        placeholder="Quantity"
+                        min="0"
+                        style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={item.unit}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateItem(index, 'unit', e.target.value)}
+                        style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                      >
+                        <option value="Units">Units</option>
+                        <option value="Kegs">Kegs</option>
+                        <option value="Bottles">Bottles</option>
+                        <option value="Cans">Cans</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={parseFloat(item.price)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(index, 'price', e.target.value)}
+                        placeholder="Price"
+                        step="0.01"
+                        min="0"
+                        style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                      />
+                    </td>
+                    <td>${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
+                    <td>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={item.hasKegDeposit}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                        />
+                        Keg Deposit
+                      </label>
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => removeItem(index)}
+                        style={{
+                          backgroundColor: '#F86752',
+                          color: '#fff',
+                          padding: '8px 12px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                  {item.kegDeposit && (
+                    <tr>
+                      <td style={{ paddingLeft: '30px' }}>Keg Deposit (Sub-Charge)</td>
+                      <td>{item.kegDeposit.quantity}</td>
+                      <td>{item.kegDeposit.unit}</td>
+                      <td>${parseFloat(item.kegDeposit.price).toFixed(2)}</td>
+                      <td>${(parseFloat(item.kegDeposit.price) * item.kegDeposit.quantity).toFixed(2)}</td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
           <button
             onClick={addItem}
             style={{
@@ -290,95 +360,43 @@ const handleSave = async () => {
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
+              marginTop: '10px',
             }}
           >
             Add Item
           </button>
         </>
       ) : (
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            backgroundColor: '#fff',
-            borderRadius: '8px',
-            marginTop: '10px',
-          }}
-        >
+        <table className="inventory-table">
           <thead>
             <tr>
-              <th
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderBottom: '1px solid #ddd',
-                  color: '#555',
-                }}
-              >
-                Item
-              </th>
-              <th
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderBottom: '1px solid #ddd',
-                  color: '#555',
-                }}
-              >
-                Quantity
-              </th>
-              <th
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderBottom: '1px solid #ddd',
-                  color: '#555',
-                }}
-              >
-                Unit
-              </th>
-              <th
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderBottom: '1px solid #ddd',
-                  color: '#555',
-                }}
-              >
-                Price
-              </th>
-              <th
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderBottom: '1px solid #ddd',
-                  color: '#555',
-                }}
-              >
-                Subtotal
-              </th>
-              <th
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderBottom: '1px solid #ddd',
-                  color: '#555',
-                }}
-              >
-                Keg Deposit
-              </th>
+              <th>Item</th>
+              <th>Quantity</th>
+              <th>Unit</th>
+              <th>Price</th>
+              <th>Subtotal</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id || `${item.itemName}-${item.quantity}`}>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.itemName || 'Unknown'}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.quantity}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.unit}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>${parseFloat(item.price).toFixed(2)}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
-                <td style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>{item.hasKegDeposit ? 'Yes' : 'No'}</td>
-              </tr>
+              <React.Fragment key={item.id || `${item.itemName}-${item.quantity}`}>
+                <tr>
+                  <td>{item.itemName || 'Unknown'}</td>
+                  <td>{item.quantity}</td>
+                  <td>{item.unit}</td>
+                  <td>${parseFloat(item.price).toFixed(2)}</td>
+                  <td>${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
+                </tr>
+                {item.kegDeposit && (
+                  <tr>
+                    <td style={{ paddingLeft: '30px' }}>Keg Deposit (Sub-Charge)</td>
+                    <td>{item.kegDeposit.quantity}</td>
+                    <td>{item.kegDeposit.unit}</td>
+                    <td>${parseFloat(item.kegDeposit.price).toFixed(2)}</td>
+                    <td>${(parseFloat(item.kegDeposit.price) * item.kegDeposit.quantity).toFixed(2)}</td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
