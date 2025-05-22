@@ -867,9 +867,6 @@ app.post('/api/sales-orders', (req, res) => {
   });
 });
 
-javascript
-
-Copy
 // Sales Order Update
 app.patch('/api/sales-orders/:orderId', (req, res) => {
   const { orderId } = req.params;
