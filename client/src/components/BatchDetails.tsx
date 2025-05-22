@@ -38,6 +38,7 @@ const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: 
 const [stage, setStage] = useState<'' | 'Brewing' | 'Fermentation' | 'Filtering/Carbonating' | 'Packaging' | 'Completed'>('');
 const [packageType, setPackageType] = useState<string>('');
 const [packageTypes, setPackageTypes] = useState<{ name: string; volume: number; enabled: number }[]>([]); // Added
+const [productPackageTypes, setProductPackageTypes] = useState<string[]>([]); // Added state
 const [packageQuantity, setPackageQuantity] = useState<number>(0);
 const [packageLocation, setPackageLocation] = useState<string>('');
 const [error, setError] = useState<string | null>(null);
