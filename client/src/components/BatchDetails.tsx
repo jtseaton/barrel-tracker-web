@@ -64,7 +64,7 @@ useEffect(() => {
         { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
         { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
         { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
-        { url: `${API_BASE_URL}/api/package-types`, setter: setPackageTypes, name: 'packageTypes' }, // Added
+        { url: `${API_BASE_URL}/api/package-types`, setter: setPackageTypes, name: 'packageTypes' },
       ].filter(endpoint => endpoint.url !== null);
 
       console.log('Fetching endpoints:', endpoints.map(e => e.url));
@@ -93,6 +93,14 @@ useEffect(() => {
 
         const data = await res.json();
         setter(single ? data : data);
+
+        // Set product-specific package types after fetching products
+        if (name === 'products' && batch) {
+          const product = data.find((p: Product) => p.id === batch.productId);
+          if (product && product.packageTypes) {
+            setProductPackageTypes(product.packageTypes.map((pt: { type: string }) => pt.type));
+          }
+        }
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -100,8 +108,10 @@ useEffect(() => {
       setError('Failed to load batch details: ' + errorMessage);
     }
   };
-  fetchData();
-}, [batchId]);
+  if (batch) {
+    fetchData();
+  }
+}, [batchId, batch]);
 
 useEffect(() => {
   if (!batch?.siteId) return;
@@ -951,18 +961,18 @@ useEffect(() => {
       ) : (
         <>
           <select
-  value={packageType}
-  onChange={(e) => setPackageType(e.target.value)}
-  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
->
-  <option value="">Select Package Type</option>
-  {packageTypes
-    .filter((pkg) => pkg.enabled)
-    .sort((a, b) => a.name.localeCompare(b.name)) // Ensure client-side sorting
-    .map((pkg) => (
-      <option key={pkg.name} value={pkg.name}>{`${pkg.name} (${(pkg.volume * 31).toFixed(2)} gal)`}</option>
-    ))}
-</select>
+            value={packageType}
+            onChange={(e) => setPackageType(e.target.value)}
+            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+          >
+            <option value="">Select Package Type</option>
+            {packageTypes
+              .filter((pkg) => pkg.enabled && productPackageTypes.includes(pkg.name))
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((pkg) => (
+                <option key={pkg.name} value={pkg.name}>{`${pkg.name} (${(pkg.volume * 31).toFixed(2)} gal)`}</option>
+              ))}
+          </select>
           <input
             type="number"
             value={packageQuantity || ''}
