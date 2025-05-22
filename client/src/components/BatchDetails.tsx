@@ -94,14 +94,6 @@ useEffect(() => {
 
         const data = await res.json();
         setter(single ? data : data);
-
-        // Set product-specific package types after fetching products
-        if (name === 'products' && batch) {
-          const product = data.find((p: Product) => p.id === batch.productId);
-          if (product && product.packageTypes) {
-            setProductPackageTypes(product.packageTypes.map((pt: { type: string }) => pt.type));
-          }
-        }
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -109,10 +101,17 @@ useEffect(() => {
       setError('Failed to load batch details: ' + errorMessage);
     }
   };
-  if (batch) {
-    fetchData();
+  fetchData();
+}, [batchId]);
+
+useEffect(() => {
+  if (batch && products.length > 0) {
+    const product = products.find((p: Product) => p.id === batch.productId);
+    if (product && product.packageTypes) {
+      setProductPackageTypes(product.packageTypes.map((pt: { type: string }) => pt.type));
+    }
   }
-}, [batchId, batch]);
+}, [batch, products]);
 
 useEffect(() => {
   if (!batch?.siteId) return;
