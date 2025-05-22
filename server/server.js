@@ -1252,10 +1252,12 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
   const { invoiceId } = req.params;
   const { items } = req.body;
   console.log('PATCH /api/invoices/:invoiceId: Received request', { invoiceId, items });
-  if (!items || !Array.isArray(items)) {
-    console.error('PATCH /api/invoices/:invoiceId: Invalid items', { items });
-    return res.status(400).json({ error: 'Items are required and must be an array' });
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    console.error('PATCH /api/invoices/:invoiceId: Missing or invalid items', { items });
+    return res.status(400).json({ error: 'Items are required and must be a non-empty array' });
   }
+
   db.get('SELECT * FROM invoices WHERE invoiceId = ? AND status = ?', [invoiceId, 'Draft'], (err, invoice) => {
     if (err) {
       console.error('PATCH /api/invoices/:invoiceId: Fetch invoice error:', err);
@@ -1265,6 +1267,7 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
       console.error('PATCH /api/invoices/:invoiceId: Invoice not found or not in Draft', { invoiceId });
       return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
     }
+
     db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
       if (err) {
         console.error('PATCH /api/invoices/:invoiceId: Fetch keg_deposit_price error:', err);
@@ -1275,99 +1278,131 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
         return res.status(500).json({ error: 'Keg deposit price not configured' });
       }
       const kegDepositPrice = parseFloat(setting.value);
-      // Consolidate items by itemName, unit, and price, excluding Keg Deposit
-      const consolidatedItems = items
-        .filter(item => item.itemName !== 'Keg Deposit') // Exclude manual Keg Deposit entries
-        .reduce((acc, item) => {
-          const { itemName, quantity, unit, price, hasKegDeposit } = item;
-          if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price))) {
-            throw new Error('Each item must have itemName, quantity, unit, and valid price');
+
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (err) => {
+          if (err) {
+            console.error('PATCH /api/invoices/:invoiceId: Begin transaction error:', err);
+            return res.status(500).json({ error: err.message });
           }
-          const existing = acc.find(i => i.itemName === itemName && i.unit === unit && i.price === price);
-          if (existing) {
-            existing.quantity += quantity;
-          } else {
-            acc.push({
-              itemName,
-              quantity,
-              unit,
-              price,
-              hasKegDeposit: hasKegDeposit ? 1 : 0,
-              kegDeposit: hasKegDeposit ? (kegDepositPrice * quantity).toFixed(2) : '0.00'
-            });
-          }
-          return acc;
-        }, []);
-      console.log('PATCH /api/invoices/:invoiceId: Consolidated items', consolidatedItems);
-      db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err) => {
-        if (err) {
-          console.error('PATCH /api/invoices/:invoiceId: Delete items error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        let remaining = consolidatedItems.length;
-        let subtotal = 0;
-        let kegDepositTotal = 0;
-        try {
-          consolidatedItems.forEach((item) => {
-            const { itemName, quantity, unit, price, hasKegDeposit, kegDeposit } = item;
-            db.run(
-              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit, kegDeposit) VALUES (?, ?, ?, ?, ?, ?, ?)',
-              [invoiceId, itemName, quantity, unit, price, hasKegDeposit, kegDeposit],
-              (err) => {
-                if (err) {
-                  console.error('PATCH /api/invoices/:invoiceId: Insert item error:', err);
-                  return res.status(500).json({ error: err.message });
+
+          db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err) => {
+            if (err) {
+              db.run('ROLLBACK');
+              console.error('PATCH /api/invoices/:invoiceId: Delete items error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+
+            let remaining = items.length;
+            const errors = [];
+            let subtotal = 0;
+            let kegDepositTotal = 0;
+
+            items.forEach((item, index) => {
+              const { itemName, quantity, unit, price, hasKegDeposit } = item;
+              if (!itemName || quantity < 0 || !unit || !price || isNaN(parseFloat(price))) {
+                errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
+                remaining--;
+                if (remaining === 0) finish();
+                return;
+              }
+
+              db.run(
+                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                [invoiceId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
+                (err) => {
+                  if (err) {
+                    console.error('PATCH /api/invoices/:invoiceId: Insert item error:', err);
+                    errors.push(`Failed to insert item ${itemName}: ${err.message}`);
+                  } else {
+                    subtotal += parseFloat(price) * quantity;
+                    if (hasKegDeposit) {
+                      kegDepositTotal += quantity * kegDepositPrice;
+                    }
+                  }
+                  remaining--;
+                  if (remaining === 0) finish();
                 }
-                subtotal += parseFloat(price) * quantity;
-                kegDepositTotal += parseFloat(kegDeposit);
-                if (--remaining === 0) {
-                  const total = subtotal + kegDepositTotal;
-                  db.run(
-                    'UPDATE invoices SET total = ?, subtotal = ?, keg_deposit_total = ?, keg_deposit_price = ? WHERE invoiceId = ?',
-                    [total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), kegDepositPrice.toFixed(2), invoiceId],
-                    (err) => {
-                      if (err) {
-                        console.error('PATCH /api/invoices/:invoiceId: Update invoice error:', err);
-                        return res.status(500).json({ error: err.message });
-                      }
-                      db.get(
-                        `SELECT i.*, c.name AS customerName, c.email AS customerEmail
-                         FROM invoices i
-                         JOIN customers c ON i.customerId = c.customerId
-                         WHERE i.invoiceId = ?`,
-                        [invoiceId],
-                        (err, updatedInvoice) => {
-                          if (err) {
-                            console.error('PATCH /api/invoices/:invoiceId: Fetch updated invoice error:', err);
-                            return res.status(500).json({ error: err.message });
-                          }
-                          db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit, kegDeposit FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+              );
+            });
+
+            function finish() {
+              if (errors.length > 0) {
+                db.run('ROLLBACK');
+                console.error('PATCH /api/invoices/:invoiceId: Errors occurred', errors);
+                return res.status(400).json({ error: errors.join('; ') });
+              }
+
+              const total = subtotal + kegDepositTotal;
+              db.run(
+                'UPDATE invoices SET subtotal = ?, keg_deposit_total = ?, total = ? WHERE invoiceId = ?',
+                [subtotal.toFixed(2), kegDepositTotal.toFixed(2), total.toFixed(2), invoiceId],
+                (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('PATCH /api/invoices/:invoiceId: Update invoice error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+
+                  db.run('COMMIT', (err) => {
+                    if (err) {
+                      console.error('PATCH /api/invoices/:invoiceId: Commit transaction error:', err);
+                      return res.status(500).json({ error: 'Failed to commit transaction' });
+                    }
+
+                    db.all(
+                      'SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ? AND itemName != ?',
+                      [invoiceId, 'Keg Deposit'],
+                      (err, dbItems) => {
+                        if (err) {
+                          console.error('PATCH /api/invoices/:invoiceId: Fetch items error:', err);
+                          return res.status(500).json({ error: err.message });
+                        }
+
+                        const enhancedItems = dbItems.map(item => ({
+                          ...item,
+                          hasKegDeposit: !!item.hasKegDeposit,
+                          kegDeposit: item.hasKegDeposit ? {
+                            itemName: 'Keg Deposit',
+                            quantity: item.quantity,
+                            unit: 'Units',
+                            price: kegDepositPrice.toFixed(2),
+                            hasKegDeposit: false,
+                            isSubCharge: true,
+                          } : null,
+                        }));
+
+                        db.get(
+                          `SELECT i.*, c.name AS customerName, c.email AS customerEmail
+                           FROM invoices i
+                           JOIN customers c ON i.customerId = c.customerId
+                           WHERE i.invoiceId = ?`,
+                          [invoiceId],
+                          (err, updatedInvoice) => {
                             if (err) {
-                              console.error('PATCH /api/invoices/:invoiceId: Fetch items error:', err);
+                              console.error('PATCH /api/invoices/:invoiceId: Fetch invoice error:', err);
                               return res.status(500).json({ error: err.message });
                             }
-                            updatedInvoice.items = items;
+                            updatedInvoice.items = enhancedItems;
                             updatedInvoice.keg_deposit_price = kegDepositPrice.toFixed(2);
                             console.log('PATCH /api/invoices/:invoiceId: Success', {
                               invoiceId,
-                              total,
-                              subtotal,
-                              keg_deposit_total: kegDepositTotal,
+                              total: updatedInvoice.total,
+                              subtotal: updatedInvoice.subtotal,
+                              keg_deposit_total: updatedInvoice.keg_deposit_total,
+                              itemCount: updatedInvoice.items.length,
                             });
                             res.json(updatedInvoice);
-                          });
-                        }
-                      );
-                    }
-                  );
+                          }
+                        );
+                      }
+                    );
+                  });
                 }
-              }
-            );
+              );
+            }
           });
-        } catch (err) {
-          console.error('PATCH /api/invoices/:invoiceId: Validation error', err);
-          return res.status(400).json({ error: err.message });
-        }
+        });
       });
     });
   });
