@@ -96,52 +96,52 @@ const ProductDetails: React.FC = () => {
   }, [id]);
 
   const handleSave = async () => {
-  if (!product?.name) {
-    setError('Product name is required');
-    return;
-  }
-  const validPackageTypes = packageTypes.filter(pt => pt.type && !isNaN(parseFloat(pt.price)) && parseFloat(pt.price) >= 0);
-  if (packageTypes.length !== validPackageTypes.length) {
-    setError('All package types must have a valid type and non-negative price');
-    return;
-  }
-  try {
-    const method = id ? 'PATCH' : 'POST';
-    const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
-    console.log('handleSave: Sending PATCH/POST request', { url, payload: { ...product, packageTypes: validPackageTypes } });
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ ...product, packageTypes: validPackageTypes }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to save product: ${text}`);
+    if (!product?.name) {
+      setError('Product name is required');
+      return;
     }
-    const savedProduct = await res.json();
-    console.log('handleSave: Received response', savedProduct);
-
-    for (const pt of validPackageTypes) {
-      const itemName = `${product.name} ${pt.type}`;
-      console.log('handleSave: Creating item', { itemName });
-      await fetch(`${API_BASE_URL}/api/items`, {
-        method: 'POST',
+    const validPackageTypes = packageTypes.filter(pt => pt.type && !isNaN(parseFloat(pt.price)) && parseFloat(pt.price) >= 0);
+    if (packageTypes.length !== validPackageTypes.length) {
+      setError('All package types must have a valid type and non-negative price');
+      return;
+    }
+    try {
+      const method = id ? 'PATCH' : 'POST';
+      const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
+      console.log('handleSave: Sending PATCH/POST request', { url, payload: { ...product, packageTypes: validPackageTypes } });
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ name: itemName, type: 'Finished Goods', enabled: 1 }),
+        body: JSON.stringify({ ...product, packageTypes: validPackageTypes }),
       });
-    }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to save product: ${text}`);
+      }
+      const savedProduct = await res.json();
+      console.log('handleSave: Received response', savedProduct);
 
-    setSuccessMessage('Product and items saved successfully');
-    setTimeout(() => {
-      setSuccessMessage(null);
-      navigate('/products');
-    }, 2000);
-    setError(null);
-  } catch (err: any) {
-    console.error('handleSave: Error', err);
-    setError('Failed to save product: ' + err.message);
-  }
-};
+      for (const pt of validPackageTypes) {
+        const itemName = `${product.name} ${pt.type}`;
+        console.log('handleSave: Creating item', { itemName });
+        await fetch(`${API_BASE_URL}/api/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ name: itemName, type: 'Finished Goods', enabled: 1 }),
+        });
+      }
+
+      setSuccessMessage('Product and items saved successfully');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        navigate('/products');
+      }, 2000);
+      setError(null);
+    } catch (err: any) {
+      console.error('handleSave: Error', err);
+      setError('Failed to save product: ' + err.message);
+    }
+  };
 
   const handleAddRecipe = async () => {
     if (
@@ -195,7 +195,7 @@ const ProductDetails: React.FC = () => {
   };
 
   const addPackageType = () => {
-    setPackageTypes([...packageTypes, { type: '', price: '0.00', isKegDepositItem: false }]);
+    setPackageTypes([...packageTypes, { type: '', price: '', isKegDepositItem: false }]);
   };
 
   const removePackageType = (index: number) => {
@@ -341,16 +341,16 @@ const ProductDetails: React.FC = () => {
                 type="text"
                 value={pt.price}
                 onChange={(e) => updatePackageType(index, 'price', e.target.value)}
-                placeholder="Price (e.g., 100.00)"
+                placeholder="Price"
                 style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
               />
-              <label>
+              <label style={{ color: '#555', fontSize: '16px' }}>
                 <input
                   type="checkbox"
                   checked={pt.isKegDepositItem}
                   onChange={(e) => updatePackageType(index, 'isKegDepositItem', e.target.checked)}
                 />
-                Keg Deposit
+                Is Keg Deposit Item?
               </label>
               <button
                 onClick={() => removePackageType(index)}
