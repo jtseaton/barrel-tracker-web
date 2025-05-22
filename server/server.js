@@ -1573,9 +1573,8 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
           });
         }
       );
-    }
+    });
   });
-});
 
 app.post('/api/invoices/:invoiceId/email', (req, res) => {
   const { invoiceId } = req.params;
