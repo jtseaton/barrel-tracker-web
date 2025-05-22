@@ -59,572 +59,442 @@ const transporter = nodemailer.createTransport({
 });
 
 
-db.serialize(() => {
-  
-  loadPackageTypesFromXML();
-  db.run(`
-    CREATE TABLE IF NOT EXISTS product_package_types (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      productId INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      price TEXT NOT NULL,
-      isKegDepositItem INTEGER NOT NULL,
-      FOREIGN KEY (productId) REFERENCES products(id),
-      UNIQUE(productId, type)
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS customers (
-      customerId INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      address TEXT,
-      phone TEXT,
-      contactPerson TEXT,
-      licenseNumber TEXT,
-      notes TEXT,
-      enabled INTEGER DEFAULT 1,
-      createdDate TEXT,
-      updatedDate TEXT
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS sales_orders (
-      orderId INTEGER PRIMARY KEY AUTOINCREMENT,
-      customerId INTEGER NOT NULL,
-      poNumber TEXT,
-      status TEXT NOT NULL DEFAULT 'Draft', -- Draft, Approved, Cancelled
-      createdDate TEXT NOT NULL,
-      FOREIGN KEY (customerId) REFERENCES customers(customerId)
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS sales_order_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      orderId INTEGER NOT NULL,
-      itemName TEXT NOT NULL,
-      quantity INTEGER NOT NULL,
-      unit TEXT NOT NULL,
-      hasKegDeposit INTEGER DEFAULT 0, -- 0: No, 1: Yes
-      FOREIGN KEY (orderId) REFERENCES sales_orders(orderId)
-    )
-  `);
+// Initialize database schema
+const initializeDatabase = () => {
+  db.serialize(() => {
+    console.log('Initializing database schema...');
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS invoices (
-      invoiceId INTEGER PRIMARY KEY AUTOINCREMENT,
-      orderId INTEGER NOT NULL,
-      customerId INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Draft', -- Draft, Posted, Cancelled
-      createdDate TEXT NOT NULL,
-      postedDate TEXT,
-      subtotal TEXT,
-      keg_deposit_total TEXT,
-      keg_deposit_price TEXT,
-      FOREIGN KEY (orderId) REFERENCES sales_orders(orderId),
-      FOREIGN KEY (customerId) REFERENCES customers(customerId)
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS invoice_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      invoiceId INTEGER NOT NULL,
-      itemName TEXT NOT NULL,
-      quantity INTEGER NOT NULL,
-      unit TEXT NOT NULL,
-      hasKegDeposit INTEGER DEFAULT 0,
-      FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId)
-    )
-  `);
-  db.run(`ALTER TABLE sales_order_items ADD COLUMN price TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding price column to sales_order_items:', err);
-    } else {
-      console.log('Added price column to sales_order_items table');
-    }
-  });
-  db.run(`ALTER TABLE invoice_items ADD COLUMN price TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding price column to invoice_items:', err);
-    } else {
-      console.log('Added price column to invoice_items table');
-    }
-  });
-  db.run(`ALTER TABLE invoices ADD COLUMN total TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding total column to invoices:', err);
-    } else {
-      console.log('Added total column to invoices table');
-    }
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS system_settings (
-      settingId INTEGER PRIMARY KEY AUTOINCREMENT,
-      key TEXT NOT NULL UNIQUE,
-      value TEXT NOT NULL
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS inventory (
-      identifier TEXT,
-      account TEXT,
-      type TEXT,
-      quantity TEXT,
-      unit TEXT,
-      proof TEXT,
-      proofGallons TEXT,
-      receivedDate TEXT,
-      source TEXT,
-      dspNumber TEXT,
-      siteId TEXT,
-      locationId INTEGER,
-      status TEXT,
-      description TEXT,
-      cost TEXT,
-      totalCost REAL DEFAULT 0,
-      UNIQUE(identifier, type, account, siteId),
-      FOREIGN KEY (siteId) REFERENCES sites(siteId),
-      FOREIGN KEY (locationId) REFERENCES locations(locationId)
-    )
-  `);
-  db.run(`ALTER TABLE inventory ADD COLUMN price TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding price column to inventory:', err);
-    } else {
-      console.log('Added price column to inventory table');
-    }
-  });
-  db.run(`ALTER TABLE inventory ADD COLUMN isKegDepositItem INTEGER`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding isKegDepositItem column to inventory:', err);
-    } else {
-      console.log('Added isKegDepositItem column to inventory table');
-    }
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS items (
-      name TEXT PRIMARY KEY,
-      type TEXT,
-      enabled INTEGER DEFAULT 1
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      barrelId TEXT,
-      type TEXT,
-      quantity REAL,
-      proofGallons REAL,
-      date TEXT,
-      action TEXT,
-      dspNumber TEXT,
-      toAccount TEXT
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS vendors (
-      name TEXT PRIMARY KEY,
-      type TEXT,
-      enabled INTEGER DEFAULT 1,
-      address TEXT,
-      email TEXT,
-      phone TEXT
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS purchase_orders (
-      poNumber TEXT PRIMARY KEY,
-      site TEXT,
-      poDate TEXT,
-      supplier TEXT,
-      supplierAddress TEXT,
-      supplierCity TEXT,
-      supplierState TEXT,
-      supplierZip TEXT,
-      comments TEXT,
-      shipToName TEXT,
-      shipToAddress TEXT,
-      shipToCity TEXT,
-      shipToState TEXT,
-      shipToZip TEXT,
-      status TEXT DEFAULT 'Open',
-      items TEXT
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS sites (
-      siteId TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT,
-      address TEXT,
-      enabled INTEGER DEFAULT 1
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS locations (
-      locationId INTEGER PRIMARY KEY AUTOINCREMENT,
-      siteId TEXT,
-      name TEXT NOT NULL,
-      abbreviation TEXT,
-      enabled INTEGER DEFAULT 1,
-      FOREIGN KEY (siteId) REFERENCES sites(siteId)
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS equipment (
-      equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      siteId TEXT,
-      abbreviation TEXT,
-      enabled INTEGER,
-      FOREIGN KEY (siteId) REFERENCES sites(siteId)
-    )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS facility_designs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      siteId TEXT NOT NULL,
-      objects TEXT NOT NULL,
-      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (siteId) REFERENCES sites(siteId),
-      UNIQUE(siteId)
-    )
-  `, (err) => {
-    if (err) console.error('Error creating facility_designs table:', err);
-    else console.log('Created facility_designs table');
-  });
-  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
-    if (err) console.error('Error adding UNIQUE index:', err);
-    else console.log('Added UNIQUE index on siteId');
-  });
-  db.run(`
-    DELETE FROM facility_designs
-    WHERE id NOT IN (
-      SELECT id FROM (
-        SELECT id, ROW_NUMBER() OVER (PARTITION BY siteId ORDER BY updatedAt DESC) AS rn
-        FROM facility_designs
-      ) WHERE rn = 1
-    )
-  `, (err) => {
-    if (err) console.error('Error cleaning up duplicate designs:', err);
-    else console.log('Cleaned up duplicate facility designs');
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      abbreviation TEXT,
-      enabled INTEGER DEFAULT 1,
-      priority INTEGER DEFAULT 1,
-      class TEXT,
-      type TEXT,
-      style TEXT,
-      abv REAL,
-      ibu INTEGER
-    )
-  `, (err) => {
-    if (err) console.error('Error creating products table:', err);
-    else console.log('Created products table');
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS batches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      batchId TEXT UNIQUE,
-      productId INTEGER,
-      recipeId INTEGER,
-      siteId TEXT,
-      status TEXT,
-      date TEXT,
-      additionalIngredients TEXT,
-      equipmentId INTEGER,
-      fermenterId INTEGER,
-      volume REAL,
-      stage TEXT,
-      FOREIGN KEY (productId) REFERENCES products(id),
-      FOREIGN KEY (recipeId) REFERENCES recipes(id),
-      FOREIGN KEY (siteId) REFERENCES sites(siteId),
-      FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
-      FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
-    )
-  `, (err) => {
-    if (err) console.error('Error creating batches table:', err);
-    else console.log('Created batches table');
-  });
-  db.run(`
-    ALTER TABLE batches ADD COLUMN stage TEXT
-  `, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding stage column to batches:', err);
-    } else {
-      console.log('Added stage column to batches table');
-    }
-  });
-  db.run('UPDATE batches SET stage = ? WHERE stage = ? OR stage IS NULL OR status = ?', ['Brewing', 'Mashing', 'In Progress'], (err) => {
-    if (err) {
-      console.error('Error updating batches stage:', err);
-    } else {
-      console.log('Updated batches stage to Brewing');
-    }
-  });
-  // Ensure stage and fermenterId are nullable
-  db.run(`
-    ALTER TABLE batches DROP COLUMN stage;
-  `, (err) => {
-    if (err && !err.message.includes('no such column')) {
-      console.error('Error dropping stage column:', err);
-    }
-  });
-  db.run(`
-    ALTER TABLE batches ADD COLUMN stage TEXT;
-  `, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding stage column:', err);
-    } else {
-      console.log('Re-added stage column as nullable');
-    }
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS inventory_losses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    identifier TEXT NOT NULL,
-    quantityLost REAL NOT NULL,
-    proofGallonsLost REAL DEFAULT 0,
-    reason TEXT NOT NULL,
-    date TEXT NOT NULL,
-    dspNumber TEXT,
-    siteId TEXT NOT NULL,
-    locationId INTEGER,
-    FOREIGN KEY (siteId) REFERENCES sites(siteId),
-    FOREIGN KEY (locationId) REFERENCES locations(locationId)
-  )
-  `);
-  db.run(`
-  CREATE TABLE IF NOT EXISTS batch_packaging (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    batchId TEXT NOT NULL,
-    packageType TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
-    volume REAL NOT NULL,
-    locationId INTEGER NOT NULL,
-    date TEXT NOT NULL,
-    siteId TEXT NOT NULL,
-    FOREIGN KEY (batchId) REFERENCES batches(batchId),
-    FOREIGN KEY (locationId) REFERENCES locations(locationId),
-    FOREIGN KEY (siteId) REFERENCES sites(siteId)
-  )
-  `);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS recipes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      productId INTEGER,
-      ingredients TEXT,
-      quantity REAL,
-      unit TEXT,
-      FOREIGN KEY (productId) REFERENCES products(id)
-    )
-  `, (err) => {
-    if (err) console.error('Error creating recipes table:', err);
-    else console.log('Created recipes table');
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      email TEXT PRIMARY KEY,
-      passwordHash TEXT,
-      role TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      passkey TEXT
-    )
-  `, (err) => {
-    if (err) console.error('Error creating users table:', err);
-    else console.log('Created users table');
-  });
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS batch_actions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      batchId TEXT,
-      action TEXT,
-      timestamp TEXT,
-      FOREIGN KEY (batchId) REFERENCES batches(batchId)
-    )
-  `);
-
-  db.run(`
-    ALTER TABLE batches ADD COLUMN brewLog TEXT
-  `, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding brewLog column:', err);
-    }
-  });
-
-  // In db.serialize() (~line 70), after existing table definitions
-  db.run(`
-    ALTER TABLE batches ADD COLUMN equipmentId INTEGER REFERENCES equipment(equipmentId)
-  `, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding equipmentId column:', err);
-    }
-  });
-
-  // Insert default Super Admin (for testing)
-  db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
-    ['superadmin@example.com', null, 'SuperAdmin', 1]);
-  db.run(`ALTER TABLE locations ADD COLUMN abbreviation TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding abbreviation column:', err);
-    } else {
-      console.log('Added abbreviation column to locations');
-    }
-  });
-  db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
-  ['Mash Tun', 'MT', 'BR-AL-20019', 1]);
-  db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
-    ['Boil Kettle', 'BK', 'BR-AL-20019', 1]);
-  db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
-    ['Fermentation FV1', 'FV1', 'BR-AL-20019', 1]);
-  db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
-    ['Fermentation FV2', 'FV2', 'BR-AL-20019', 1]);
-  db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled) VALUES (?, ?, ?, ?)', 
-    ['Brite Tank', 'BT', 'BR-AL-20019', 1]);
-  db.run('ALTER TABLE equipment ADD COLUMN type TEXT', (err) => {
-    if (err) {
-      console.error('Error adding type column to equipment:', err);
-    } else {
-      console.log('Added type column to equipment table');
-    }
-  });
-  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Mash Tun', 'Mash Tun', 'BR-AL-20019']);
-  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Kettle', 'Boil Kettle', 'BR-AL-20019']);
-  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Fermenter', 'Fermentation FV1', 'BR-AL-20019']);
-  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Fermenter', 'Fermentation FV2', 'BR-AL-20019']);
-  db.run('UPDATE equipment SET type = ? WHERE name = ? AND siteId = ?', ['Brite Tank', 'Brite Tank', 'BR-AL-20019']);
-
-    db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
-  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
-  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
-  db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`, 
-    ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-    ['DSP-AL-20010', 'Spirits Storage']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-    ['DSP-AL-20010', 'Grain Storage']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)`, 
-    ['DSP-AL-20010', 'Fermentation Tanks']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Fermenter 1']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Fermenter 2']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Fermenter 3']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Fermenter 4']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Cold Storage']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Mash Tun']);
-  db.run('INSERT OR IGNORE INTO locations (siteId, name) VALUES (?, ?)', 
-    ['BR-AL-20019', 'Madison Boil Kettle']); 
-  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 40, 0]);
-  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [2, 'Hazy Train IPA', 'IPA', 1, 2, 'Beer', 'Malt', 'American IPA', 6.5, 60]);
-  db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [2, 'Cave City Lager', 'CCL', 1, 2, 'Beer', 'Malt', 'American Amber Ale', 5.2, 21]);
-  db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-    ['Finished Goods', 'Finished Goods', 1]);
-  // Insert mock items (for ingredients)
-  db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-    ['Corn', 'Grain', 1]);
-  db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-    ['Hops', 'Hops', 1]);
-  // Insert mock inventory with identifier as itemName for non-Spirits
-  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Flaked Corn', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
-    db.run('INSERT OR REPLACE INTO inventory (identifier, quantity, unit, siteId, account, type, receivedDate, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['Hops', 550, 'lbs', 'BR-AL-20019', 'Storage', 'Hops', '2025-04-20', 'Stored', 'Acme Supplies']);db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
-  db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ['Hops', 'Storage', 'Hops', '550', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 8, 'Stored']);
-  // Insert mock recipes
-  db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
-    [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }]), '100', 'gallons']);
-  db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
-    [2, 'Hazy Train 20 BBL', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50, unit: 'lbs' }]), '20', 'barrels']);
-  // Insert mock batches
-  db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
-    ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
-  db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`, 
-    ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'], (err) => {
-      if (err) console.error('Insert error:', err);
-      else console.log('Inserted: Athens Cold Storage, abbreviation=Athens Cooler, BR-AL-20088');
-  }); 
-  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
-    ['Beer Cooler', 'Madison Cold Storage', 'BR-AL-20019'], (err) => {
-      if (err) console.error('Update error:', err);
-      else console.log('Updated: Madison Cold Storage, abbreviation=Beer Cooler');
-  });
-  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
-    ['Mash Tun', 'Madison Mash Tun', 'BR-AL-20019'], (err) => {
-      if (err) console.error('Update error:', err);
-      else console.log('Updated: Madison Mash Tun, abbreviation=Mash Tun');
-  });
-  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
-    ['Spirits', 'Spirits Storage', 'DSP-AL-20010'], (err) => {
-      if (err) console.error('Update error:', err);
-      else console.log('Updated: Spirits Storage, abbreviation=Spirits');
-  });
-  // In db.serialize, replace the default Super Admin insert
-  db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
-  ['jtseaton@gmail.com', 'P@$$w0rd1234', 'SuperAdmin', 1], // Temporary password: temp123
-  (err) => {
-    if (err) console.error('Error inserting default user:', err);
-    else console.log('Inserted default Super Admin user');
-  });
-  db.run(`UPDATE locations SET abbreviation = ? WHERE name = ? AND siteId = ?`, 
-    ['Athens Cooler', 'Athens Cold Storage', 'BR-AL-20088'], (err) => {
-      if (err) console.error('Update error:', err);
-      else console.log('Updated: Athens Cold Storage, abbreviation=Athens Cooler');
-  });
-  db.run(`ALTER TABLE inventory ADD COLUMN totalCost REAL DEFAULT 0`, (err) => {
-    if (err && !err.message.includes('duplicate column')) console.error('Error adding totalCost:', err);
-  });
-  db.run(`ALTER TABLE purchase_orders ADD COLUMN status TEXT DEFAULT 'Open'`, (err) => {
-    if (err && !err.message.includes('duplicate column')) {
-      console.error('Error adding status column:', err);
-    } 
-  });
-  db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
-    ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-  db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
-    ['Country Malt', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-  db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
-    ['Yakima Chief', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-  db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)', 
-    ['Pharmco Aaper', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
-        
-    db.run(`ALTER TABLE batches ADD COLUMN additionalIngredients TEXT`
-    , (err) => {
-      if (err && !err.message.includes('duplicate column')) {
-        console.error('Error adding additionalIngredients column:', err);
-      }
-    });
+    // Create tables (ordered by foreign key dependencies)
     db.run(`
-      ALTER TABLE batches ADD COLUMN volume REAL
-    `, (err) => {
-      if (err && !err.message.includes('duplicate column')) {
-        console.error('Error adding volume column to batches:', err);
-      } else {
-        console.log('Added volume column to batches table');
-      }
+      CREATE TABLE IF NOT EXISTS sites (
+        siteId TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT,
+        address TEXT,
+        enabled INTEGER DEFAULT 1
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS locations (
+        locationId INTEGER PRIMARY KEY AUTOINCREMENT,
+        siteId TEXT,
+        name TEXT NOT NULL,
+        abbreviation TEXT,
+        enabled INTEGER DEFAULT 1,
+        FOREIGN KEY (siteId) REFERENCES sites(siteId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS equipment (
+        equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        siteId TEXT,
+        abbreviation TEXT,
+        enabled INTEGER,
+        type TEXT,
+        FOREIGN KEY (siteId) REFERENCES sites(siteId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS customers (
+        customerId INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        address TEXT,
+        phone TEXT,
+        contactPerson TEXT,
+        licenseNumber TEXT,
+        notes TEXT,
+        enabled INTEGER DEFAULT 1,
+        createdDate TEXT,
+        updatedDate TEXT
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        abbreviation TEXT,
+        enabled INTEGER DEFAULT 1,
+        priority INTEGER DEFAULT 1,
+        class TEXT,
+        type TEXT,
+        style TEXT,
+        abv REAL,
+        ibu INTEGER
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS product_package_types (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        productId INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        price TEXT NOT NULL,
+        isKegDepositItem INTEGER NOT NULL,
+        FOREIGN KEY (productId) REFERENCES products(id),
+        UNIQUE(productId, type)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS recipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        productId INTEGER,
+        ingredients TEXT,
+        quantity REAL,
+        unit TEXT,
+        FOREIGN KEY (productId) REFERENCES products(id)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sales_orders (
+        orderId INTEGER PRIMARY KEY AUTOINCREMENT,
+        customerId INTEGER NOT NULL,
+        poNumber TEXT,
+        status TEXT NOT NULL DEFAULT 'Draft',
+        createdDate TEXT NOT NULL,
+        FOREIGN KEY (customerId) REFERENCES customers(customerId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sales_order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        orderId INTEGER NOT NULL,
+        itemName TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        unit TEXT NOT NULL,
+        price TEXT,
+        hasKegDeposit INTEGER DEFAULT 0,
+        FOREIGN KEY (orderId) REFERENCES sales_orders(orderId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        invoiceId INTEGER PRIMARY KEY AUTOINCREMENT,
+        orderId INTEGER NOT NULL,
+        customerId INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Draft',
+        createdDate TEXT NOT NULL,
+        postedDate TEXT,
+        total TEXT,
+        subtotal TEXT,
+        keg_deposit_total TEXT,
+        keg_deposit_price TEXT,
+        FOREIGN KEY (orderId) REFERENCES sales_orders(orderId),
+        FOREIGN KEY (customerId) REFERENCES customers(customerId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoiceId INTEGER NOT NULL,
+        itemName TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        unit TEXT NOT NULL,
+        price TEXT,
+        hasKegDeposit INTEGER DEFAULT 0,
+        FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        settingId INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT NOT NULL UNIQUE,
+        value TEXT NOT NULL
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS inventory (
+        identifier TEXT,
+        account TEXT,
+        type TEXT,
+        quantity TEXT,
+        unit TEXT,
+        price TEXT,
+        isKegDepositItem INTEGER,
+        proof TEXT,
+        proofGallons TEXT,
+        receivedDate TEXT,
+        source TEXT,
+        dspNumber TEXT,
+        siteId TEXT,
+        locationId INTEGER,
+        status TEXT,
+        description TEXT,
+        cost TEXT,
+        totalCost REAL DEFAULT 0,
+        UNIQUE(identifier, type, account, siteId),
+        FOREIGN KEY (siteId) REFERENCES sites(siteId),
+        FOREIGN KEY (locationId) REFERENCES locations(locationId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS items (
+        name TEXT PRIMARY KEY,
+        type TEXT,
+        enabled INTEGER DEFAULT 1
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        barrelId TEXT,
+        type TEXT,
+        quantity REAL,
+        proofGallons REAL,
+        date TEXT,
+        action TEXT,
+        dspNumber TEXT,
+        toAccount TEXT
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS vendors (
+        name TEXT PRIMARY KEY,
+        type TEXT,
+        enabled INTEGER DEFAULT 1,
+        address TEXT,
+        email TEXT,
+        phone TEXT
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        poNumber TEXT PRIMARY KEY,
+        site TEXT,
+        poDate TEXT,
+        supplier TEXT,
+        supplierAddress TEXT,
+        supplierCity TEXT,
+        supplierState TEXT,
+        supplierZip TEXT,
+        comments TEXT,
+        shipToName TEXT,
+        shipToAddress TEXT,
+        shipToCity TEXT,
+        shipToState TEXT,
+        shipToZip TEXT,
+        status TEXT DEFAULT 'Open',
+        items TEXT
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS facility_designs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        siteId TEXT NOT NULL,
+        objects TEXT NOT NULL,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (siteId) REFERENCES sites(siteId),
+        UNIQUE(siteId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS batches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batchId TEXT UNIQUE,
+        productId INTEGER,
+        recipeId INTEGER,
+        siteId TEXT,
+        status TEXT,
+        date TEXT,
+        additionalIngredients TEXT,
+        equipmentId INTEGER,
+        fermenterId INTEGER,
+        volume REAL,
+        stage TEXT,
+        brewLog TEXT,
+        FOREIGN KEY (productId) REFERENCES products(id),
+        FOREIGN KEY (recipeId) REFERENCES recipes(id),
+        FOREIGN KEY (siteId) REFERENCES sites(siteId),
+        FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
+        FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS inventory_losses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        identifier TEXT NOT NULL,
+        quantityLost REAL NOT NULL,
+        proofGallonsLost REAL DEFAULT 0,
+        reason TEXT NOT NULL,
+        date TEXT NOT NULL,
+        dspNumber TEXT,
+        siteId TEXT NOT NULL,
+        locationId INTEGER,
+        FOREIGN KEY (siteId) REFERENCES sites(siteId),
+        FOREIGN KEY (locationId) REFERENCES locations(locationId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS batch_packaging (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batchId TEXT NOT NULL,
+        packageType TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        volume REAL NOT NULL,
+        locationId INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        siteId TEXT NOT NULL,
+        FOREIGN KEY (batchId) REFERENCES batches(batchId),
+        FOREIGN KEY (locationId) REFERENCES locations(locationId),
+        FOREIGN KEY (siteId) REFERENCES sites(siteId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        email TEXT PRIMARY KEY,
+        passwordHash TEXT,
+        role TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        passkey TEXT
+      )
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS batch_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batchId TEXT,
+        action TEXT,
+        timestamp TEXT,
+        FOREIGN KEY (batchId) REFERENCES batches(batchId)
+      )
+    `);
+
+    // Create indexes
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
+      if (err) console.error('Error adding UNIQUE index:', err);
+      else console.log('Added UNIQUE index on siteId');
     });
-});
-db.all('SELECT * FROM products WHERE name = "Hazy Train"', (err, rows) => console.log('Products:', rows));
-db.all('SELECT * FROM product_package_types WHERE productId IN (SELECT id FROM products WHERE name = "Hazy Train")', (err, rows) => console.log('Package types for Hazy Train:', rows));
-db.all('SELECT * FROM items WHERE name = "Hazy Train 1/2 BBL Keg"', (err, rows) => console.log('Items:', rows));
+
+    // Cleanup duplicates
+    db.run(`
+      DELETE FROM facility_designs
+      WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY siteId ORDER BY updatedAt DESC) AS rn
+          FROM facility_designs
+        ) WHERE rn = 1
+      )
+    `, (err) => {
+      if (err) console.error('Error cleaning up duplicate designs:', err);
+      else console.log('Cleaned up duplicate facility designs');
+    });
+
+    console.log('Database schema initialized');
+  });
+};
+
+// Insert test data
+const insertTestData = () => {
+  db.serialize(() => {
+    console.log('Inserting test data...');
+
+    // Users
+    db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
+      ['jtseaton@gmail.com', 'P@$$w0rd1234', 'SuperAdmin', 1], // TODO: Replace with bcrypt hash
+      (err) => {
+        if (err) console.error('Error inserting default user:', err);
+        else console.log('Inserted default Super Admin user');
+      });
+
+    // Sites
+    db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
+      ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
+    db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
+      ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
+    db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
+    db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
+      ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
+
+    // Locations
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['DSP-AL-20010', 'Spirits Storage', 'Spirits']);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['DSP-AL-20010', 'Grain Storage', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['DSP-AL-20010', 'Fermentation Tanks', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Fermenter 1', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Fermenter 2', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Fermenter 3', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Fermenter 4', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Cold Storage', 'Beer Cooler']);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Mash Tun', 'Mash Tun']);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Boil Kettle', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler']);
+
+    // Equipment
+    db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
+      ['Mash Tun', 'MT', 'BR-AL-20019', 1, 'Mash Tun']);
+    db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
+      ['Boil Kettle', 'BK', 'BR-AL-20019', 1, 'Kettle']);
+    db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
+      ['Fermentation FV1', 'FV1', 'BR-AL-20019', 1, 'Fermenter']);
+    db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
+      ['Fermentation FV2', 'FV2', 'BR-AL-20019', 1, 'Fermenter']);
+    db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
+      ['Brite Tank', 'BT', 'BR-AL-20019', 1, 'Brite Tank']);
+
+    // Products
+    db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 40, 0]);
+    db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [2, 'Hazy Train IPA', 'IPA', 1, 2, 'Beer', 'Malt', 'American IPA', 6.5, 60]);
+    db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [3, 'Cave City Lager', 'CCL', 1, 3, 'Beer', 'Malt', 'American Amber Ale', 5.2, 21]);
+
+    // Items
+    db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+      ['Finished Goods', 'Finished Goods', 1]);
+    db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+      ['Corn', 'Grain', 1]);
+    db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+      ['Hops', 'Hops', 1]);
+
+    // Inventory
+    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['Flaked Corn', 'Storage', 'Grain', '1000', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+    db.run('INSERT OR REPLACE INTO inventory (identifier, quantity, unit, siteId, account, type, receivedDate, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['Hops', 550, 'lbs', 'BR-AL-20019', 'Storage', 'Hops', '2025-04-20', 'Stored', 'Acme Supplies']);
+    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
+
+    // Recipes
+    db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
+      [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }]), '100', 'gallons']);
+    db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
+      [2, 'Hazy Train 20 BBL', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50, unit: 'lbs' }]), '20', 'barrels']);
+
+    // Batches
+    db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
+      ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
+
+    // Vendors
+    db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
+      ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+    db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
+      ['Country Malt', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+    db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
+      ['Yakima Chief', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+    db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
+      ['Pharmco Aaper', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+
+    console.log('Test data inserted');
+  });
+};
+
+// Initialize database and load data
+loadPackageTypesFromXML();
+loadItemsFromXML();
+initializeDatabase();
+insertTestData();
 
 app.post('/api/customers', (req, res) => {
   const { name, email, address, phone, contactPerson, licenseNumber, notes, enabled } = req.body;
@@ -968,6 +838,10 @@ app.post('/api/sales-orders', (req, res) => {
   });
 });
 
+javascript
+
+Copy
+// Sales Order Update
 app.patch('/api/sales-orders/:orderId', (req, res) => {
   const { orderId } = req.params;
   const { customerId, poNumber, items, status } = req.body;
@@ -997,234 +871,261 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
         return res.status(404).json({ error: 'Order not found or not in Draft status' });
       }
 
-      db.serialize(() => {
-        db.run('BEGIN TRANSACTION', (err) => {
-          if (err) {
-            console.error('PATCH /api/sales-orders/:orderId: Begin transaction error:', err);
-            return res.status(500).json({ error: err.message });
+      // Validate inventory if approving
+      if (status === 'Approved') {
+        let remainingChecks = items.length;
+        const errors = [];
+        items.forEach((item, index) => {
+          const { itemName, quantity } = item;
+          if (!itemName || quantity <= 0) {
+            errors.push(`Invalid item at index ${index}: itemName and positive quantity required`);
+            remainingChecks--;
+            if (remainingChecks === 0) finishValidation();
+            return;
           }
-
-          // Update sales order
-          db.run(
-            'UPDATE sales_orders SET customerId = ?, poNumber = ?, status = ? WHERE orderId = ?',
-            [customerId, poNumber || null, status || 'Draft', orderId],
-            (err) => {
+          if (itemName === 'Keg Deposit') {
+            remainingChecks--;
+            if (remainingChecks === 0) finishValidation();
+            return;
+          }
+          db.get(
+            'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
+            [itemName, 'Finished Goods', 'Marketing'],
+            (err, row) => {
               if (err) {
-                db.run('ROLLBACK');
-                console.error('PATCH /api/sales-orders/:orderId: Update order error:', err);
-                return res.status(500).json({ error: err.message });
-              }
-
-              // Delete existing items
-              db.run('DELETE FROM sales_order_items WHERE orderId = ?', [orderId], (err) => {
-                if (err) {
-                  db.run('ROLLBACK');
-                  console.error('PATCH /api/sales-orders/:orderId: Delete items error:', err);
-                  return res.status(500).json({ error: err.message });
-                }
-
-                // Insert updated items
-                let remaining = items.length;
-                const errors = [];
-                items.forEach((item, index) => {
-                  const { itemName, quantity, unit, price, hasKegDeposit } = item;
-                  if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
-                    errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
-                    remaining--;
-                    if (remaining === 0) finish();
-                    return;
-                  }
-
-                  db.run(
-                    'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                    [orderId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
-                    (err) => {
-                      if (err) {
-                        console.error('PATCH /api/sales-orders/:orderId: Insert item error:', err);
-                        errors.push(`Failed to insert item ${itemName}: ${err.message}`);
-                      }
-                      remaining--;
-                      if (remaining === 0) finish();
-                    }
-                  );
+                console.error('PATCH /api/sales-orders/:orderId: Fetch inventory error:', err);
+                errors.push(`Failed to check inventory for ${itemName}: ${err.message}`);
+              } else if (!row || parseFloat(row.quantity) < quantity) {
+                console.error('PATCH /api/sales-orders/:orderId: Insufficient inventory', {
+                  itemName,
+                  available: row?.quantity || 0,
+                  needed: quantity,
                 });
-
-                function finish() {
-                  if (errors.length > 0) {
-                    db.run('ROLLBACK');
-                    console.error('PATCH /api/sales-orders/:orderId: Errors occurred', errors);
-                    return res.status(400).json({ error: errors.join('; ') });
-                  }
-
-                  // If status is Approved, create an invoice
-                  if (status === 'Approved') {
-                    db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
-                      if (err) {
-                        db.run('ROLLBACK');
-                        console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
-                        return res.status(500).json({ error: err.message });
-                      }
-                      if (!setting) {
-                        db.run('ROLLBACK');
-                        console.error('PATCH /api/sales-orders/:orderId: Keg deposit price not set in system_settings');
-                        return res.status(500).json({ error: 'Keg deposit price not configured' });
-                      }
-                      const kegDepositPrice = parseFloat(setting.value);
-                      console.log('PATCH /api/sales-orders/:orderId: Keg deposit price', { kegDepositPrice });
-
-                      // Calculate totals
-                      let subtotal = 0;
-                      let kegDepositTotal = 0;
-                      let kegDepositCount = 0;
-                      items.forEach(item => {
-                        subtotal += parseFloat(item.price) * item.quantity;
-                        if (item.hasKegDeposit) {
-                          kegDepositCount += item.quantity;
-                          kegDepositTotal += item.quantity * kegDepositPrice;
-                        }
-                      });
-                      const total = subtotal + kegDepositTotal;
-                      console.log('PATCH /api/sales-orders/:orderId: Calculated totals', { subtotal, kegDepositTotal, total });
-
-                      // Insert invoice
-                      db.run(
-                        'INSERT INTO invoices (orderId, customerId, status, createdDate, total, subtotal, keg_deposit_total, keg_deposit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                        [orderId, customerId, 'Draft', new Date().toISOString().split('T')[0], total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), kegDepositPrice.toFixed(2)],
-                        function (err) {
-                          if (err) {
-                            db.run('ROLLBACK');
-                            console.error('PATCH /api/sales-orders/:orderId: Insert invoice error:', err);
-                            return res.status(500).json({ error: err.message });
-                          }
-                          const invoiceId = this.lastID;
-                          console.log('PATCH /api/sales-orders/:orderId: Created invoice', { invoiceId });
-
-                          // Insert invoice items
-                          let invoiceItemsRemaining = items.length + (kegDepositCount > 0 ? 1 : 0);
-                          items.forEach(item => {
-                            db.run(
-                              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                              [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
-                              (err) => {
-                                if (err) {
-                                  db.run('ROLLBACK');
-                                  console.error('PATCH /api/sales-orders/:orderId: Insert invoice item error:', err);
-                                  return res.status(500).json({ error: err.message });
-                                }
-                                console.log('PATCH /api/sales-orders/:orderId: Inserted invoice item', { itemName: item.itemName });
-                                if (--invoiceItemsRemaining === 0) commit();
-                              }
-                            );
-                          });
-
-                          // Insert keg deposit line
-                          if (kegDepositCount > 0) {
-                            db.run(
-                              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                              [invoiceId, 'Keg Deposit', kegDepositCount, 'Units', kegDepositPrice.toFixed(2), 0],
-                              (err) => {
-                                if (err) {
-                                  db.run('ROLLBACK');
-                                  console.error('PATCH /api/sales-orders/:orderId: Insert keg deposit item error:', err);
-                                  return res.status(500).json({ error: err.message });
-                                }
-                                console.log('PATCH /api/sales-orders/:orderId: Inserted keg deposit item', { kegDepositCount, kegDepositPrice });
-                                if (--invoiceItemsRemaining === 0) commit();
-                              }
-                            );
-                          } else {
-                            if (--invoiceItemsRemaining === 0) commit();
-                          }
-
-                          function commit() {
-                            db.run('COMMIT', (err) => {
-                              if (err) {
-                                db.run('ROLLBACK');
-                                console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
-                                return res.status(500).json({ error: 'Failed to commit transaction' });
-                              }
-
-                              // Fetch updated order
-                              db.get(
-                                `SELECT so.*, c.name AS customerName
-                                 FROM sales_orders so
-                                 JOIN customers c ON so.customerId = c.customerId
-                                 WHERE so.orderId = ?`,
-                                [orderId],
-                                (err, order) => {
-                                  if (err) {
-                                    console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
-                                    return res.status(500).json({ error: err.message });
-                                  }
-                                  db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
-                                    if (err) {
-                                      console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
-                                      return res.status(500).json({ error: err.message });
-                                    }
-                                    db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
-                                      if (err) {
-                                        console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
-                                        return res.status(500).json({ error: err.message });
-                                      }
-                                      order.items = items;
-                                      order.keg_deposit_price = setting ? setting.value : '0.00';
-                                      order.invoiceId = invoiceId; // Include invoiceId
-                                      console.log('PATCH /api/sales-orders/:orderId: Success', order);
-                                      res.json(order);
-                                    });
-                                  });
-                                }
-                              );
-                            });
-                          }
-                        }
-                      );
-                    });
-                  } else {
-                    // Non-Approved case: Commit and return order
-                    db.run('COMMIT', (err) => {
-                      if (err) {
-                        console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
-                        return res.status(500).json({ error: 'Failed to commit transaction' });
-                      }
-
-                      db.get(
-                        `SELECT so.*, c.name AS customerName
-                         FROM sales_orders so
-                         JOIN customers c ON so.customerId = c.customerId
-                         WHERE so.orderId = ?`,
-                        [orderId],
-                        (err, order) => {
-                          if (err) {
-                            console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
-                            return res.status(500).json({ error: err.message });
-                          }
-                          db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
-                            if (err) {
-                              console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
-                              return res.status(500).json({ error: err.message });
-                            }
-                            db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
-                              if (err) {
-                                console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
-                                return res.status(500).json({ error: err.message });
-                              }
-                              order.items = items;
-                              order.keg_deposit_price = setting ? setting.value : '0.00';
-                              console.log('PATCH /api/sales-orders/:orderId: Success', order);
-                              res.json(order);
-                            });
-                          });
-                        }
-                      );
-                    });
-                  }
-                }
-              });
+                errors.push(`Insufficient inventory for ${itemName}: ${row?.quantity || 0} available, ${quantity} needed`);
+              }
+              remainingChecks--;
+              if (remainingChecks === 0) finishValidation();
             }
           );
         });
-      });
+        function finishValidation() {
+          if (errors.length > 0) {
+            console.error('PATCH /api/sales-orders/:orderId: Inventory validation failed', errors);
+            return res.status(400).json({ error: errors.join('; ') });
+          }
+          proceedWithUpdate();
+        }
+      } else {
+        proceedWithUpdate();
+      }
+
+      function proceedWithUpdate() {
+        db.serialize(() => {
+          db.run('BEGIN TRANSACTION', (err) => {
+            if (err) {
+              console.error('PATCH /api/sales-orders/:orderId: Begin transaction error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            db.run(
+              'UPDATE sales_orders SET customerId = ?, poNumber = ?, status = ? WHERE orderId = ?',
+              [customerId, poNumber || null, status || 'Draft', orderId],
+              (err) => {
+                if (err) {
+                  db.run('ROLLBACK');
+                  console.error('PATCH /api/sales-orders/:orderId: Update order error:', err);
+                  return res.status(500).json({ error: err.message });
+                }
+                db.run('DELETE FROM sales_order_items WHERE orderId = ?', [orderId], (err) => {
+                  if (err) {
+                    db.run('ROLLBACK');
+                    console.error('PATCH /api/sales-orders/:orderId: Delete items error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  let remaining = items.length;
+                  const errors = [];
+                  items.forEach((item, index) => {
+                    const { itemName, quantity, unit, price, hasKegDeposit } = item;
+                    if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+                      errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
+                      remaining--;
+                      if (remaining === 0) finish();
+                      return;
+                    }
+                    db.run(
+                      'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                      [orderId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
+                      (err) => {
+                        if (err) {
+                          console.error('PATCH /api/sales-orders/:orderId: Insert item error:', err);
+                          errors.push(`Failed to insert item ${itemName}: ${err.message}`);
+                        }
+                        remaining--;
+                        if (remaining === 0) finish();
+                      }
+                    );
+                  });
+                  function finish() {
+                    if (errors.length > 0) {
+                      db.run('ROLLBACK');
+                      console.error('PATCH /api/sales-orders/:orderId: Errors occurred', errors);
+                      return res.status(400).json({ error: errors.join('; ') });
+                    }
+                    if (status === 'Approved') {
+                      db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                        if (err) {
+                          db.run('ROLLBACK');
+                          console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                          return res.status(500).json({ error: err.message });
+                        }
+                        if (!setting) {
+                          db.run('ROLLBACK');
+                          console.error('PATCH /api/sales-orders/:orderId: Keg deposit price not set in system_settings');
+                          return res.status(500).json({ error: 'Keg deposit price not configured' });
+                        }
+                        const kegDepositPrice = parseFloat(setting.value);
+                        console.log('PATCH /api/sales-orders/:orderId: Keg deposit price', { kegDepositPrice });
+                        let subtotal = 0;
+                        let kegDepositTotal = 0;
+                        let kegDepositCount = 0;
+                        items.forEach(item => {
+                          subtotal += parseFloat(item.price) * item.quantity;
+                          if (item.hasKegDeposit) {
+                            kegDepositCount += item.quantity;
+                            kegDepositTotal += item.quantity * kegDepositPrice;
+                          }
+                        });
+                        const total = subtotal + kegDepositTotal;
+                        console.log('PATCH /api/sales-orders/:orderId: Calculated totals', { subtotal, kegDepositTotal, total });
+                        db.run(
+                          'INSERT INTO invoices (orderId, customerId, status, createdDate, total, subtotal, keg_deposit_total, keg_deposit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                          [orderId, customerId, 'Draft', new Date().toISOString().split('T')[0], total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), kegDepositPrice.toFixed(2)],
+                          function (err) {
+                            if (err) {
+                              db.run('ROLLBACK');
+                              console.error('PATCH /api/sales-orders/:orderId: Insert invoice error:', err);
+                              return res.status(500).json({ error: err.message });
+                            }
+                            const invoiceId = this.lastID;
+                            console.log('PATCH /api/sales-orders/:orderId: Created invoice', { invoiceId });
+                            let invoiceItemsRemaining = items.length + (kegDepositCount > 0 ? 1 : 0);
+                            items.forEach(item => {
+                              db.run(
+                                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                                [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                                (err) => {
+                                  if (err) {
+                                    db.run('ROLLBACK');
+                                    console.error('PATCH /api/sales-orders/:orderId: Insert invoice item error:', err);
+                                    return res.status(500).json({ error: err.message });
+                                  }
+                                  console.log('PATCH /api/sales-orders/:orderId: Inserted invoice item', { itemName: item.itemName });
+                                  if (--invoiceItemsRemaining === 0) commit();
+                                }
+                              );
+                            });
+                            if (kegDepositCount > 0) {
+                              db.run(
+                                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                                [invoiceId, 'Keg Deposit', kegDepositCount, 'Units', kegDepositPrice.toFixed(2), 0],
+                                (err) => {
+                                  if (err) {
+                                    db.run('ROLLBACK');
+                                    console.error('PATCH /api/sales-orders/:orderId: Insert keg deposit item error:', err);
+                                    return res.status(500).json({ error: err.message });
+                                  }
+                                  console.log('PATCH /api/sales-orders/:orderId: Inserted keg deposit item', { kegDepositCount, kegDepositPrice });
+                                  if (--invoiceItemsRemaining === 0) commit();
+                                }
+                              );
+                            } else {
+                              if (--invoiceItemsRemaining === 0) commit();
+                            }
+                            function commit() {
+                              db.run('COMMIT', (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
+                                  return res.status(500).json({ error: 'Failed to commit transaction' });
+                                }
+                                db.get(
+                                  `SELECT so.*, c.name AS customerName
+                                   FROM sales_orders so
+                                   JOIN customers c ON so.customerId = c.customerId
+                                   WHERE so.orderId = ?`,
+                                  [orderId],
+                                  (err, order) => {
+                                    if (err) {
+                                      console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
+                                      return res.status(500).json({ error: err.message });
+                                    }
+                                    db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                                      if (err) {
+                                        console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
+                                        return res.status(500).json({ error: err.message });
+                                      }
+                                      db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                                        if (err) {
+                                          console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                                          return res.status(500).json({ error: err.message });
+                                        }
+                                        order.items = items;
+                                        order.keg_deposit_price = setting ? setting.value : '0.00';
+                                        order.invoiceId = invoiceId;
+                                        console.log('PATCH /api/sales-orders/:orderId: Success', order);
+                                        res.json(order);
+                                      });
+                                    });
+                                  }
+                                );
+                              });
+                            }
+                          }
+                        );
+                      });
+                    } else {
+                      db.run('COMMIT', (err) => {
+                        if (err) {
+                          console.error('PATCH /api/sales-orders/:orderId: Commit transaction error:', err);
+                          return res.status(500).json({ error: 'Failed to commit transaction' });
+                        }
+                        db.get(
+                          `SELECT so.*, c.name AS customerName
+                           FROM sales_orders so
+                           JOIN customers c ON so.customerId = c.customerId
+                           WHERE so.orderId = ?`,
+                          [orderId],
+                          (err, order) => {
+                            if (err) {
+                              console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
+                              return res.status(500).json({ error: err.message });
+                            }
+                            db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                              if (err) {
+                                console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
+                                return res.status(500).json({ error: err.message });
+                              }
+                              db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+                                if (err) {
+                                  console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
+                                  return res.status(500).json({ error: err.message });
+                                }
+                                order.items = items;
+                                order.keg_deposit_price = setting ? setting.value : '0.00';
+                                console.log('PATCH /api/sales-orders/:orderId: Success', order);
+                                res.json(order);
+                              });
+                            });
+                          }
+                        );
+                      });
+                    }
+                  }
+                });
+              }
+            );
+          });
+        });
+      }
     });
   });
 });
@@ -1357,77 +1258,93 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
         return res.status(500).json({ error: 'Keg deposit price not configured' });
       }
       const kegDepositPrice = parseFloat(setting.value);
+      // Consolidate items by itemName, unit, and price
+      const consolidatedItems = items.reduce((acc, item) => {
+        const { itemName, quantity, unit, price, hasKegDeposit } = item;
+        if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price))) {
+          throw new Error('Each item must have itemName, quantity, unit, and valid price');
+        }
+        const existing = acc.find(i => i.itemName === itemName && i.unit === unit && i.price === price);
+        if (existing) {
+          existing.quantity += quantity;
+        } else {
+          acc.push({ itemName, quantity, unit, price, hasKegDeposit: hasKegDeposit ? 1 : 0 });
+        }
+        return acc;
+      }, []);
+      console.log('PATCH /api/invoices/:invoiceId: Consolidated items', consolidatedItems);
       db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err) => {
         if (err) {
           console.error('PATCH /api/invoices/:invoiceId: Delete items error:', err);
           return res.status(500).json({ error: err.message });
         }
-        let remaining = items.length;
+        let remaining = consolidatedItems.length;
         let subtotal = 0;
         let kegDepositTotal = 0;
-        items.forEach((item) => {
-          const { itemName, quantity, unit, price, hasKegDeposit } = item;
-          if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price))) {
-            console.error('PATCH /api/invoices/:invoiceId: Invalid item', { item });
-            return res.status(400).json({ error: 'Each item must have itemName, quantity, unit, and valid price' });
-          }
-          db.run(
-            'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-            [invoiceId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
-            (err) => {
-              if (err) {
-                console.error('PATCH /api/invoices/:invoiceId: Insert item error:', err);
-                return res.status(500).json({ error: err.message });
-              }
-              if (item.itemName === 'Keg Deposit') {
-                kegDepositTotal += parseFloat(price) * quantity;
-              } else {
-                subtotal += parseFloat(price) * quantity;
-              }
-              if (--remaining === 0) {
-                const total = subtotal + kegDepositTotal;
-                db.run(
-                  'UPDATE invoices SET total = ?, subtotal = ?, keg_deposit_total = ?, keg_deposit_price = ? WHERE invoiceId = ?',
-                  [total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), kegDepositPrice.toFixed(2), invoiceId],
-                  (err) => {
-                    if (err) {
-                      console.error('PATCH /api/invoices/:invoiceId: Update invoice error:', err);
-                      return res.status(500).json({ error: err.message });
-                    }
-                    db.get(
-                      `SELECT i.*, c.name AS customerName, c.email AS customerEmail
-                       FROM invoices i
-                       JOIN customers c ON i.customerId = c.customerId
-                       WHERE i.invoiceId = ?`,
-                      [invoiceId],
-                      (err, updatedInvoice) => {
-                        if (err) {
-                          console.error('PATCH /api/invoices/:invoiceId: Fetch updated invoice error:', err);
-                          return res.status(500).json({ error: err.message });
-                        }
-                        db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+        try {
+          consolidatedItems.forEach((item) => {
+            const { itemName, quantity, unit, price, hasKegDeposit } = item;
+            db.run(
+              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+              [invoiceId, itemName, quantity, unit, price, hasKegDeposit],
+              (err) => {
+                if (err) {
+                  console.error('PATCH /api/invoices/:invoiceId: Insert item error:', err);
+                  return res.status(500).json({ error: err.message });
+                }
+                if (itemName === 'Keg Deposit') {
+                  kegDepositTotal += parseFloat(price) * quantity;
+                } else {
+                  subtotal += parseFloat(price) * quantity;
+                }
+                if (--remaining === 0) {
+                  const total = subtotal + kegDepositTotal;
+                  db.run(
+                    'UPDATE invoices SET total = ?, subtotal = ?, keg_deposit_total = ?, keg_deposit_price = ? WHERE invoiceId = ?',
+                    [total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), kegDepositPrice.toFixed(2), invoiceId],
+                    (err) => {
+                      if (err) {
+                        console.error('PATCH /api/invoices/:invoiceId: Update invoice error:', err);
+                        return res.status(500).json({ error: err.message });
+                      }
+                      db.get(
+                        `SELECT i.*, c.name AS customerName, c.email AS customerEmail
+                         FROM invoices i
+                         JOIN customers c ON i.customerId = c.customerId
+                         WHERE i.invoiceId = ?`,
+                        [invoiceId],
+                        (err, updatedInvoice) => {
                           if (err) {
-                            console.error('PATCH /api/invoices/:invoiceId: Fetch items error:', err);
+                            console.error('PATCH /api/invoices/:invoiceId: Fetch updated invoice error:', err);
                             return res.status(500).json({ error: err.message });
                           }
-                          updatedInvoice.items = items;
-                          updatedInvoice.keg_deposit_price = kegDepositPrice.toFixed(2);
-                          console.log('PATCH /api/invoices/:invoiceId: Success', {
-                            invoiceId,
-                            total,
-                            subtotal,
-                            keg_deposit_total: kegDepositTotal,
+                          db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+                            if (err) {
+                              console.error('PATCH /api/invoices/:invoiceId: Fetch items error:', err);
+                              return res.status(500).json({ error: err.message });
+                            }
+                            updatedInvoice.items = items;
+                            updatedInvoice.keg_deposit_price = kegDepositPrice.toFixed(2);
+                            console.log('PATCH /api/invoices/:invoiceId: Success', {
+                              invoiceId,
+                              total,
+                              subtotal,
+                              keg_deposit_total: kegDepositTotal,
+                            });
+                            res.json(updatedInvoice);
                           });
-                          res.json(updatedInvoice);
-                        });
-                      }
-                    );
-                  }
-                );
+                        }
+                      );
+                    }
+                  );
+                }
               }
-            }
-          );
-        });
+            );
+          });
+        } catch (err) {
+          console.error('PATCH /api/invoices/:invoiceId: Validation error', err);
+          return res.status(400).json({ error: err.message });
+        }
       });
     });
   });
@@ -1445,154 +1362,218 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
       console.error('POST /api/invoices/:invoiceId/post: Invoice not found or not in Draft', { invoiceId });
       return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
     }
-    db.all('SELECT itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, orderItems) => {
-      if (err) {
-        console.error('POST /api/invoices/:invoiceId/post: Fetch invoice items error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log('POST /api/invoices/:invoiceId/post: Invoice items', orderItems);
-      if (!orderItems || orderItems.length === 0) {
-        console.error('POST /api/invoices/:invoiceId/post: No invoice items found', { invoiceId });
-        return res.status(400).json({ error: 'No items found for the invoice' });
-      }
-      db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
+    db.run(
+      `DELETE FROM invoice_items 
+       WHERE itemName = 'Keg Deposit' 
+       AND invoiceId = ?
+       AND id NOT IN (
+         SELECT MIN(id) 
+         FROM invoice_items 
+         WHERE itemName = 'Keg Deposit' 
+         AND invoiceId = ?
+       )`,
+      [invoiceId, invoiceId],
+      (err) => {
         if (err) {
-          console.error('POST /api/invoices/:invoiceId/post: Fetch keg_deposit_price error:', err);
-          return res.status(500).json({ error: err.message });
+          console.error('POST /api/invoices/:invoiceId/post: Cleanup duplicate Keg Deposit lines error:', err);
+          return res.status(500).json({ error: 'Failed to clean up duplicate Keg Deposit lines' });
         }
-        if (!setting) {
-          console.error('POST /api/invoices/:invoiceId/post: Keg deposit price not set in system_settings');
-          return res.status(500).json({ error: 'Keg deposit price not configured' });
-        }
-        const kegDepositPrice = parseFloat(setting.value);
-        console.log('POST /api/invoices/:invoiceId/post: Keg deposit price', { kegDepositPrice });
-        db.serialize(() => {
-          db.run('BEGIN TRANSACTION', (err) => {
+        db.get(
+          'SELECT SUM(quantity) AS totalQuantity FROM invoice_items WHERE itemName = "Keg Deposit" AND invoiceId = ?',
+          [invoiceId],
+          (err, row) => {
             if (err) {
-              console.error('POST /api/invoices/:invoiceId/post: Begin transaction error:', err);
-              return res.status(500).json({ error: 'Failed to start transaction' });
+              console.error('POST /api/invoices/:invoiceId/post: Fetch Keg Deposit quantity error:', err);
+              return res.status(500).json({ error: err.message });
             }
-            db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err) => {
-              if (err) {
-                db.run('ROLLBACK');
-                console.error('POST /api/invoices/:invoiceId/post: Delete invoice items error:', err);
-                return res.status(500).json({ error: err.message });
-              }
-              let remaining = orderItems.length;
-              let subtotal = 0;
-              let kegDepositTotal = 0;
-
-              orderItems.forEach(item => {
-                console.log('POST /api/invoices/:invoiceId/post: Processing item', item);
-                if (!item.price || isNaN(parseFloat(item.price))) {
-                  console.error('POST /api/invoices/:invoiceId/post: Invalid price for item', { itemName: item.itemName, price: item.price });
-                  db.run('ROLLBACK');
-                  return res.status(400).json({ error: `Invalid price for item ${item.itemName || 'Unknown'}` });
+            if (row && row.totalQuantity > 0) {
+              db.run(
+                'UPDATE invoice_items SET quantity = ? WHERE itemName = "Keg Deposit" AND invoiceId = ?',
+                [row.totalQuantity, invoiceId],
+                (err) => {
+                  if (err) {
+                    console.error('POST /api/invoices/:invoiceId/post: Update Keg Deposit quantity error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  console.log('POST /api/invoices/:invoiceId/post: Consolidated Keg Deposit lines', {
+                    invoiceId,
+                    totalQuantity: row.totalQuantity,
+                  });
+                  processItems();
                 }
-                if (item.itemName === 'Keg Deposit') {
-                  // Use Keg Deposit line for kegDepositTotal
-                  kegDepositTotal = parseFloat(item.price) * item.quantity;
-                  db.run(
-                    'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                    [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
-                    (err) => {
-                      if (err) {
-                        db.run('ROLLBACK');
-                        console.error('POST /api/invoices/:invoiceId/post: Insert keg deposit item error:', err);
-                        return res.status(500).json({ error: err.message });
-                      }
-                      if (--remaining === 0) {
-                        commitTransaction();
-                      }
-                    }
-                  );
-                } else {
-                  // Check inventory for non-Keg Deposit items
-                  db.get(
-                    'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
-                    [item.itemName, 'Finished Goods', 'Marketing'],
-                    (err, row) => {
-                      if (err) {
-                        db.run('ROLLBACK');
-                        console.error('POST /api/invoices/:invoiceId/post: Fetch inventory error:', err);
-                        return res.status(500).json({ error: err.message });
-                      }
-                      if (!row || parseFloat(row.quantity) < item.quantity) {
-                        db.run('ROLLBACK');
-                        console.error('POST /api/invoices/:invoiceId/post: Insufficient inventory', { itemName: item.itemName, available: row?.quantity, needed: item.quantity });
-                        return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
-                      }
-                      db.run(
-                        'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND type IN (?, ?)',
-                        [item.quantity, item.itemName, 'Finished Goods', 'Marketing'],
-                        (err) => {
-                          if (err) {
-                            db.run('ROLLBACK');
-                            console.error('POST /api/invoices/:invoiceId/post: Update inventory error:', err);
-                            return res.status(500).json({ error: err.message });
-                          }
-                          db.run(
-                            'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                            [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
-                            (err) => {
-                              if (err) {
-                                db.run('ROLLBACK');
-                                console.error('POST /api/invoices/:invoiceId/post: Insert invoice item error:', err);
-                                return res.status(500).json({ error: err.message });
-                              }
-                              subtotal += parseFloat(item.price) * item.quantity;
-                              if (--remaining === 0) {
-                                commitTransaction();
-                              }
-                            }
-                          );
-                        }
-                      );
-                    }
-                  );
-                }
-              });
-
-              function commitTransaction() {
-                const total = subtotal + kegDepositTotal;
-                db.run(
-                  'UPDATE invoices SET status = ?, postedDate = ?, total = ?, subtotal = ?, keg_deposit_total = ? WHERE invoiceId = ?',
-                  ['Posted', new Date().toISOString().split('T')[0], total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), invoiceId],
-                  (err) => {
+              );
+            } else {
+              processItems();
+            }
+            function processItems() {
+              db.all(
+                'SELECT itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?',
+                [invoiceId],
+                (err, orderItems) => {
+                  if (err) {
+                    console.error('POST /api/invoices/:invoiceId/post: Fetch invoice items error:', err);
+                    return res.status(500).json({ error: err.message });
+                  }
+                  console.log('POST /api/invoices/:invoiceId/post: Invoice items', orderItems);
+                  if (!orderItems || orderItems.length === 0) {
+                    console.error('POST /api/invoices/:invoiceId/post: No invoice items found', { invoiceId });
+                    return res.status(400).json({ error: 'No items found for the invoice' });
+                  }
+                  db.get('SELECT value FROM system_settings WHERE key = ?', ['keg_deposit_price'], (err, setting) => {
                     if (err) {
-                      db.run('ROLLBACK');
-                      console.error('POST /api/invoices/:invoiceId/post: Update invoice error:', err);
+                      console.error('POST /api/invoices/:invoiceId/post: Fetch keg_deposit_price error:', err);
                       return res.status(500).json({ error: err.message });
                     }
-                    db.run('COMMIT', (err) => {
-                      if (err) {
-                        console.error('POST /api/invoices/:invoiceId/post: Commit transaction error:', err);
-                        return res.status(500).json({ error: 'Failed to commit transaction' });
-                      }
-                      // Fetch updated items for response
-                      db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err, items) => {
+                    if (!setting) {
+                      console.error('POST /api/invoices/:invoiceId/post: Keg deposit price not set in system_settings');
+                      return res.status(500).json({ error: 'Keg deposit price not configured' });
+                    }
+                    const kegDepositPrice = parseFloat(setting.value);
+                    console.log('POST /api/invoices/:invoiceId/post: Keg deposit price', { kegDepositPrice });
+                    db.serialize(() => {
+                      db.run('BEGIN TRANSACTION', (err) => {
                         if (err) {
-                          console.error('POST /api/invoices/:invoiceId/post: Fetch items error:', err);
-                          return res.status(500).json({ error: err.message });
+                          console.error('POST /api/invoices/:invoiceId/post: Begin transaction error:', err);
+                          return res.status(500).json({ error: 'Failed to start transaction' });
                         }
-                        console.log('POST /api/invoices/:invoiceId/post: Success', { invoiceId, subtotal, kegDepositTotal, total });
-                        res.json({
-                          message: 'Invoice posted, inventory updated',
-                          subtotal: subtotal.toFixed(2),
-                          keg_deposit_total: kegDepositTotal.toFixed(2),
-                          total: total.toFixed(2),
-                          items: items
+                        db.run('DELETE FROM invoice_items WHERE invoiceId = ?', [invoiceId], (err) => {
+                          if (err) {
+                            db.run('ROLLBACK');
+                            console.error('POST /api/invoices/:invoiceId/post: Delete invoice items error:', err);
+                            return res.status(500).json({ error: err.message });
+                          }
+                          let remaining = orderItems.length;
+                          let subtotal = 0;
+                          let kegDepositTotal = 0;
+                          orderItems.forEach((item) => {
+                            console.log('POST /api/invoices/:invoiceId/post: Processing item', item);
+                            if (!item.price || isNaN(parseFloat(item.price))) {
+                              console.error('POST /api/invoices/:invoiceId/post: Invalid price for item', {
+                                itemName: item.itemName,
+                                price: item.price,
+                              });
+                              db.run('ROLLBACK');
+                              return res.status(400).json({ error: `Invalid price for item ${item.itemName || 'Unknown'}` });
+                            }
+                            if (item.itemName === 'Keg Deposit') {
+                              kegDepositTotal = parseFloat(item.price) * item.quantity;
+                              db.run(
+                                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                                [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                                (err) => {
+                                  if (err) {
+                                    db.run('ROLLBACK');
+                                    console.error('POST /api/invoices/:invoiceId/post: Insert keg deposit item error:', err);
+                                    return res.status(500).json({ error: err.message });
+                                  }
+                                  if (--remaining === 0) {
+                                    commitTransaction();
+                                  }
+                                }
+                              );
+                            } else {
+                              db.get(
+                                'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
+                                [item.itemName, 'Finished Goods', 'Marketing'],
+                                (err, row) => {
+                                  if (err) {
+                                    db.run('ROLLBACK');
+                                    console.error('POST /api/invoices/:invoiceId/post: Fetch inventory error:', err);
+                                    return res.status(500).json({ error: err.message });
+                                  }
+                                  if (!row || parseFloat(row.quantity) < item.quantity) {
+                                    db.run('ROLLBACK');
+                                    console.error('POST /api/invoices/:invoiceId/post: Insufficient inventory', {
+                                      itemName: item.itemName,
+                                      available: row?.quantity,
+                                      needed: item.quantity,
+                                    });
+                                    return res.status(400).json({ error: `Insufficient inventory for ${item.itemName}` });
+                                  }
+                                  db.run(
+                                    'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND type IN (?, ?)',
+                                    [item.quantity, item.itemName, 'Finished Goods', 'Marketing'],
+                                    (err) => {
+                                      if (err) {
+                                        db.run('ROLLBACK');
+                                        console.error('POST /api/invoices/:invoiceId/post: Update inventory error:', err);
+                                        return res.status(500).json({ error: err.message });
+                                      }
+                                      db.run(
+                                        'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
+                                        [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                                        (err) => {
+                                          if (err) {
+                                            db.run('ROLLBACK');
+                                            console.error('POST /api/invoices/:invoiceId/post: Insert invoice item error:', err);
+                                            return res.status(500).json({ error: err.message });
+                                          }
+                                          subtotal += parseFloat(item.price) * item.quantity;
+                                          if (--remaining === 0) {
+                                            commitTransaction();
+                                          }
+                                        }
+                                      );
+                                    }
+                                  );
+                                }
+                              );
+                            }
+                          });
+                          function commitTransaction() {
+                            const total = subtotal + kegDepositTotal;
+                            db.run(
+                              'UPDATE invoices SET status = ?, postedDate = ?, total = ?, subtotal = ?, keg_deposit_total = ? WHERE invoiceId = ?',
+                              ['Posted', new Date().toISOString().split('T')[0], total.toFixed(2), subtotal.toFixed(2), kegDepositTotal.toFixed(2), invoiceId],
+                              (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('POST /api/invoices/:invoiceId/post: Update invoice error:', err);
+                                  return res.status(500).json({ error: err.message });
+                                }
+                                db.run('COMMIT', (err) => {
+                                  if (err) {
+                                    console.error('POST /api/invoices/:invoiceId/post: Commit transaction error:', err);
+                                    return res.status(500).json({ error: 'Failed to commit transaction' });
+                                  }
+                                  db.all(
+                                    'SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?',
+                                    [invoiceId],
+                                    (err, items) => {
+                                      if (err) {
+                                        console.error('POST /api/invoices/:invoiceId/post: Fetch items error:', err);
+                                        return res.status(500).json({ error: err.message });
+                                      }
+                                      console.log('POST /api/invoices/:invoiceId/post: Success', {
+                                        invoiceId,
+                                        subtotal,
+                                        kegDepositTotal,
+                                        total,
+                                      });
+                                      res.json({
+                                        message: 'Invoice posted, inventory updated',
+                                        subtotal: subtotal.toFixed(2),
+                                        keg_deposit_total: kegDepositTotal.toFixed(2),
+                                        total: total.toFixed(2),
+                                        items: items,
+                                      });
+                                    }
+                                  );
+                                });
+                              }
+                            );
+                          }
                         });
                       });
                     });
-                  }
-                );
-              }
-            });
+                  });
+                }
+              );
+            }
           });
-        });
-      });
-    });
+        }
+      );
+    }
   });
 });
 
