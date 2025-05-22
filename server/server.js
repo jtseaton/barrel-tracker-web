@@ -39,6 +39,36 @@ const loadPackageTypesFromXML = () => {
   });
 };
 
+// Load items from XML
+const loadItemsFromXML = () => {
+  fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading items.xml:', err);
+      return;
+    }
+    xml2js.parseString(data, (err, result) => {
+      if (err) {
+        console.error('Error parsing items.xml:', err);
+        return;
+      }
+      const items = result.items.item || [];
+      items.forEach((item) => {
+        const attributes = item.$ || {};
+        const name = String(attributes.name || '').replace(/[^a-zA-Z0-9\s]/g, '');
+        const type = String(attributes.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, '');
+        const enabled = parseInt(attributes.enabled || '1', 10) || 1;
+        db.run(
+          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+          [name, type, enabled],
+          (err) => {
+            if (err) console.error(`Error inserting item ${name}:`, err);
+          }
+        );
+      });
+    });
+  });
+};
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/build')));
@@ -57,7 +87,6 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
-
 
 // Initialize database schema
 const initializeDatabase = () => {
@@ -3799,38 +3828,6 @@ app.post('/api/recipes', (req, res) => {
     });
   });
 });
-
-// Existing routes (unchanged)
-const loadItemsFromXML = () => {
-  fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
-    if (err) {
-      console.error('Error reading items.xml:', err);
-      return;
-    }
-    xml2js.parseString(data, (err, result) => {
-      if (err) {
-        console.error('Error parsing items.xml:', err);
-        return;
-      }
-      const items = result.items.item || [];
-      items.forEach((item) => {
-        const attributes = item.$ || {};
-        const name = String(attributes.name || '').replace(/[^a-zA-Z0-9\s]/g, '');
-        const type = String(attributes.type || 'Other').replace(/[^a-zA-Z0-9\s]/g, '');
-        const enabled = parseInt(attributes.enabled || '1', 10) || 1;
-        db.run(
-          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-          [name, type, enabled],
-          (err) => {
-            if (err) console.error(`Error inserting item ${name}:`, err);
-          }
-        );
-      });
-    });
-  });
-};
-
-loadItemsFromXML();
 
 // Items endpoints
 app.get('/api/items', (req, res) => {
