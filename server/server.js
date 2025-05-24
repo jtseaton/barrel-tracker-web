@@ -5448,12 +5448,23 @@ app.get('/styles.xml', (req, res) => {
   });
 });
 
+// server.js (replace around line ~5480)
 app.get('/api/kegs', (req, res) => {
   const { status } = req.query;
-  let query = 'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.customerId';
+  let query = `
+    SELECT k.*, p.name AS productName, c.name AS customerName, l.name AS locationName,
+           bp.packageType AS packagingType
+    FROM kegs k
+    LEFT JOIN products p ON k.productId = p.id
+    LEFT JOIN customers c ON k.customerId = c.customerId
+    LEFT JOIN locations l ON k.location = l.locationId
+    LEFT JOIN keg_transactions kt ON k.id = kt.kegId AND kt.action = 'Filled'
+    LEFT JOIN batch_packaging bp ON kt.batchId = bp.batchId
+    WHERE kt.id = (SELECT MAX(id) FROM keg_transactions WHERE kegId = k.id AND action = 'Filled') OR kt.id IS NULL
+  `;
   let params = [];
   if (status) {
-    query += ' WHERE k.status = ?';
+    query += ' AND k.status = ?';
     params.push(status);
   }
   db.all(query, params, (err, rows) => {
