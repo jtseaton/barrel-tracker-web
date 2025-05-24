@@ -34,6 +34,8 @@ export enum MaterialType {
   Aging = 'Aging',
   Packaging = 'Packaging',
   Other = 'Other',
+  FinishedGoods = 'Finished Goods',
+  Marketing = 'Marketing',
 }
 
 export enum ProductClass {

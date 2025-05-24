@@ -388,6 +388,42 @@ const initializeDatabase = () => {
         FOREIGN KEY (batchId) REFERENCES batches(batchId)
       )
     `);
+    db.run(`
+      CREATE TABLE kegs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL, -- 'Filled', 'Empty', 'Destroyed'
+        productId INTEGER,
+        lastScanned TEXT,
+        location TEXT, -- e.g., 'Madison Brewery Cooler', 'Customer: Gulf Distributing'
+        customerId INTEGER,
+        FOREIGN KEY (productId) REFERENCES products(id),
+        FOREIGN KEY (customerId) REFERENCES customers(customerId)
+      )
+    `);
+    db.run(`
+      CREATE TABLE keg_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kegId INTEGER NOT NULL,
+        action TEXT NOT NULL, -- 'Registered', 'Filled', 'Shipped', 'Returned', 'Updated', 'Destroyed'
+        productId INTEGER,
+        batchId TEXT,
+        invoiceId INTEGER,
+        customerId INTEGER,
+        date TEXT NOT NULL,
+        location TEXT,
+        FOREIGN KEY (kegId) REFERENCES kegs(id),
+        FOREIGN KEY (productId) REFERENCES products(id),
+        FOREIGN KEY (batchId) REFERENCES batches(batchId),
+        FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId),
+        FOREIGN KEY (customerId) REFERENCES customers(customerId)
+      )  
+    `);
+    db.run(`
+      ALTER TABLE batch_packaging ADD COLUMN keg_codes TEXT;
+      ALTER TABLE invoice_items ADD COLUMN keg_codes TEXT;
+      )
+    `);
 
     // Create indexes
     db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
@@ -516,6 +552,10 @@ const insertTestData = () => {
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
       ['Pharmco Aaper', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
 
+    // Customers
+    db.run('INSERT OR IGNORE INTO customers (name, email) VALUES (?,?)',
+      ['Gulf Distributing', 'jtseaton@gmail']);
+      
     console.log('Test data inserted');
   });
 };
@@ -739,9 +779,15 @@ app.post('/api/sales-orders', (req, res) => {
         let remaining = items.length;
         const errors = [];
         items.forEach((item, index) => {
-          const { itemName, quantity, unit, hasKegDeposit } = item;
+          const { itemName, quantity, unit, hasKegDeposit, kegCodes } = item;
           if (!itemName || quantity <= 0 || !unit) {
             errors.push(`Invalid item at index ${index}: itemName, quantity, and unit are required`);
+            remaining--;
+            if (remaining === 0) finish();
+            return;
+          }
+          if (hasKegDeposit && kegCodes && (!Array.isArray(kegCodes) || kegCodes.some(code => !/^[A-Z0-9-]+$/.test(code)))) {
+            errors.push(`Invalid kegCodes for item ${itemName} at index ${index}: must be an array of valid codes`);
             remaining--;
             if (remaining === 0) finish();
             return;
@@ -750,14 +796,11 @@ app.post('/api/sales-orders', (req, res) => {
           // Extract product name and package type
           const parts = itemName.trim().split(' ');
           let packageType, productName;
-          // Check if last part is 'Keg' or 'Bottle' to determine split
           const lastPart = parts[parts.length - 1].toLowerCase();
           if (['keg', 'bottle', 'can'].includes(lastPart)) {
-            // Assume last 3 parts for types like '1/2 BBL Keg'
             packageType = parts.slice(-3).join(' ').replace(/\s*\/\s*/, '/');
             productName = parts.slice(0, -3).join(' ');
           } else {
-            // Fallback to previous logic
             packageType = parts.slice(-2).join(' ').replace(/\s*\/\s*/, '/');
             productName = parts.slice(0, -2).join(' ');
           }
@@ -812,8 +855,8 @@ app.post('/api/sales-orders', (req, res) => {
 
           function insertItem(itemPrice, itemHasKegDeposit) {
             db.run(
-              'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-              [orderId, itemName, quantity, unit, itemPrice, itemHasKegDeposit ? 1 : 0],
+              'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit, kegCodes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [orderId, itemName, quantity, unit, itemPrice, itemHasKegDeposit ? 1 : 0, kegCodes ? JSON.stringify(kegCodes) : null],
               (err) => {
                 if (err) {
                   console.error('POST /api/sales-orders: Insert item error:', err);
@@ -844,7 +887,7 @@ app.post('/api/sales-orders', (req, res) => {
                 console.error('POST /api/sales-orders: Fetch order error:', err);
                 return res.status(500).json({ error: err.message });
               }
-              db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+              db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit, kegCodes FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
                 if (err) {
                   console.error('POST /api/sales-orders: Fetch items error:', err);
                   return res.status(500).json({ error: err.message });
@@ -854,7 +897,10 @@ app.post('/api/sales-orders', (req, res) => {
                     console.error('POST /api/sales-orders: Fetch keg_deposit_price error:', err);
                     return res.status(500).json({ error: err.message });
                   }
-                  order.items = items;
+                  order.items = items.map(item => ({
+                    ...item,
+                    kegCodes: item.kegCodes ? JSON.parse(item.kegCodes) : null,
+                  }));
                   order.keg_deposit_price = setting ? setting.value : '0.00';
                   console.log('POST /api/sales-orders: Success', order);
                   res.json(order);
@@ -898,12 +944,12 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
         return res.status(404).json({ error: 'Order not found or not in Draft status' });
       }
 
-      // Validate inventory if approving
+      // Validate inventory and kegCodes if approving
       if (status === 'Approved') {
         let remainingChecks = items.length;
         const errors = [];
         items.forEach((item, index) => {
-          const { itemName, quantity } = item;
+          const { itemName, quantity, kegCodes } = item;
           if (!itemName || quantity <= 0) {
             errors.push(`Invalid item at index ${index}: itemName and positive quantity required`);
             remainingChecks--;
@@ -915,29 +961,61 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
             if (remainingChecks === 0) finishValidation();
             return;
           }
-          db.get(
-            'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
-            [itemName, 'Finished Goods', 'Marketing'],
-            (err, row) => {
-              if (err) {
-                console.error('PATCH /api/sales-orders/:orderId: Fetch inventory error:', err);
-                errors.push(`Failed to check inventory for ${itemName}: ${err.message}`);
-              } else if (!row || parseFloat(row.quantity) < quantity) {
-                console.error('PATCH /api/sales-orders/:orderId: Insufficient inventory', {
-                  itemName,
-                  available: row?.quantity || 0,
-                  needed: quantity,
-                });
-                errors.push(`Insufficient inventory for ${itemName}: ${row?.quantity || 0} available, ${quantity} needed`);
+          if (item.hasKegDeposit && (!kegCodes || !Array.isArray(kegCodes) || kegCodes.length !== quantity)) {
+            errors.push(`Item ${itemName} at index ${index} requires exactly ${quantity} keg codes`);
+            remainingChecks--;
+            if (remainingChecks === 0) finishValidation();
+            return;
+          }
+          if (kegCodes) {
+            kegCodes.forEach((code, codeIndex) => {
+              db.get('SELECT id, status, productId FROM kegs WHERE code = ?', [code], (err, keg) => {
+                if (err) {
+                  errors.push(`Failed to fetch keg ${code} for ${itemName}: ${err.message}`);
+                } else if (!keg) {
+                  errors.push(`Keg ${code} not found for ${itemName}`);
+                } else if (keg.status !== 'Filled') {
+                  errors.push(`Keg ${code} is not filled for ${itemName} (status: ${keg.status})`);
+                } else {
+                  // Verify product matches
+                  const parts = itemName.trim().split(' ');
+                  const productName = parts.slice(0, -3).join(' ');
+                  db.get('SELECT id FROM products WHERE name = ?', [productName], (err, product) => {
+                    if (err || !product || product.id !== keg.productId) {
+                      errors.push(`Keg ${code} does not contain ${productName} for ${itemName}`);
+                    }
+                    if (--remainingChecks === 0) finishValidation();
+                  });
+                  return;
+                }
+                if (--remainingChecks === 0) finishValidation();
+              });
+            });
+          } else {
+            db.get(
+              'SELECT quantity FROM inventory WHERE identifier = ? AND type IN (?, ?)',
+              [itemName, 'Finished Goods', 'Marketing'],
+              (err, row) => {
+                if (err) {
+                  console.error('PATCH /api/sales-orders/:orderId: Fetch inventory error:', err);
+                  errors.push(`Failed to check inventory for ${itemName}: ${err.message}`);
+                } else if (!row || parseFloat(row.quantity) < quantity) {
+                  console.error('PATCH /api/sales-orders/:orderId: Insufficient inventory', {
+                    itemName,
+                    available: row?.quantity || 0,
+                    needed: quantity,
+                  });
+                  errors.push(`Insufficient inventory for ${itemName}: ${row?.quantity || 0} available, ${quantity} needed`);
+                }
+                remainingChecks--;
+                if (remainingChecks === 0) finishValidation();
               }
-              remainingChecks--;
-              if (remainingChecks === 0) finishValidation();
-            }
-          );
+            );
+          }
         });
         function finishValidation() {
           if (errors.length > 0) {
-            console.error('PATCH /api/sales-orders/:orderId: Inventory validation failed', errors);
+            console.error('PATCH /api/sales-orders/:orderId: Validation failed', errors);
             return res.status(400).json({ error: errors.join('; ') });
           }
           proceedWithUpdate();
@@ -971,7 +1049,7 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                   let remaining = items.length;
                   const errors = [];
                   items.forEach((item, index) => {
-                    const { itemName, quantity, unit, price, hasKegDeposit } = item;
+                    const { itemName, quantity, unit, price, hasKegDeposit, kegCodes } = item;
                     if (!itemName || quantity <= 0 || !unit || !price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
                       errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
                       remaining--;
@@ -979,8 +1057,8 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                       return;
                     }
                     db.run(
-                      'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                      [orderId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
+                      'INSERT INTO sales_order_items (orderId, itemName, quantity, unit, price, hasKegDeposit, kegCodes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                      [orderId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0, kegCodes ? JSON.stringify(kegCodes) : null],
                       (err) => {
                         if (err) {
                           console.error('PATCH /api/sales-orders/:orderId: Insert item error:', err);
@@ -1037,8 +1115,8 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                             let invoiceItemsRemaining = items.length + (kegDepositCount > 0 ? 1 : 0);
                             items.forEach(item => {
                               db.run(
-                                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                                [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
+                                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit, kegCodes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0, item.kegCodes ? JSON.stringify(item.kegCodes) : null],
                                 (err) => {
                                   if (err) {
                                     db.run('ROLLBACK');
@@ -1085,7 +1163,7 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                                       console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
                                       return res.status(500).json({ error: err.message });
                                     }
-                                    db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                                    db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit, kegCodes FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
                                       if (err) {
                                         console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
                                         return res.status(500).json({ error: err.message });
@@ -1095,7 +1173,10 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                                           console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
                                           return res.status(500).json({ error: err.message });
                                         }
-                                        order.items = items;
+                                        order.items = items.map(item => ({
+                                          ...item,
+                                          kegCodes: item.kegCodes ? JSON.parse(item.kegCodes) : null,
+                                        }));
                                         order.keg_deposit_price = setting ? setting.value : '0.00';
                                         order.invoiceId = invoiceId;
                                         console.log('PATCH /api/sales-orders/:orderId: Success', order);
@@ -1126,7 +1207,7 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                               console.error('PATCH /api/sales-orders/:orderId: Fetch order error:', err);
                               return res.status(500).json({ error: err.message });
                             }
-                            db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
+                            db.all('SELECT id, itemName, quantity, unit, price, hasKegDeposit, kegCodes FROM sales_order_items WHERE orderId = ?', [orderId], (err, items) => {
                               if (err) {
                                 console.error('PATCH /api/sales-orders/:orderId: Fetch items error:', err);
                                 return res.status(500).json({ error: err.message });
@@ -1136,7 +1217,10 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
                                   console.error('PATCH /api/sales-orders/:orderId: Fetch keg_deposit_price error:', err);
                                   return res.status(500).json({ error: err.message });
                                 }
-                                order.items = items;
+                                order.items = items.map(item => ({
+                                  ...item,
+                                  kegCodes: item.kegCodes ? JSON.parse(item.kegCodes) : null,
+                                }));
                                 order.keg_deposit_price = setting ? setting.value : '0.00';
                                 console.log('PATCH /api/sales-orders/:orderId: Success', order);
                                 res.json(order);
@@ -1279,6 +1363,22 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
       }
       const kegDepositPrice = parseFloat(setting.value);
 
+      // Validate kegCodes
+      const errors = [];
+      items.forEach((item, index) => {
+        const { itemName, quantity, kegCodes, hasKegDeposit } = item;
+        if (hasKegDeposit && (!kegCodes || !Array.isArray(kegCodes) || kegCodes.length !== quantity)) {
+          errors.push(`Item ${itemName} at index ${index} requires exactly ${quantity} keg codes`);
+        }
+        if (kegCodes && kegCodes.some(code => !/^[A-Z0-9-]+$/.test(code))) {
+          errors.push(`Invalid kegCodes for item ${itemName} at index ${index}: must be valid codes`);
+        }
+      });
+      if (errors.length > 0) {
+        console.error('PATCH /api/invoices/:invoiceId: Validation errors', errors);
+        return res.status(400).json({ error: errors.join('; ') });
+      }
+
       db.serialize(() => {
         db.run('BEGIN TRANSACTION', (err) => {
           if (err) {
@@ -1294,12 +1394,11 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
             }
 
             let remaining = items.length;
-            const errors = [];
             let subtotal = 0;
             let kegDepositTotal = 0;
 
             items.forEach((item, index) => {
-              const { itemName, quantity, unit, price, hasKegDeposit } = item;
+              const { itemName, quantity, unit, price, hasKegDeposit, kegCodes } = item;
               if (!itemName || quantity < 0 || !unit || !price || isNaN(parseFloat(price))) {
                 errors.push(`Invalid item at index ${index}: itemName, quantity, unit, and valid price are required`);
                 remaining--;
@@ -1308,8 +1407,8 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
               }
 
               db.run(
-                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                [invoiceId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0],
+                'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit, kegCodes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [invoiceId, itemName, quantity, unit, price, hasKegDeposit ? 1 : 0, kegCodes ? JSON.stringify(kegCodes) : null],
                 (err) => {
                   if (err) {
                     console.error('PATCH /api/invoices/:invoiceId: Insert item error:', err);
@@ -1351,7 +1450,7 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
                     }
 
                     db.all(
-                      'SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ? AND itemName != ?',
+                      'SELECT id, itemName, quantity, unit, price, hasKegDeposit, kegCodes FROM invoice_items WHERE invoiceId = ? AND itemName != ?',
                       [invoiceId, 'Keg Deposit'],
                       (err, dbItems) => {
                         if (err) {
@@ -1362,6 +1461,7 @@ app.patch('/api/invoices/:invoiceId', (req, res) => {
                         const enhancedItems = dbItems.map(item => ({
                           ...item,
                           hasKegDeposit: !!item.hasKegDeposit,
+                          kegCodes: item.kegCodes ? JSON.parse(item.kegCodes) : null,
                           kegDeposit: item.hasKegDeposit ? {
                             itemName: 'Keg Deposit',
                             quantity: item.quantity,
@@ -1421,7 +1521,7 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
       return res.status(404).json({ error: 'Invoice not found or not in Draft status' });
     }
     db.all(
-      'SELECT itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ? AND itemName != ?',
+      'SELECT itemName, quantity, unit, price, hasKegDeposit, kegCodes FROM invoice_items WHERE invoiceId = ? AND itemName != ?',
       [invoiceId, 'Keg Deposit'],
       (err, orderItems) => {
         if (err) {
@@ -1444,6 +1544,22 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
           }
           const kegDepositPrice = parseFloat(setting.value);
           console.log('POST /api/invoices/:invoiceId/post: Keg deposit price', { kegDepositPrice });
+
+          // Validate kegCodes
+          const errors = [];
+          orderItems.forEach(item => {
+            if (item.hasKegDeposit) {
+              const kegCodes = item.kegCodes ? JSON.parse(item.kegCodes) : [];
+              if (!kegCodes || kegCodes.length !== item.quantity) {
+                errors.push(`Item ${item.itemName} requires exactly ${item.quantity} keg codes`);
+              }
+            }
+          });
+          if (errors.length > 0) {
+            console.error('POST /api/invoices/:invoiceId/post: Validation errors', errors);
+            return res.status(400).json({ error: errors.join('; ') });
+          }
+
           db.serialize(() => {
             db.run('BEGIN TRANSACTION', (err) => {
               if (err) {
@@ -1496,24 +1612,69 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
                             console.error('POST /api/invoices/:invoiceId/post: Update inventory error:', err);
                             return res.status(500).json({ error: err.message });
                           }
-                          db.run(
-                            'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit) VALUES (?, ?, ?, ?, ?, ?)',
-                            [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0],
-                            (err) => {
+                          const kegCodes = item.kegCodes ? JSON.parse(item.kegCodes) : [];
+                          // Update keg locations if hasKegDeposit
+                          const updateKegs = (callback) => {
+                            if (!item.hasKegDeposit || !kegCodes.length) {
+                              return callback();
+                            }
+                            db.get('SELECT name FROM customers WHERE customerId = ?', [invoice.customerId], (err, customer) => {
                               if (err) {
                                 db.run('ROLLBACK');
-                                console.error('POST /api/invoices/:invoiceId/post: Insert invoice item error:', err);
+                                console.error('POST /api/invoices/:invoiceId/post: Fetch customer error:', err);
                                 return res.status(500).json({ error: err.message });
                               }
-                              subtotal += parseFloat(item.price) * item.quantity;
-                              if (item.hasKegDeposit) {
-                                kegDepositTotal += item.quantity * kegDepositPrice;
+                              let remainingKegs = kegCodes.length;
+                              kegCodes.forEach(code => {
+                                db.run(
+                                  `UPDATE kegs SET status = ?, location = ?, customerId = ?, lastScanned = ? 
+                                   WHERE code = ?`,
+                                  ['Filled', `Customer: ${customer.name}`, invoice.customerId, new Date().toISOString().split('T')[0], code],
+                                  (err) => {
+                                    if (err) {
+                                      db.run('ROLLBACK');
+                                      console.error('POST /api/invoices/:invoiceId/post: Update keg error:', err);
+                                      return res.status(500).json({ error: `Failed to update keg ${code}: ${err.message}` });
+                                    }
+                                    db.run(
+                                      `INSERT INTO keg_transactions (kegId, action, invoiceId, customerId, date, location)
+                                       VALUES ((SELECT id FROM kegs WHERE code = ?), ?, ?, ?, ?, ?)`,
+                                      [code, 'Shipped', invoiceId, invoice.customerId, new Date().toISOString().split('T')[0], `Customer: ${customer.name}`],
+                                      (err) => {
+                                        if (err) {
+                                          db.run('ROLLBACK');
+                                          console.error('POST /api/invoices/:invoiceId/post: Insert keg transaction error:', err);
+                                          return res.status(500).json({ error: `Failed to record keg transaction for ${code}: ${err.message}` });
+                                        }
+                                        if (--remainingKegs === 0) callback();
+                                      }
+                                    );
+                                  }
+                                );
+                              });
+                            });
+                          };
+
+                          updateKegs(() => {
+                            db.run(
+                              'INSERT INTO invoice_items (invoiceId, itemName, quantity, unit, price, hasKegDeposit, kegCodes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                              [invoiceId, item.itemName, item.quantity, item.unit, item.price, item.hasKegDeposit ? 1 : 0, item.kegCodes],
+                              (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('POST /api/invoices/:invoiceId/post: Insert invoice item error:', err);
+                                  return res.status(500).json({ error: err.message });
+                                }
+                                subtotal += parseFloat(item.price) * item.quantity;
+                                if (item.hasKegDeposit) {
+                                  kegDepositTotal += item.quantity * kegDepositPrice;
+                                }
+                                if (--remaining === 0) {
+                                  commitTransaction();
+                                }
                               }
-                              if (--remaining === 0) {
-                                commitTransaction();
-                              }
-                            }
-                          );
+                            );
+                          });
                         }
                       );
                     }
@@ -1536,7 +1697,7 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
                           return res.status(500).json({ error: 'Failed to commit transaction' });
                         }
                         db.all(
-                          'SELECT id, itemName, quantity, unit, price, hasKegDeposit FROM invoice_items WHERE invoiceId = ?',
+                          'SELECT id, itemName, quantity, unit, price, hasKegDeposit, kegCodes FROM invoice_items WHERE invoiceId = ?',
                           [invoiceId],
                           (err, items) => {
                             if (err) {
@@ -1554,7 +1715,10 @@ app.post('/api/invoices/:invoiceId/post', (req, res) => {
                               subtotal: subtotal.toFixed(2),
                               keg_deposit_total: kegDepositTotal.toFixed(2),
                               total: total.toFixed(2),
-                              items: items,
+                              items: items.map(item => ({
+                                ...item,
+                                kegCodes: item.kegCodes ? JSON.parse(item.kegCodes) : null,
+                              })),
                             });
                           }
                         );
@@ -2363,8 +2527,8 @@ app.post('/api/batches/:batchId/equipment', (req, res) => {
 
 app.post('/api/batches/:batchId/package', (req, res) => {
   const { batchId } = req.params;
-  const { packageType, quantity, locationId } = req.body;
-  console.log('POST /api/batches/:batchId/package: Received request', { batchId, packageType, quantity, locationId });
+  const { packageType, quantity, locationId, kegCodes } = req.body;
+  console.log('POST /api/batches/:batchId/package: Received request', { batchId, packageType, quantity, locationId, kegCodes });
 
   if (!packageType || !quantity || quantity <= 0 || !locationId) {
     console.error('POST /api/batches/:batchId/package: Missing required fields', { batchId, packageType, quantity, locationId });
@@ -2374,9 +2538,13 @@ app.post('/api/batches/:batchId/package', (req, res) => {
     console.error('POST /api/batches/:batchId/package: Invalid packageType', { packageType });
     return res.status(400).json({ error: `Invalid packageType. Must be one of: ${Object.keys(packageVolumes).join(', ')}` });
   }
+  if (packageType.includes('Keg') && kegCodes && (!Array.isArray(kegCodes) || kegCodes.some(code => !/^[A-Z0-9-]+$/.test(code)))) {
+    console.error('POST /api/batches/:batchId/package: Invalid kegCodes', { kegCodes });
+    return res.status(400).json({ error: 'kegCodes must be an array of valid codes (e.g., KEG-001)' });
+  }
 
   db.get(
-    `SELECT b.volume, b.siteId, p.name AS productName, b.status
+    `SELECT b.volume, b.siteId, p.name AS productName, p.id AS productId, b.status
      FROM batches b
      JOIN products p ON b.productId = p.id
      WHERE b.batchId = ?`,
@@ -2462,114 +2630,175 @@ app.post('/api/batches/:batchId/package', (req, res) => {
                         return res.status(500).json({ error: `Failed to start transaction: ${err.message}` });
                       }
 
-                      db.run(
-                        `INSERT INTO batch_packaging (batchId, packageType, quantity, volume, locationId, date, siteId)
-                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                        [
-                          batchId,
-                          packageType,
-                          quantity,
-                          volumeUsed,
-                          locationId,
-                          new Date().toISOString().split('T')[0],
-                          batch.siteId,
-                        ],
-                        (err) => {
-                          if (err) {
-                            db.run('ROLLBACK');
-                            console.error('POST /api/batches/:batchId/package: Insert packaging error:', err);
-                            return res.status(500).json({ error: `Failed to record packaging: ${err.message}` });
-                          }
-
-                          const newVolume = availableVolume - volumeUsed;
-                          db.run(
-                            `UPDATE batches SET volume = ? WHERE batchId = ?`,
-                            [newVolume, batchId],
-                            (err) => {
-                              if (err) {
-                                db.run('ROLLBACK');
-                                console.error('POST /api/batches/:batchId/package: Update batch volume error:', err);
-                                return res.status(500).json({ error: `Failed to update batch volume: ${err.message}` });
-                              }
-
-                              db.get(
-                                `SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
-                                [newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
-                                (err, row) => {
-                                  if (err) {
-                                    db.run('ROLLBACK');
-                                    console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
-                                    return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
-                                  }
-
-                                  if (row) {
-                                    const newQuantity = parseFloat(row.quantity) + quantity;
-                                    db.run(
-                                      `UPDATE inventory SET quantity = ?, price = ?, isKegDepositItem = ? 
-                                       WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
-                                      [newQuantity, priceRow.price, priceRow.isKegDepositItem, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
-                                      (err) => {
-                                        if (err) {
-                                          db.run('ROLLBACK');
-                                          console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
-                                          return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
-                                        }
-                                        commitTransaction();
-                                      }
-                                    );
-                                  } else {
-                                    db.run(
-                                      `INSERT INTO inventory (
-                                        identifier, account, type, quantity, unit, price, isKegDepositItem, 
-                                        receivedDate, source, siteId, locationId, status
-                                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                                      [
-                                        newIdentifier,
-                                        'Storage',
-                                        'Finished Goods',
-                                        quantity,
-                                        'Units',
-                                        priceRow.price,
-                                        priceRow.isKegDepositItem,
-                                        new Date().toISOString().split('T')[0],
-                                        'Packaged',
-                                        batch.siteId,
-                                        locationId,
-                                        'Stored',
-                                      ],
-                                      (err) => {
-                                        if (err) {
-                                          db.run('ROLLBACK');
-                                          console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
-                                          return res.status(500).json({ error: `Failed to insert inventory: ${err.message}` });
-                                        }
-                                        commitTransaction();
-                                      }
-                                    );
-                                  }
-
-                                  function commitTransaction() {
-                                    db.run('COMMIT', (err) => {
-                                      if (err) {
-                                        db.run('ROLLBACK');
-                                        console.error('POST /api/batches/:batchId/package: Commit transaction error:', err);
-                                        return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
-                                      }
-                                      console.log('POST /api/batches/:batchId/package: Success', {
-                                        batchId,
-                                        newIdentifier,
-                                        quantity,
-                                        newVolume,
-                                      });
-                                      res.json({ message: 'Packaging successful', newIdentifier, quantity, newVolume });
-                                    });
-                                  }
-                                }
-                              );
-                            }
-                          );
+                      // Validate and update kegs if provided
+                      const validateAndUpdateKegs = (callback) => {
+                        if (!kegCodes || kegCodes.length === 0 || !packageType.includes('Keg')) {
+                          return callback();
                         }
-                      );
+                        if (kegCodes.length !== quantity) {
+                          db.run('ROLLBACK');
+                          console.error('POST /api/batches/:batchId/package: Keg codes mismatch', { kegCodesLength: kegCodes.length, quantity });
+                          return res.status(400).json({ error: `Number of keg codes (${kegCodes.length}) must match quantity (${quantity})` });
+                        }
+                        let remainingKegs = kegCodes.length;
+                        kegCodes.forEach((code, index) => {
+                          db.get('SELECT id, status, productId FROM kegs WHERE code = ?', [code], (err, keg) => {
+                            if (err) {
+                              db.run('ROLLBACK');
+                              console.error('POST /api/batches/:batchId/package: Fetch keg error:', err);
+                              return res.status(500).json({ error: `Failed to fetch keg ${code}: ${err.message}` });
+                            }
+                            if (!keg) {
+                              db.run('ROLLBACK');
+                              console.error('POST /api/batches/:batchId/package: Keg not found', { code });
+                              return res.status(400).json({ error: `Keg not found: ${code}` });
+                            }
+                            if (keg.status !== 'Empty') {
+                              db.run('ROLLBACK');
+                              console.error('POST /api/batches/:batchId/package: Keg not empty', { code, status: keg.status });
+                              return res.status(400).json({ error: `Keg ${code} is not empty (status: ${keg.status})` });
+                            }
+                            db.run(
+                              `UPDATE kegs SET status = ?, productId = ?, lastScanned = ?, location = ?, customerId = NULL 
+                               WHERE code = ?`,
+                              ['Filled', batch.productId, new Date().toISOString().split('T')[0], `Location: ${locationId}`, code],
+                              (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('POST /api/batches/:batchId/package: Update keg error:', err);
+                                  return res.status(500).json({ error: `Failed to update keg ${code}: ${err.message}` });
+                                }
+                                db.run(
+                                  `INSERT INTO keg_transactions (kegId, action, productId, batchId, date, location)
+                                   VALUES ((SELECT id FROM kegs WHERE code = ?), ?, ?, ?, ?, ?)`,
+                                  [code, 'Filled', batch.productId, batchId, new Date().toISOString().split('T')[0], `Location: ${locationId}`],
+                                  (err) => {
+                                    if (err) {
+                                      db.run('ROLLBACK');
+                                      console.error('POST /api/batches/:batchId/package: Insert keg transaction error:', err);
+                                      return res.status(500).json({ error: `Failed to record keg transaction for ${code}: ${err.message}` });
+                                    }
+                                    if (--remainingKegs === 0) callback();
+                                  }
+                                );
+                              }
+                            );
+                          });
+                        });
+                      };
+
+                      validateAndUpdateKegs(() => {
+                        db.run(
+                          `INSERT INTO batch_packaging (batchId, packageType, quantity, volume, locationId, date, siteId, keg_codes)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                          [
+                            batchId,
+                            packageType,
+                            quantity,
+                            volumeUsed,
+                            locationId,
+                            new Date().toISOString().split('T')[0],
+                            batch.siteId,
+                            kegCodes ? JSON.stringify(kegCodes) : null,
+                          ],
+                          (err) => {
+                            if (err) {
+                              db.run('ROLLBACK');
+                              console.error('POST /api/batches/:batchId/package: Insert packaging error:', err);
+                              return res.status(500).json({ error: `Failed to record packaging: ${err.message}` });
+                            }
+
+                            const newVolume = availableVolume - volumeUsed;
+                            db.run(
+                              `UPDATE batches SET volume = ?, stage = ? WHERE batchId = ?`,
+                              [newVolume, 'Packaging', batchId],
+                              (err) => {
+                                if (err) {
+                                  db.run('ROLLBACK');
+                                  console.error('POST /api/batches/:batchId/package: Update batch volume error:', err);
+                                  return res.status(500).json({ error: `Failed to update batch volume: ${err.message}` });
+                                }
+
+                                db.get(
+                                  `SELECT quantity FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
+                                  [newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
+                                  (err, row) => {
+                                    if (err) {
+                                      db.run('ROLLBACK');
+                                      console.error('POST /api/batches/:batchId/package: Fetch inventory error:', err);
+                                      return res.status(500).json({ error: `Failed to check inventory: ${err.message}` });
+                                    }
+
+                                    if (row) {
+                                      const newQuantity = parseFloat(row.quantity) + quantity;
+                                      db.run(
+                                        `UPDATE inventory SET quantity = ?, price = ?, isKegDepositItem = ? 
+                                         WHERE identifier = ? AND type = ? AND account = ? AND siteId = ? AND locationId = ?`,
+                                        [newQuantity, priceRow.price, priceRow.isKegDepositItem, newIdentifier, 'Finished Goods', 'Storage', batch.siteId, locationId],
+                                        (err) => {
+                                          if (err) {
+                                            db.run('ROLLBACK');
+                                            console.error('POST /api/batches/:batchId/package: Update inventory error:', err);
+                                            return res.status(500).json({ error: `Failed to update inventory: ${err.message}` });
+                                          }
+                                          commitTransaction();
+                                        }
+                                      );
+                                    } else {
+                                      db.run(
+                                        `INSERT INTO inventory (
+                                          identifier, account, type, quantity, unit, price, isKegDepositItem, 
+                                          receivedDate, source, siteId, locationId, status
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                        [
+                                          newIdentifier,
+                                          'Storage',
+                                          'Finished Goods',
+                                          quantity,
+                                          'Units',
+                                          priceRow.price,
+                                          priceRow.isKegDepositItem,
+                                          new Date().toISOString().split('T')[0],
+                                          'Packaged',
+                                          batch.siteId,
+                                          locationId,
+                                          'Stored',
+                                        ],
+                                        (err) => {
+                                          if (err) {
+                                            db.run('ROLLBACK');
+                                            console.error('POST /api/batches/:batchId/package: Insert inventory error:', err);
+                                            return res.status(500).json({ error: `Failed to insert inventory: ${err.message}` });
+                                          }
+                                          commitTransaction();
+                                        }
+                                      );
+                                    }
+
+                                    function commitTransaction() {
+                                      db.run('COMMIT', (err) => {
+                                        if (err) {
+                                          db.run('ROLLBACK');
+                                          console.error('POST /api/batches/:batchId/package: Commit transaction error:', err);
+                                          return res.status(500).json({ error: `Failed to commit transaction: ${err.message}` });
+                                        }
+                                        console.log('POST /api/batches/:batchId/package: Success', {
+                                          batchId,
+                                          newIdentifier,
+                                          quantity,
+                                          newVolume,
+                                          kegCodes,
+                                        });
+                                        res.json({ message: 'Packaging successful', newIdentifier, quantity, newVolume });
+                                      });
+                                    }
+                                  }
+                                );
+                              }
+                            );
+                          }
+                        );
+                      });
                     });
                   });
                 }
@@ -5216,6 +5445,177 @@ app.get('/styles.xml', (req, res) => {
       console.error('Error serving styles.xml:', err);
       res.status(404).json({ error: 'styles.xml not found' });
     }
+  });
+});
+
+app.get('/api/kegs', (req, res) => {
+  const { status } = req.query;
+  let query = 'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.id';
+  let params = [];
+  if (status) {
+    query += ' WHERE k.status = ?';
+    params.push(status);
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('GET /api/kegs: Fetch kegs error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/kegs: Success', { count: rows.length });
+    res.json(rows);
+  });
+});
+
+app.post('/api/kegs/register', (req, res) => {
+  const { code } = req.body;
+  if (!code || !/^[A-Z0-9-]+$/.test(code)) {
+    console.error('POST /api/kegs/register: Invalid code', { code });
+    return res.status(400).json({ error: 'Valid keg code (e.g., KEG-001) required' });
+  }
+  db.get('SELECT id FROM kegs WHERE code = ?', [code], (err, existing) => {
+    if (err) {
+      console.error('POST /api/kegs/register: Check existing keg error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (existing) {
+      console.error('POST /api/kegs/register: Keg already exists', { code });
+      return res.status(400).json({ error: `Keg code ${code} already registered` });
+    }
+    const date = new Date().toISOString().split('T')[0];
+    db.run(
+      'INSERT INTO kegs (code, status, lastScanned, location) VALUES (?, ?, ?, ?)',
+      [code, 'Empty', date, 'Brewery'],
+      function (err) {
+        if (err) {
+          console.error('POST /api/kegs/register: Insert keg error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        const kegId = this.lastID;
+        db.run(
+          'INSERT INTO keg_transactions (kegId, action, date, location) VALUES (?, ?, ?, ?)',
+          [kegId, 'Registered', date, 'Brewery'],
+          (err) => {
+            if (err) {
+              console.error('POST /api/kegs/register: Insert transaction error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log('POST /api/kegs/register: Success', { code, kegId });
+            res.json({ id: kegId, code, status: 'Empty', lastScanned: date, location: 'Brewery' });
+          }
+        );
+      }
+    );
+  });
+});
+
+app.get('/api/kegs/:code', (req, res) => {
+  const { code } = req.params;
+  db.get(
+    'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.id WHERE k.code = ?',
+    [code],
+    (err, keg) => {
+      if (err) {
+        console.error('GET /api/kegs/:code: Fetch keg error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (!keg) {
+        console.error('GET /api/kegs/:code: Keg not found', { code });
+        return res.status(404).json({ error: `Keg not found: ${code}` });
+      }
+      console.log('GET /api/kegs/:code: Success', keg);
+      res.json(keg);
+    }
+  );
+});
+
+app.patch('/api/kegs/:code', (req, res) => {
+  const { code } = req.params;
+  const { status, productId, location, customerId } = req.body;
+  if (!status && !productId && !location && !customerId) {
+    console.error('PATCH /api/kegs/:code: No fields provided', { code });
+    return res.status(400).json({ error: 'At least one field (status, productId, location, customerId) must be provided' });
+  }
+  if (status && !['Filled', 'Empty', 'Destroyed', 'Broken'].includes(status)) {
+    console.error('PATCH /api/kegs/:code: Invalid status', { status });
+    return res.status(400).json({ error: 'Invalid status. Must be Filled, Empty, Destroyed, or Broken' });
+  }
+  db.get('SELECT * FROM kegs WHERE code = ?', [code], (err, keg) => {
+    if (err) {
+      console.error('PATCH /api/kegs/:code: Fetch keg error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!keg) {
+      console.error('PATCH /api/kegs/:code: Keg not found', { code });
+      return res.status(404).json({ error: `Keg not found: ${code}` });
+    }
+    const updates = {};
+    if (status) updates.status = status;
+    if (productId) updates.productId = productId;
+    if (location) updates.location = location;
+    if (customerId !== undefined) updates.customerId = customerId;
+    updates.lastScanned = new Date().toISOString().split('T')[0];
+
+    const setClause = Object.keys(updates).map(field => `${field} = ?`).join(', ');
+    const values = [...Object.values(updates), code];
+
+    db.run(
+      `UPDATE kegs SET ${setClause} WHERE code = ?`,
+      values,
+      function (err) {
+        if (err) {
+          console.error('PATCH /api/kegs/:code: Update keg error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        db.run(
+          'INSERT INTO keg_transactions (kegId, action, productId, customerId, date, location) VALUES (?, ?, ?, ?, ?, ?)',
+          [keg.id, 'Updated', productId || keg.productId, customerId !== undefined ? customerId : keg.customerId, updates.lastScanned, location || keg.location],
+          (err) => {
+            if (err) {
+              console.error('PATCH /api/kegs/:code: Insert transaction error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            db.get(
+              'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.id WHERE k.code = ?',
+              [code],
+              (err, updatedKeg) => {
+                if (err) {
+                  console.error('PATCH /api/kegs/:code: Fetch updated keg error:', err);
+                  return res.status(500).json({ error: err.message });
+                }
+                console.log('PATCH /api/kegs/:code: Success', updatedKeg);
+                res.json(updatedKeg);
+              }
+            );
+          }
+        );
+      }
+    );
+  });
+});
+
+app.get('/api/kegs/:code/transactions', (req, res) => {
+  const { code } = req.params;
+  db.get('SELECT id FROM kegs WHERE code = ?', [code], (err, keg) => {
+    if (err) {
+      console.error('GET /api/kegs/:code/transactions: Fetch keg error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!keg) {
+      console.error('GET /api/kegs/:code/transactions: Keg not found', { code });
+      return res.status(404).json({ error: `Keg not found: ${code}` });
+    }
+    db.all(
+      'SELECT kt.*, p.name AS productName, c.name AS customerName FROM keg_transactions kt LEFT JOIN products p ON kt.productId = p.id LEFT JOIN customers c ON kt.customerId = c.id WHERE kt.kegId = ? ORDER BY kt.date DESC',
+      [keg.id],
+      (err, transactions) => {
+        if (err) {
+          console.error('GET /api/kegs/:code/transactions: Fetch transactions error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('GET /api/kegs/:code/transactions: Success', { code, count: transactions.length });
+        res.json(transactions);
+      }
+    );
   });
 });
 
