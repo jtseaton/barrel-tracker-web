@@ -5450,7 +5450,7 @@ app.get('/styles.xml', (req, res) => {
 
 app.get('/api/kegs', (req, res) => {
   const { status } = req.query;
-  let query = 'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.id';
+  let query = 'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.customerId';
   let params = [];
   if (status) {
     query += ' WHERE k.status = ?';
