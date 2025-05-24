@@ -26,6 +26,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
           throw new Error(`Failed to fetch kegs: HTTP ${res.status}`);
         }
         const data = await res.json();
+        console.log('Fetched kegs:', data); // Debug log
         setKegs(data);
       } catch (err: any) {
         setError('Failed to load kegs: ' + err.message);
@@ -71,6 +72,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
         throw new Error(`Failed to fetch transactions: ${text}`);
       }
       const transactions = await res.json();
+      console.log('Fetched transactions for keg:', keg.code, transactions); // Debug log
       setDetailsModal({ keg, transactions });
     } catch (err: any) {
       setError('Failed to load keg transactions: ' + err.message);
