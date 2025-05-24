@@ -172,6 +172,8 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
         <thead>
           <tr>
             <th>Code</th>
+            <th>Product</th>
+            <th>Packaging Type</th>
             <th>Status</th>
             <th>Customer</th>
             <th>Location</th>
@@ -188,9 +190,11 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
                   {keg.code}
                 </span>
               </td>
+              <td>{keg.productName || 'N/A'}</td>
+              <td>{keg.packagingType || 'N/A'}</td>
               <td>{keg.status}</td>
               <td>{keg.customerName || 'N/A'}</td>
-              <td>{keg.location || 'N/A'}</td>
+              <td>{keg.locationName || 'N/A'}</td>
             </tr>
           ))}
         </tbody>
@@ -274,7 +278,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
           >
             <h3 style={{ color: '#555', marginBottom: '20px' }}>Keg Details: {detailsModal.keg.code}</h3>
             <p><strong>Status:</strong> {detailsModal.keg.status}</p>
-            <p><strong>Location:</strong> {detailsModal.keg.location || 'N/A'}</p>
+            <p><strong>Location:</strong> {detailsModal.keg.locationName || 'N/A'}</p>
             <p><strong>Customer:</strong> {detailsModal.keg.customerName || 'N/A'}</p>
             <p><strong>Last Scanned:</strong> {detailsModal.keg.lastScanned}</p>
             <h4 style={{ color: '#555', margin: '20px 0 10px' }}>Transaction History</h4>
