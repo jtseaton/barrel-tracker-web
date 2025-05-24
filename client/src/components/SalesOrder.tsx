@@ -1,7 +1,9 @@
+// src/components/SalesOrderComponent.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Customer, InventoryItem, SalesOrder, SalesOrderItem } from '../types/interfaces';
 import { MaterialType } from '../types/enums';
+import '../App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -23,6 +25,10 @@ interface Product {
   packageTypes: PackageType[];
 }
 
+interface ExtendedSalesOrderItem extends SalesOrderItem {
+  kegCodes?: string[];
+}
+
 const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ inventory }) => {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId: string }>();
@@ -33,13 +39,16 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
     poNumber: '',
     status: 'Draft',
   });
-  const [items, setItems] = useState<SalesOrderItem[]>([
-    { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' },
+  const [items, setItems] = useState<ExtendedSalesOrderItem[]>([
+    { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00', kegCodes: [] },
   ]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState<NewCustomer>({ name: '', email: '', address: '' });
+  const [kegScanning, setKegScanning] = useState<{ itemIndex: number | null; kegCodes: string[] }>({ itemIndex: null, kegCodes: [] });
+  const [currentKegCode, setCurrentKegCode] = useState('');
+  const [manualKegEntry, setManualKegEntry] = useState(false);
 
   const fetchProductByName = async (productName: string): Promise<Product | null> => {
     try {
@@ -60,7 +69,6 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch customers
         const customerRes = await fetch(`${API_BASE_URL}/api/customers`, {
           headers: { Accept: 'application/json' },
         });
@@ -70,7 +78,6 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         const customerData = await customerRes.json();
         setCustomers(customerData);
 
-        // Fetch products
         const productRes = await fetch(`${API_BASE_URL}/api/products`, {
           headers: { Accept: 'application/json' },
         });
@@ -100,7 +107,8 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             data.items.map((item: SalesOrderItem) => ({
               ...item,
               price: item.price || '0.00',
-            })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]
+              kegCodes: item.kegCodes || [],
+            })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00', kegCodes: [] }]
           );
         } catch (err: any) {
           setError('Failed to load sales order: ' + err.message);
@@ -111,15 +119,14 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
   }, [orderId]);
 
   const addItem = () => {
-    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]);
+    setItems([...items, { itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00', kegCodes: [] }]);
   };
 
-  const updateItem = async (index: number, field: keyof SalesOrderItem, value: any) => {
+  const updateItem = async (index: number, field: keyof ExtendedSalesOrderItem, value: any) => {
     const updatedItems = [...items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
 
     if (field === 'itemName' && typeof value === 'string') {
-      // Split itemName into product name and package type
       const parts = value.trim().split(' ');
       let packageType: string = '';
       let productName: string = '';
@@ -132,7 +139,6 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         productName = parts.slice(0, -2).join(' ');
       }
 
-      // Find product and package type
       const product = products.find(p => p.name === productName);
       if (product && packageType) {
         const pkg = product.packageTypes?.find(pt => pt.type === packageType);
@@ -149,7 +155,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         const invItem = inventory.find(i => i.identifier === value && i.type === MaterialType.FinishedGoods);
         if (invItem && invItem.price) {
           updatedItems[index].price = invItem.price;
-          updatedItems[index].hasKegDeposit = invItem.isKegDepositItem === 1; // Fixed: Safe comparison
+          updatedItems[index].hasKegDeposit = invItem.isKegDepositItem === 1;
           updatedItems[index].unit = 'Units';
         } else {
           updatedItems[index].price = '0.00';
@@ -170,11 +176,54 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
     setItems(items.filter((_, i) => i !== index));
   };
 
+  const handleAddKegCode = async (index: number) => {
+    if (!currentKegCode || !/^[A-Z0-9-]+$/.test(currentKegCode)) {
+      setError('Valid keg code (e.g., KEG-001) required');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/kegs/${currentKegCode}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Keg not found: HTTP ${res.status}, ${text}`);
+      }
+      const keg = await res.json();
+      if (keg.status !== 'Filled' || keg.productId !== products.find(p => items[index].itemName.includes(p.name))?.id) {
+        setError(`Keg ${currentKegCode} is not filled with ${items[index].itemName}`);
+        return;
+      }
+      if (kegScanning.kegCodes.includes(currentKegCode)) {
+        setError(`Keg ${currentKegCode} already added`);
+        return;
+      }
+      const updatedKegCodes = [...kegScanning.kegCodes, currentKegCode];
+      setKegScanning({ ...kegScanning, kegCodes: updatedKegCodes });
+      setCurrentKegCode('');
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Add keg code error:', err);
+      setError('Failed to add keg: ' + errorMessage);
+    }
+  };
+
+  const saveKegCodes = () => {
+    if (kegScanning.itemIndex === null) return;
+    const updatedItems = [...items];
+    updatedItems[kegScanning.itemIndex].kegCodes = kegScanning.kegCodes;
+    setItems(updatedItems);
+    setKegScanning({ itemIndex: null, kegCodes: [] });
+    setCurrentKegCode('');
+    setManualKegEntry(false);
+    setSuccessMessage('Keg codes saved');
+    setTimeout(() => setSuccessMessage(null), 2000);
+  };
+
   const handleSave = async () => {
     if (
       !salesOrder.customerId ||
       items.some(
-        (item) =>
+        item =>
           !item.itemName ||
           item.quantity <= 0 ||
           !item.unit ||
@@ -185,6 +234,12 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
     ) {
       setError('Customer and valid items with prices are required');
       return;
+    }
+    for (const item of items) {
+      if (item.hasKegDeposit && (!item.kegCodes || item.kegCodes.length !== item.quantity)) {
+        setError(`Item ${item.itemName} requires ${item.quantity} keg codes`);
+        return;
+      }
     }
     try {
       const method = orderId ? 'PATCH' : 'POST';
@@ -199,9 +254,10 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             quantity: item.quantity,
             unit: item.unit,
             price: item.price,
-            hasKegDeposit: item.hasKegDeposit ? 1 : 0 // Convert boolean to number for backend
-          }))
-        })
+            hasKegDeposit: item.hasKegDeposit ? 1 : 0,
+            kegCodes: item.kegCodes,
+          })),
+        }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -213,8 +269,9 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
         data.items.map((item: SalesOrderItem) => ({
           ...item,
           price: item.price || '0.00',
-          hasKegDeposit: !!item.hasKegDeposit // Convert number to boolean
-        })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00' }]
+          hasKegDeposit: !!item.hasKegDeposit,
+          kegCodes: item.kegCodes || [],
+        })) || [{ itemName: '', quantity: 0, unit: 'Units', hasKegDeposit: false, price: '0.00', kegCodes: [] }]
       );
       setSuccessMessage(`Sales order ${orderId ? 'updated' : 'created'} successfully`);
       setTimeout(() => {
@@ -232,6 +289,12 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
       setError('Cannot approve: Missing order ID, customer, or items');
       return;
     }
+    for (const item of items) {
+      if (item.hasKegDeposit && (!item.kegCodes || item.kegCodes.length !== item.quantity)) {
+        setError(`Item ${item.itemName} requires ${item.quantity} keg codes`);
+        return;
+      }
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/sales-orders/${salesOrder.orderId}`, {
         method: 'PATCH',
@@ -244,10 +307,11 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             quantity: item.quantity,
             unit: item.unit,
             price: item.price,
-            hasKegDeposit: item.hasKegDeposit ? 1 : 0 // Convert boolean to number for backend
+            hasKegDeposit: item.hasKegDeposit ? 1 : 0,
+            kegCodes: item.kegCodes,
           })),
-          status: 'Approved'
-        })
+          status: 'Approved',
+        }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -362,66 +426,65 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
           <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
             Items (required):
           </label>
-          {items.map((item, index) => {
-            const selectedItem = inventory.find((inv) => inv.identifier === item.itemName);
-            return (
-              <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                <select
-                  value={item.itemName}
-                  onChange={(e) => updateItem(index, 'itemName', e.target.value)}
-                  style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                  disabled={salesOrder.status === 'Approved'}
-                >
-                  <option value="">Select Item</option>
-                  {products.map(p => p.packageTypes.map(pt => (
-                    <option key={`${p.name} ${pt.type}`} value={`${p.name} ${pt.type}`}>
-                      {`${p.name} ${pt.type}`}
-                    </option>
-                  )))}
-                </select>
+          {items.map((item, index) => (
+            <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                value={item.itemName}
+                onChange={(e) => updateItem(index, 'itemName', e.target.value)}
+                style={{ width: '200px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex === index}
+              >
+                <option value="">Select Item</option>
+                {products.map(p => p.packageTypes.map(pt => (
+                  <option key={`${p.name} ${pt.type}`} value={`${p.name} ${pt.type}`}>
+                    {`${p.name} ${pt.type}`}
+                  </option>
+                )))}
+              </select>
+              <input
+                type="number"
+                value={item.quantity || ''}
+                onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                placeholder="Quantity"
+                min="0"
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex === index}
+              />
+              <select
+                value={item.unit}
+                onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex === index}
+              >
+                <option value="Units">Units</option>
+                <option value="Kegs">Kegs</option>
+                <option value="Bottles">Bottles</option>
+                <option value="Cans">Cans</option>
+              </select>
+              <input
+                type="number"
+                value={parseFloat(item.price)}
+                onChange={(e) => updateItem(index, 'price', e.target.value)}
+                placeholder="Price"
+                step="0.01"
+                min="0"
+                style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
+                disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex === index}
+              />
+              <label>
                 <input
-                  type="number"
-                  value={item.quantity || ''}
-                  onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                  placeholder="Quantity"
-                  min="0"
-                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                  disabled={salesOrder.status === 'Approved'}
+                  type="checkbox"
+                  checked={item.hasKegDeposit}
+                  onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
+                  disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex === index}
                 />
-                <select
-                  value={item.unit}
-                  onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                  disabled={salesOrder.status === 'Approved'}
-                >
-                  <option value="Units">Units</option>
-                  <option value="Kegs">Kegs</option>
-                  <option value="Bottles">Bottles</option>
-                  <option value="Cans">Cans</option>
-                </select>
-                <input
-                  type="number"
-                  value={parseFloat(item.price)}
-                  onChange={(e) => updateItem(index, 'price', e.target.value)}
-                  placeholder="Price"
-                  step="0.01"
-                  min="0"
-                  style={{ width: '100px', padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px' }}
-                  disabled={salesOrder.status === 'Approved'}
-                />
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={item.hasKegDeposit}
-                    onChange={(e) => updateItem(index, 'hasKegDeposit', e.target.checked)}
-                    disabled={salesOrder.status === 'Approved'}
-                  />
-                  Keg Deposit
-                </label>
+                Keg Deposit
+              </label>
+              {item.hasKegDeposit && (
                 <button
-                  onClick={() => removeItem(index)}
+                  onClick={() => setKegScanning({ itemIndex: index, kegCodes: item.kegCodes || [] })}
                   style={{
-                    backgroundColor: '#F86752',
+                    backgroundColor: '#2196F3',
                     color: '#fff',
                     padding: '8px 12px',
                     border: 'none',
@@ -430,11 +493,30 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                   }}
                   disabled={salesOrder.status === 'Approved'}
                 >
-                  Remove
+                  {item.kegCodes && item.kegCodes.length > 0 ? `Edit Kegs (${item.kegCodes.length})` : 'Scan Kegs'}
                 </button>
-              </div>
-            );
-          })}
+              )}
+              <button
+                onClick={() => removeItem(index)}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '8px 12px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+                disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex === index}
+              >
+                Remove
+              </button>
+              {item.kegCodes && item.kegCodes.length > 0 && (
+                <p style={{ width: '100%' }}>
+                  <strong>Kegs:</strong> {item.kegCodes.join(', ')}
+                </p>
+              )}
+            </div>
+          ))}
           <button
             onClick={addItem}
             style={{
@@ -445,7 +527,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
               borderRadius: '4px',
               cursor: 'pointer',
             }}
-            disabled={salesOrder.status === 'Approved'}
+            disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex !== null}
           >
             Add Item
           </button>
@@ -462,7 +544,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             borderRadius: '4px',
             cursor: 'pointer',
           }}
-          disabled={salesOrder.status === 'Approved'}
+          disabled={salesOrder.status === 'Approved' || kegScanning.itemIndex !== null}
         >
           Save Sales Order
         </button>
@@ -477,6 +559,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
               borderRadius: '4px',
               cursor: 'pointer',
             }}
+            disabled={kegScanning.itemIndex !== null}
           >
             Approve Sales Order
           </button>
@@ -491,6 +574,7 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
             borderRadius: '4px',
             cursor: 'pointer',
           }}
+          disabled={kegScanning.itemIndex !== null}
         >
           Cancel
         </button>
@@ -605,6 +689,120 @@ const SalesOrderComponent: React.FC<{ inventory: InventoryItem[] }> = ({ invento
                   border: 'none',
                   borderRadius: '4px',
                   cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {kegScanning.itemIndex !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2100,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+              color: '#555',
+            }}
+          >
+            <h3 style={{ color: '#555', marginBottom: '20px' }}>
+              Scan Kegs for {items[kegScanning.itemIndex].itemName}
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+              <div>
+                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                  Keg Code:
+                </label>
+                <input
+                  type="text"
+                  value={currentKegCode}
+                  onChange={(e) => setCurrentKegCode(e.target.value)}
+                  placeholder="Scan or enter keg code"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                  }}
+                />
+                <label style={{ marginTop: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={manualKegEntry}
+                    onChange={(e) => setManualKegEntry(e.target.checked)}
+                  />
+                  Manual Entry
+                </label>
+              </div>
+              {kegScanning.kegCodes.length > 0 && (
+                <div>
+                  <p><strong>Scanned Kegs:</strong> {kegScanning.kegCodes.join(', ')}</p>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
+              <button
+                onClick={() => handleAddKegCode(kegScanning.itemIndex!)}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Add Keg
+              </button>
+              <button
+                onClick={saveKegCodes}
+                style={{
+                  backgroundColor: '#28A745',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setKegScanning({ itemIndex: null, kegCodes: [] });
+                  setCurrentKegCode('');
+                  setManualKegEntry(false);
+                  setError(null);
+                }}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
                 }}
               >
                 Cancel

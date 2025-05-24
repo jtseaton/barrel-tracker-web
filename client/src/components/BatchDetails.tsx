@@ -1,3 +1,4 @@
+// src/components/BatchDetails.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site, Equipment, Ingredient, Location, InventoryItem, PackagingAction, BatchDetailsProps } from '../types/interfaces';
@@ -21,136 +22,295 @@ interface BatchAction {
 }
 
 const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory }) => {
-const { batchId } = useParams<{ batchId: string }>();
-const navigate = useNavigate();
-const [batch, setBatch] = useState<Batch | null>(null);
-const [products, setProducts] = useState<Product[]>([]);
-const [sites, setSites] = useState<Site[]>([]);
-const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
-const [actions, setActions] = useState<BatchAction[]>([]);
-const [equipment, setEquipment] = useState<Equipment[]>([]);
-const [locations, setLocations] = useState<Location[]>([]);
-const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
-const [newAction, setNewAction] = useState('');
-const [newBatchId, setNewBatchId] = useState('');
-const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
-const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
-const [stage, setStage] = useState<'' | 'Brewing' | 'Fermentation' | 'Filtering/Carbonating' | 'Packaging' | 'Completed'>('');
-const [packageType, setPackageType] = useState<string>('');
-const [packageTypes, setPackageTypes] = useState<{ name: string; volume: number; enabled: number }[]>([]); // Added
-const [productPackageTypes, setProductPackageTypes] = useState<string[]>([]); // Added state
-const [packageQuantity, setPackageQuantity] = useState<number>(0);
-const [packageLocation, setPackageLocation] = useState<string>('');
-const [error, setError] = useState<string | null>(null);
-const [successMessage, setSuccessMessage] = useState<string | null>(null);
-const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
-const [showVolumePrompt, setShowVolumePrompt] = useState<{ message: string; shortfall: number } | null>(null);
-const [showLossPrompt, setShowLossPrompt] = useState<{ volume: number } | null>(null);
-const [packagingActions, setPackagingActions] = useState<PackagingAction[]>([]);
-const [editPackaging, setEditPackaging] = useState<PackagingAction | null>(null);
-const packageVolumes: { [key: string]: number } = {
-  '1/2 BBL Keg': 0.5,
-  '1/6 BBL Keg': 0.167,
-  '750ml Bottle': 0.006,
-};
-const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packaging', 'Completed'];
+  const { batchId } = useParams<{ batchId: string }>();
+  const navigate = useNavigate();
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [items, setItems] = useState<{ name: string; type: string; enabled: number }[]>([]);
+  const [actions, setActions] = useState<BatchAction[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
+  const [newAction, setNewAction] = useState('');
+  const [newBatchId, setNewBatchId] = useState('');
+  const [newIngredient, setNewIngredient] = useState<Ingredient>({ itemName: '', quantity: 0, unit: 'lbs' });
+  const [newIngredients, setNewIngredients] = useState<Ingredient[]>([{ itemName: '', quantity: 0, unit: 'lbs' }]);
+  const [stage, setStage] = useState<'' | 'Brewing' | 'Fermentation' | 'Filtering/Carbonating' | 'Packaging' | 'Completed'>('');
+  const [packageType, setPackageType] = useState<string>('');
+  const [packageTypes, setPackageTypes] = useState<{ name: string; volume: number; enabled: number }[]>([]);
+  const [productPackageTypes, setProductPackageTypes] = useState<string[]>([]);
+  const [packageQuantity, setPackageQuantity] = useState<number>(0);
+  const [packageLocation, setPackageLocation] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(new Set());
+  const [showVolumePrompt, setShowVolumePrompt] = useState<{ message: string; shortfall: number } | null>(null);
+  const [showLossPrompt, setShowLossPrompt] = useState<{ volume: number } | null>(null);
+  const [packagingActions, setPackagingActions] = useState<PackagingAction[]>([]);
+  const [editPackaging, setEditPackaging] = useState<PackagingAction | null>(null);
+  const [showKegPrompt, setShowKegPrompt] = useState<boolean>(false);
+  const [kegCodes, setKegCodes] = useState<string[]>([]);
+  const [currentKegCode, setCurrentKegCode] = useState('');
+  const [manualKegEntry, setManualKegEntry] = useState(false);
+  const packageVolumes: { [key: string]: number } = {
+    '1/2 BBL Keg': 0.5,
+    '1/6 BBL Keg': 0.167,
+    '750ml Bottle': 0.006,
+  };
+  const validStages = ['Brewing', 'Fermentation', 'Filtering/Carbonating', 'Packaging', 'Completed'];
 
-useEffect(() => {
-  const fetchData = async () => {
-    try {
-      const endpoints = [
-        { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
-        { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
-        { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
-        { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
-        { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
-        { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
-        { url: `${API_BASE_URL}/api/package-types`, setter: setPackageTypes, name: 'packageTypes' },
-      ].filter(endpoint => endpoint.url !== null);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const endpoints = [
+          { url: `${API_BASE_URL}/api/batches/${batchId}`, setter: setBatch, name: 'batch', single: true },
+          { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
+          { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
+          { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
+          { url: `${API_BASE_URL}/api/batches/${batchId}/actions`, setter: setActions, name: 'actions' },
+          { url: `${API_BASE_URL}/api/batches/${batchId}/package`, setter: setPackagingActions, name: 'packaging' },
+          { url: `${API_BASE_URL}/api/package-types`, setter: setPackageTypes, name: 'packageTypes' },
+        ].filter(endpoint => endpoint.url !== null);
 
-      console.log('Fetching endpoints:', endpoints.map(e => e.url));
+        console.log('Fetching endpoints:', endpoints.map(e => e.url));
 
-      const responses = await Promise.all(
-        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-      );
+        const responses = await Promise.all(
+          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+        );
 
-      for (let i = 0; i < responses.length; i++) {
-        const res = responses[i];
-        const { name, setter, single } = endpoints[i];
-        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+        for (let i = 0; i < responses.length; i++) {
+          const res = responses[i];
+          const { name, setter, single } = endpoints[i];
+          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
 
-        if (!res.ok) {
-          const text = await res.text();
-          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
-          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
+          }
+
+          const data = await res.json();
+          setter(single ? data : data);
         }
-
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          const text = await res.text();
-          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
-          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
-        }
-
-        const data = await res.json();
-        setter(single ? data : data);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Fetch error:', err);
+        setError('Failed to load batch details: ' + errorMessage);
       }
+    };
+    fetchData();
+  }, [batchId]);
+
+  useEffect(() => {
+    if (batch && products.length > 0) {
+      const product = products.find((p: Product) => p.id === batch.productId);
+      if (product && product.packageTypes) {
+        setProductPackageTypes(product.packageTypes.map((pt: { type: string }) => pt.type));
+      }
+    }
+  }, [batch, products]);
+
+  useEffect(() => {
+    if (!batch?.siteId) return;
+    const fetchSiteData = async () => {
+      try {
+        const endpoints = [
+          { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
+          { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
+        ];
+        console.log('Fetching site endpoints:', endpoints.map(e => e.url));
+        const responses = await Promise.all(
+          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+        );
+        for (let i = 0; i < responses.length; i++) {
+          const res = responses[i];
+          const { name, setter } = endpoints[i];
+          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
+            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
+            throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
+          }
+          const data = await res.json();
+          setter(data);
+        }
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Fetch site data error:', err);
+        setError('Failed to load site data: ' + errorMessage);
+      }
+    };
+    fetchSiteData();
+  }, [batch?.siteId]);
+
+  const handleAddKegCode = async () => {
+    if (!currentKegCode || !/^[A-Z0-9-]+$/.test(currentKegCode)) {
+      setError('Valid keg code (e.g., KEG-001) required');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/kegs/${currentKegCode}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Keg not found: HTTP ${res.status}, ${text}`);
+      }
+      const keg = await res.json();
+      if (keg.status !== 'Empty') {
+        setError(`Keg ${currentKegCode} is not empty`);
+        return;
+      }
+      if (kegCodes.includes(currentKegCode)) {
+        setError(`Keg ${currentKegCode} already added`);
+        return;
+      }
+      setKegCodes([...kegCodes, currentKegCode]);
+      setCurrentKegCode('');
+      setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Fetch error:', err);
-      setError('Failed to load batch details: ' + errorMessage);
+      console.error('Add keg code error:', err);
+      setError('Failed to add keg: ' + errorMessage);
     }
   };
-  fetchData();
-}, [batchId]);
 
-useEffect(() => {
-  if (batch && products.length > 0) {
-    const product = products.find((p: Product) => p.id === batch.productId);
-    if (product && product.packageTypes) {
-      setProductPackageTypes(product.packageTypes.map((pt: { type: string }) => pt.type));
+  const handlePackage = async (skipKegPrompt: boolean = false) => {
+    console.log('handlePackage: Attempting to package', { batchId, packageType, packageQuantity, packageLocation, kegCodes });
+    if (!packageType || packageQuantity <= 0 || !packageLocation) {
+      console.error('handlePackage: Invalid input', { packageType, packageQuantity, packageLocation });
+      setError('Please select a package type, quantity (> 0), and location');
+      return;
     }
-  }
-}, [batch, products]);
-
-useEffect(() => {
-  if (!batch?.siteId) return;
-  const fetchSiteData = async () => {
+    if (packageType.includes('Keg') && kegCodes.length === 0 && !skipKegPrompt) {
+      setShowKegPrompt(true);
+      return;
+    }
     try {
-      const endpoints = [
-        { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
-        { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
-      ];
-      console.log('Fetching site endpoints:', endpoints.map(e => e.url));
-      const responses = await Promise.all(
-        endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
-      );
-      for (let i = 0; i < responses.length; i++) {
-        const res = responses[i];
-        const { name, setter } = endpoints[i];
-        console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
-        if (!res.ok) {
-          const text = await res.text();
-          console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
-          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-        }
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          const text = await res.text();
-          console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
-          throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
-        }
-        const data = await res.json();
-        setter(data);
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          packageType,
+          quantity: packageQuantity,
+          locationId: packageLocation,
+          kegCodes: packageType.includes('Keg') ? kegCodes : [],
+        }),
+      });
+      console.log('handlePackage: Response received', { status: res.status, ok: res.ok });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('handlePackage: Failed to package', { status: res.status, response: text.slice(0, 100) });
+        throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
+      const data = await res.json();
+      console.log('handlePackage: Response data', data);
+      if (data.prompt === 'volumeAdjustment') {
+        setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
+        return;
+      }
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        const text = await batchRes.text();
+        console.error('handlePackage: Failed to refresh batch', { status: batchRes.status, response: text });
+        throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (packagingRes.ok) {
+        const packagingData = await packagingRes.json();
+        setPackagingActions(packagingData);
+      } else {
+        console.error('handlePackage: Failed to refresh packaging actions', { status: packagingRes.status });
+      }
+      await refreshInventory();
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
+      setKegCodes([]);
+      setShowKegPrompt(false);
+      setSuccessMessage(data.message || 'Packaged successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Fetch site data error:', err);
-      setError('Failed to load site data: ' + errorMessage);
+      console.error('Package error:', err);
+      setError('Failed to package: ' + errorMessage);
     }
   };
-  fetchSiteData();
-}, [batch?.siteId]);
+
+  const handleVolumeAdjustment = async (confirm: boolean) => {
+    if (!showVolumePrompt) return;
+    if (!confirm) {
+      setShowVolumePrompt(null);
+      setError('Packaging cancelled due to insufficient volume');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/adjust-volume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ shortfall: showVolumePrompt.shortfall }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to adjust volume: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const packageRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          packageType,
+          quantity: packageQuantity,
+          locationId: packageLocation,
+          kegCodes: packageType.includes('Keg') ? kegCodes : [],
+        }),
+      });
+      if (!packageRes.ok) {
+        const text = await packageRes.text();
+        throw new Error(`Failed to package after adjustment: HTTP ${packageRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await packageRes.json();
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to refresh batch');
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      await refreshInventory();
+      setPackageType('');
+      setPackageQuantity(0);
+      setPackageLocation('');
+      setKegCodes([]);
+      setShowVolumePrompt(null);
+      setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Volume adjustment error:', err);
+      setError('Failed to adjust volume or package: ' + errorMessage);
+    }
+  };
 
   const handleAddAction = async () => {
     if (!newAction) {
@@ -206,8 +366,7 @@ useEffect(() => {
       setError('Failed to complete batch: ' + errorMessage);
     }
   };
-  
-  // handleLossConfirmation (line ~400)
+
   const handleLossConfirmation = async (confirm: boolean) => {
     if (!showLossPrompt || !batch) return;
     if (!confirm) {
@@ -364,8 +523,7 @@ useEffect(() => {
         throw new Error(`Failed to add ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      console.log('Add ingredient response:', updatedBatch);
-      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
+      setBatch(updatedBatch);
       setNewIngredient({ itemName: '', quantity: 0, unit: 'lbs' });
       setError(null);
       setSuccessMessage('Ingredient added successfully');
@@ -377,822 +535,515 @@ useEffect(() => {
     }
   };
 
-  const handleRemoveIngredient = async (ingredient: Ingredient) => {
-    const deletionKey = `${ingredient.itemName}-${ingredient.quantity}-${ingredient.unit || 'lbs'}`;
-    if (pendingDeletions.has(deletionKey)) return;
-    setPendingDeletions(prev => new Set(prev).add(deletionKey));
-    console.log('Attempting to delete ingredient:', { ...ingredient, unit: ingredient.unit || 'lbs' });
+  const handleUpdateIngredient = async (original: Ingredient, updated: Ingredient) => {
+    if (!original.itemName || !original.quantity || !original.unit ||
+        !updated.itemName || updated.quantity <= 0 || !updated.unit) {
+      setError('Valid original and updated item, quantity, and unit are required');
+      return;
+    }
     try {
-      if (!window.confirm(`Remove ${ingredient.quantity} ${ingredient.unit || 'lbs'} of ${ingredient.itemName}?`)) {
-        setPendingDeletions(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(deletionKey);
-          return newSet;
-        });
-        return;
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ original, updated }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to update ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
+      const updatedBatch = await res.json();
+      setBatch(updatedBatch);
+      setNewIngredients(newIngredients.map(ing => 
+        ing.itemName === original.itemName && ing.quantity === original.quantity && ing.unit === original.unit ? updated : ing
+      ));
+      setError(null);
+      setSuccessMessage('Ingredient updated successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Update ingredient error:', err);
+      setError('Failed to update ingredient: ' + errorMessage);
+    }
+  };
+
+  const handleDeleteIngredient = async (ingredient: Ingredient) => {
+    if (!ingredient.itemName || !ingredient.quantity || !ingredient.unit) {
+      setError('Valid item, quantity, and unit are required for deletion');
+      return;
+    }
+    try {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/ingredients`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ...ingredient, unit: ingredient.unit || 'lbs' }),
+        body: JSON.stringify(ingredient),
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Failed to remove ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        throw new Error(`Failed to delete ingredient: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const updatedBatch = await res.json();
-      console.log('Delete response:', updatedBatch);
-      if (!Array.isArray(updatedBatch.ingredients)) {
-        console.error('Invalid ingredients array in response:', updatedBatch.ingredients);
-        throw new Error('Invalid server response: ingredients array missing');
-      }
-      setBatch({ ...updatedBatch, ingredients: [...updatedBatch.ingredients] });
+      setBatch(updatedBatch);
+      setNewIngredients(newIngredients.filter(ing => 
+        !(ing.itemName === ingredient.itemName && ing.quantity === ingredient.quantity && ing.unit === ingredient.unit)
+      ));
       setError(null);
-      setSuccessMessage('Ingredient removed successfully');
+      setSuccessMessage('Ingredient deleted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Remove ingredient error:', err);
-      setError('Failed to remove ingredient: ' + errorMessage);
-    } finally {
-      setPendingDeletions(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(deletionKey);
-        return newSet;
-      });
+      console.error('Delete ingredient error:', err);
+      setError('Failed to delete ingredient: ' + errorMessage);
     }
   };
 
-  const handleUnCompleteBatch = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'In Progress' }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to un-complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-      }
-      setBatch((prev) => prev ? { ...prev, status: 'In Progress' } : null);
-      setError(null);
-      setSuccessMessage('Batch un-completed successfully');
-      setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Un-complete batch error:', err);
-      setError('Failed to un-complete batch: ' + errorMessage);
-    }
-  };
-
-  const handleProgressBatch = async () => {
-    console.log('handleProgressBatch: Selected stage:', stage, 'Selected equipmentId:', selectedEquipmentId);
-    if (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId)) {
-      setError('Please select both stage and equipment (if not Completed or Packaging)');
-      return;
-    }
-    if (stage === 'Packaging' && packagingActions.length > 0) {
-      setError('Cannot progress to Packaging: existing packaging actions must be deleted first');
-      return;
-    }
-    if (batch?.status === 'Completed') {
-      setError('Cannot progress a completed batch');
+  const handleUpdateEquipment = async () => {
+    if (!selectedEquipmentId || !stage) {
+      setError('Equipment and stage are required');
       return;
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/equipment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          equipmentId: stage === 'Completed' || stage === 'Packaging' ? null : selectedEquipmentId,
-          stage,
-        }),
+        body: JSON.stringify({ equipmentId: selectedEquipmentId, stage }),
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Failed to progress batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        throw new Error(`Failed to update equipment: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      console.log('handleProgressBatch: API response:', data);
-      setBatch((prev) => prev ? { ...prev, equipmentId: stage === 'Completed' || stage === 'Packaging' ? null : selectedEquipmentId, stage } : null);
-      setStage('');
+      setBatch((prev) => prev ? { ...prev, equipmentId: data.equipmentId, stage: data.stage } : null);
       setSelectedEquipmentId(null);
-      setSuccessMessage(data.message || 'Batch progressed successfully');
+      setStage('');
+      setError(null);
+      setSuccessMessage('Equipment and stage updated successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Update equipment error:', err);
+      setError('Failed to update equipment: ' + errorMessage);
+    }
+  };
+
+  const handleEditPackaging = async () => {
+    if (!editPackaging || editPackaging.quantity < 0) {
+      setError('Valid quantity is required');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${editPackaging.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ quantity: editPackaging.quantity }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to update packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!batchRes.ok) {
+        throw new Error('Failed to refresh batch');
+      }
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (packagingRes.ok) {
+        const packagingData = await packagingRes.json();
+        setPackagingActions(packagingData);
+      }
+      await refreshInventory();
+      setEditPackaging(null);
+      setSuccessMessage('Packaging updated successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Progress batch error:', err);
-      setError('Failed to progress batch: ' + errorMessage);
+      console.error('Edit packaging error:', err);
+      setError('Failed to update packaging: ' + errorMessage);
     }
   };
 
-  const handlePackage = async () => {
-  console.log('handlePackage: Attempting to package', { batchId, packageType, packageQuantity, packageLocation });
-
-  if (!packageType || packageQuantity <= 0 || !packageLocation) {
-    console.error('handlePackage: Invalid input', { packageType, packageQuantity, packageLocation });
-    setError('Please select a package type, quantity (> 0), and location');
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        packageType,
-        quantity: packageQuantity,
-        locationId: packageLocation,
-      }),
-    });
-
-    console.log('handlePackage: Response received', { status: res.status, ok: res.ok });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error('handlePackage: Failed to package', { status: res.status, response: text.slice(0, 100) });
-      throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-    }
-
-    const data = await res.json();
-    console.log('handlePackage: Response data', data);
-
-    if (data.prompt === 'volumeAdjustment') {
-      setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
-      return;
-    }
-
-    const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (!batchRes.ok) {
-      const text = await batchRes.text();
-      console.error('handlePackage: Failed to refresh batch', { status: batchRes.status, response: text });
-      throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}, Response: ${text.slice(0, 50)}`);
-    }
-    const updatedBatch = await batchRes.json();
-    setBatch(updatedBatch);
-
-    const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (packagingRes.ok) {
-      const packagingData = await packagingRes.json();
-      setPackagingActions(packagingData);
-    } else {
-      console.error('handlePackage: Failed to refresh packaging actions', { status: packagingRes.status });
-    }
-
-    await refreshInventory();
-
-    setPackageType('');
-    setPackageQuantity(0);
-    setPackageLocation('');
-    setSuccessMessage(data.message || 'Packaged successfully');
-    setTimeout(() => setSuccessMessage(null), 2000);
-    setError(null);
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Package error:', err);
-    setError('Failed to package: ' + errorMessage);
-  }
-};
-
-  const handleVolumeAdjustment = async (confirm: boolean) => {
-  if (!showVolumePrompt) return;
-  if (!confirm) {
-    setShowVolumePrompt(null);
-    setError('Packaging cancelled due to insufficient volume');
-    return;
-  }
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/adjust-volume`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ shortfall: showVolumePrompt.shortfall }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to adjust volume: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-    }
-    const packageRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        packageType,
-        quantity: packageQuantity,
-        locationId: packageLocation,
-      }),
-    });
-    if (!packageRes.ok) {
-      const text = await packageRes.text();
-      throw new Error(`Failed to package after adjustment: HTTP ${packageRes.status}, Response: ${text.slice(0, 50)}`);
-    }
-    const data = await packageRes.json();
-    const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (!batchRes.ok) {
-      throw new Error('Failed to refresh batch');
-    }
-    const updatedBatch = await batchRes.json();
-    setBatch(updatedBatch);
-    await refreshInventory();
-    setPackageType('');
-    setPackageQuantity(0);
-    setPackageLocation('');
-    setShowVolumePrompt(null);
-    setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
-    setTimeout(() => setSuccessMessage(null), 2000);
-    setError(null);
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Volume adjustment error:', err);
-    setError('Failed to adjust volume or package: ' + errorMessage);
-  }
-};
-
-  const handleDeletePackaging = async (action: PackagingAction) => {
-    if (!window.confirm(`Are you sure you want to delete the packaging action for ${action.quantity} ${action.packageType}?`)) return;
-    console.log('handleDeletePackaging: Attempting to delete', {
-      batchId,
-      packageId: action.id,
-      packageType: action.packageType,
-      quantity: action.quantity,
-    });
+  const handleDeletePackaging = async (pkg: PackagingAction) => {
+    if (pendingDeletions.has(pkg.id.toString())) return;
+    setPendingDeletions(prev => new Set(prev).add(pkg.id.toString()));
     try {
-      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${action.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${pkg.id}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) {
         const text = await res.text();
-        console.error('handleDeletePackaging: Failed to delete', {
-          status: res.status,
-          response: text.slice(0, 100),
-        });
         throw new Error(`Failed to delete packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      const data = await res.json();
-      console.log('handleDeletePackaging: Success', data);
-      setPackagingActions((prev) => prev.filter((a) => a.id !== action.id));
-      setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
-      await refreshInventory();
-      setSuccessMessage('Packaging action deleted successfully');
-      setTimeout(() => setSuccessMessage(null), 2000);
-      setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('handleDeletePackaging: Error', err);
-      setError(`Failed to delete packaging: ${errorMessage}`);
-    }
-  };
-
-  const handlePrintBatchSheet = async () => {
-    try {
       const batchRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         headers: { Accept: 'application/json' },
       });
       if (!batchRes.ok) {
-        throw new Error('Failed to fetch batch details');
+        throw new Error('Failed to refresh batch');
       }
-      const batchData = await batchRes.json();
-      const brewLogRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/brewlog`, {
+      const updatedBatch = await batchRes.json();
+      setBatch(updatedBatch);
+      const packagingRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package`, {
         headers: { Accept: 'application/json' },
       });
-      if (!brewLogRes.ok) {
-        throw new Error('Failed to fetch brew log');
+      if (packagingRes.ok) {
+        const packagingData = await packagingRes.json();
+        setPackagingActions(packagingData);
       }
-      const brewLog = await batchRes.json();
-      const product = products.find(p => p.id === batchData.productId)?.name || 'Unknown';
-      const site = sites.find(s => s.siteId === batchData.siteId)?.name || batchData.siteId;
-      const fermenterName = batchData.equipmentId ? equipment.find((e) => e.equipmentId === batchData.equipmentId)?.name || `Equipment ID: ${batchData.equipmentId}` : 'None';  
-      const doc = new jsPDF();
-      const margin = 8;
-      let y = margin;
-  
-      doc.setFont('times', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(33, 150, 243);
-      doc.text(`Batch Sheet: ${batchData.batchId}`, 105, y, { align: 'center' });
-      y += 8;
-  
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(0);
-      doc.text('Batch Details', margin, y);
-      y += 4;
-      doc.setLineWidth(0.5);
-      doc.setDrawColor(33, 150, 243);
-      doc.line(margin, y, 202 - margin, y);
-      y += 8;
-  
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      const batchDetails = [
-        { label: 'Batch ID', value: batchData.batchId },
-        { label: 'Product', value: product },
-        { label: 'Recipe', value: batchData.recipeName || 'Unknown' },
-        { label: 'Site', value: site },
-        { label: 'Status', value: batchData.status },
-        { label: 'Stage', value: batchData.stage || 'Brewing' },
-        { label: 'Current Equipment', value: fermenterName },
-        { label: 'Volume', value: batchData.volume ? `${batchData.volume.toFixed(2)} barrels` : 'N/A' },
-        { label: 'Date', value: batchData.date },
-      ];
-      batchDetails.forEach(({ label, value }) => {
-        doc.text(`${label}: ${value}`, margin, y);
-        y += 6;
-      });
-  
-      y += 4;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text('Ingredients', margin, y);
-      y += 4;
-      doc.setLineWidth(0.5);
-      doc.line(margin, y, 202 - margin, y);
-      y += 8;
-  
-      if (batchData.ingredients.length > 0) {
-        doc.autoTable({
-          startY: y,
-          head: [['Item', 'Quantity', 'Unit', 'Source']],
-          body: batchData.ingredients.map((ing: Ingredient) => [
-            ing.itemName,
-            ing.quantity,
-            ing.unit || 'lbs',
-            ing.isRecipe ? 'Recipe' : 'Added',
-          ]),
-          theme: 'grid',
-          headStyles: { fillColor: [33, 150, 243], textColor: 255, fontStyle: 'bold', font: 'helvetica' },
-          styles: { fontSize: 9, cellPadding: 2, font: 'helvetica' },
-          columnStyles: {
-            0: { cellWidth: 80 },
-            1: { cellWidth: 30 },
-            2: { cellWidth: 30 },
-            3: { cellWidth: 40 },
-          },
-          margin: { left: margin, right: margin },
-        });
-        y = doc.lastAutoTable.finalY + 8;
-      } else {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.text('None', margin, y);
-        y += 8;
-      }
-  
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text('Brew Day Log', margin, y);
-      y += 4;
-      doc.setLineWidth(0.5);
-      doc.line(margin, y, 202 - margin, y);
-      y += 8;
-  
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      if (brewLog.date) {
-        const logDetails = [
-          { label: 'Date', value: brewLog.date },
-          { label: 'Notes', value: brewLog.notes },
-          { label: 'Temperature', value: brewLog.temperature ? `${brewLog.temperature} °C` : 'N/A' },
-          { label: 'Gravity', value: brewLog.gravity || 'N/A' },
-        ];
-        logDetails.forEach(({ label, value }) => {
-          if (label === 'Notes') {
-            const splitNotes = doc.splitTextToSize(value, 184);
-            doc.text(`${label}:`, margin, y);
-            doc.text(splitNotes, margin + 20, y);
-            y += splitNotes.length * 6;
-          } else {
-            doc.text(`${label}: ${value}`, margin, y);
-            y += 6;
-          }
-        });
-      } else {
-        doc.text('No brew log available', margin, y);
-        y += 8;
-      }
-  
-      y += 4;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text('Batch Actions', margin, y);
-      y += 4;
-      doc.setLineWidth(0.5);
-      doc.line(margin, y, 202 - margin, y);
-      y += 8;
-  
-      if (actions.length > 0) {
-        actions.forEach((action) => {
-          const timestamp = new Date(action.timestamp).toLocaleString();
-          const actionText = `- ${action.action} (${timestamp})`;
-          const splitAction = doc.splitTextToSize(actionText, 184);
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10);
-          doc.text(splitAction, margin, y);
-          y += splitAction.length * 6;
-        });
-      } else {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.text('No actions recorded', margin, y);
-        y += 8;
-      }
-  
-      doc.save(`batch_${batchData.batchId}_sheet.pdf`);
+      await refreshInventory();
+      setSuccessMessage('Packaging deleted successfully');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Print batch sheet error:', err);
-      setError('Failed to generate batch sheet: ' + errorMessage);
+      console.error('Delete packaging error:', err);
+      setError('Failed to delete packaging: ' + errorMessage);
+    } finally {
+      setPendingDeletions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(pkg.id.toString());
+        return newSet;
+      });
     }
   };
 
-  if (!batch) return <div>Loading...</div>;
+  const handlePrintBatchSheet = () => {
+    if (!batch) return;
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 10;
+    const contentWidth = pageWidth - 2 * margin;
 
-  const product = products.find(p => p.id === batch.productId);
-  const site = sites.find(s => s.siteId === batch.siteId);
-  const currentEquipment = equipment.find((e: Equipment) => e.equipmentId === batch.equipmentId);
+    doc.setFontSize(18);
+    doc.text('Batch Sheet', margin, 20);
+    doc.setFontSize(12);
+    doc.text(`Batch ID: ${batch.batchId}`, margin, 30);
+    doc.text(`Product: ${batch.productName || 'N/A'}`, margin, 40);
+    doc.text(`Site: ${batch.siteName || 'N/A'}`, margin, 50);
+    doc.text(`Status: ${batch.status}`, margin, 60);
+    doc.text(`Date: ${batch.date}`, margin, 70);
+    doc.text(`Volume: ${batch.volume ? batch.volume.toFixed(3) : 'N/A'} barrels`, margin, 80);
+    doc.text(`Stage: ${batch.stage || 'N/A'}`, margin, 90);
+
+    let yPos = 100;
+    if (batch.ingredients && batch.ingredients.length > 0) {
+      doc.text('Ingredients:', margin, yPos);
+      yPos += 10;
+      doc.autoTable({
+        startY: yPos,
+        head: [['Item', 'Quantity', 'Unit', 'Source']],
+        body: batch.ingredients.map(ing => [
+          ing.itemName,
+          ing.quantity.toString(),
+          ing.unit,
+          ing.isRecipe ? 'Recipe' : 'Additional'
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [33, 150, 243], textColor: 255 },
+        margin: { left: margin, right: margin },
+        columnStyles: {
+          0: { cellWidth: contentWidth * 0.4 },
+          1: { cellWidth: contentWidth * 0.2 },
+          2: { cellWidth: contentWidth * 0.2 },
+          3: { cellWidth: contentWidth * 0.2 },
+        },
+      });
+      yPos = doc.lastAutoTable.finalY + 10;
+    }
+
+    if (actions.length > 0) {
+      doc.text('Actions:', margin, yPos);
+      yPos += 10;
+      doc.autoTable({
+        startY: yPos,
+        head: [['Timestamp', 'Action']],
+        body: actions.map(action => [action.timestamp, action.action]),
+        theme: 'striped',
+        headStyles: { fillColor: [33, 150, 243], textColor: 255 },
+        margin: { left: margin, right: margin },
+        columnStyles: {
+          0: { cellWidth: contentWidth * 0.3 },
+          1: { cellWidth: contentWidth * 0.7 },
+        },
+      });
+      yPos = doc.lastAutoTable.finalY + 10;
+    }
+
+    if (packagingActions.length > 0) {
+      doc.text('Packaging Actions:', margin, yPos);
+      yPos += 10;
+      doc.autoTable({
+        startY: yPos,
+        head: [['Date', 'Package Type', 'Quantity', 'Volume (barrels)', 'Location', 'Keg Codes']],
+        body: packagingActions.map(pkg => [
+          pkg.date,
+          pkg.packageType,
+          pkg.quantity.toString(),
+          pkg.volume.toFixed(3),
+          locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId,
+          pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [33, 150, 243], textColor: 255 },
+        margin: { left: margin, right: margin },
+        columnStyles: {
+          0: { cellWidth: contentWidth * 0.15 },
+          1: { cellWidth: contentWidth * 0.15 },
+          2: { cellWidth: contentWidth * 0.15 },
+          3: { cellWidth: contentWidth * 0.15 },
+          4: { cellWidth: contentWidth * 0.2 },
+          5: { cellWidth: contentWidth * 0.2 },
+        },
+      });
+    }
+
+    doc.save(`Batch_${batch.batchId}_Sheet.pdf`);
+  };
+
+  if (!batch) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="page-container">
-      <h2>Batch Details: {batch.batchId}</h2>
+      <h2 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px' }}>
+        Batch {batch.batchId}
+      </h2>
       {error && <div className="error">{error}</div>}
       {successMessage && (
         <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>
           {successMessage}
         </div>
       )}
-      <h3>Batch Management</h3>
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
         <div>
-          <input
-            type="text"
-            value={newBatchId}
-            onChange={(e) => setNewBatchId(e.target.value)}
-            placeholder="New Batch ID"
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px', marginRight: '10px' }}
-          />
-          <button
-            onClick={handleEditBatchName}
-            style={{
-              backgroundColor: '#2196F3',
-              color: '#fff',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Edit Batch Name
-          </button>
+          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Batch Details</h3>
+          <p><strong>Product:</strong> {batch.productName || 'N/A'}</p>
+          <p><strong>Site:</strong> {batch.siteName || 'N/A'}</p>
+          <p><strong>Status:</strong> {batch.status}</p>
+          <p><strong>Date:</strong> {batch.date}</p>
+          <p><strong>Volume:</strong> {batch.volume ? batch.volume.toFixed(3) : 'N/A'} barrels</p>
+          <p><strong>Stage:</strong> {batch.stage || 'N/A'}</p>
+          <p><strong>Equipment:</strong> {equipment.find(e => e.equipmentId === batch.equipmentId)?.name || 'N/A'}</p>
+          {batch.status !== 'Completed' && (
+            <div style={{ marginTop: '20px' }}>
+              <h4 style={{ color: '#EEC930', fontSize: '16px', marginBottom: '10px' }}>Update Batch ID</h4>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={newBatchId}
+                  onChange={(e) => setNewBatchId(e.target.value)}
+                  placeholder="New Batch ID"
+                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                />
+                <button
+                  onClick={handleEditBatchName}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Update ID
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        <button
-          onClick={handleCompleteBatch}
-          disabled={batch.status === 'Completed'}
-          style={{
-            backgroundColor: batch.status === 'Completed' ? '#ccc' : '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: batch.status === 'Completed' ? 'not-allowed' : 'pointer',
-          }}
-        >
-          Complete Batch
-        </button>
-        <button
-          onClick={handleUnCompleteBatch}
-          disabled={batch.status !== 'Completed'}
-          style={{
-            backgroundColor: batch.status !== 'Completed' ? '#ccc' : '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: batch.status !== 'Completed' ? 'not-allowed' : 'pointer',
-          }}
-        >
-          Un-Complete Batch
-        </button>
-        <button
-          onClick={handleDeleteBatch}
-          disabled={batch.status === 'Completed'}
-          style={{
-            backgroundColor: batch.status === 'Completed' ? '#ccc' : '#F86752',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: batch.status === 'Completed' ? 'not-allowed' : 'pointer',
-          }}
-        >
-          Delete Batch
-        </button>
-        <button
-          onClick={() => navigate(`/production/${batchId}/brewlog`)}
-          style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Add Brew Day Log
-        </button>
-        <button
-          onClick={handlePrintBatchSheet}
-          style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Print Batch Sheet
-        </button>
-      </div>
-      <div style={{ marginTop: '20px' }}>
-        <h3>Progress Batch</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
-        <select
-          value={stage}
-          onChange={(e) => {
-            const newStage = e.target.value as typeof stage;
-            console.log('Dropdown onChange: Selected stage:', newStage);
-            setStage(newStage);
-          }}
-          style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          disabled={batch?.status === 'Completed'}
-        >
-          <option value="">Select Stage</option>
-          {validStages.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          value={selectedEquipmentId || ''}
-          onChange={(e) => {
-            const newEquipmentId = parseInt(e.target.value) || null;
-            console.log('Dropdown onChange: Selected equipmentId:', newEquipmentId);
-            setSelectedEquipmentId(newEquipmentId);
-          }}
-          style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          disabled={stage === 'Completed' || stage === 'Packaging' || !stage || batch?.status === 'Completed'}
-        >
-          <option value="">Select Equipment</option>
-          {equipment.map((equip) => (
-            <option key={equip.equipmentId} value={equip.equipmentId}>{equip.name}</option>
-          ))}
-        </select>
-        {stage === 'Packaging' && (
-  <>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <h4 style={{ margin: '0', fontSize: '16px' }}>Package Batch</h4>
-      {batch?.status === 'Completed' ? (
-        <p style={{ color: '#555' }}>Cannot package a completed batch.</p>
-      ) : (
-        <>
-          <select
-            value={packageType}
-            onChange={(e) => setPackageType(e.target.value)}
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          >
-            <option value="">Select Package Type</option>
-            {packageTypes
-              .filter((pkg) => pkg.enabled && productPackageTypes.includes(pkg.name))
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((pkg) => (
-                <option key={pkg.name} value={pkg.name}>{`${pkg.name} (${(pkg.volume * 31).toFixed(2)} gal)`}</option>
-              ))}
-          </select>
-          <input
-            type="number"
-            value={packageQuantity || ''}
-            onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
-            placeholder="Quantity"
-            min="1"
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          />
-          <select
-            value={packageLocation}
-            onChange={(e) => setPackageLocation(e.target.value)}
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
-          >
-            <option value="">Select Location</option>
-            {locations.map((loc) => (
-              <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={handlePackage}
-            disabled={!packageType || packageQuantity <= 0 || !packageLocation}
-            style={{
-              backgroundColor: !packageType || packageQuantity <= 0 || !packageLocation ? '#ccc' : '#28A745',
-              color: '#fff',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: !packageType || packageQuantity <= 0 || !packageLocation ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              width: '100%',
-            }}
-          >
-            Package
-          </button>
-        </>
-      )}
-    </div>
-    <div style={{ marginTop: '20px' }}>
-      <h4 style={{ margin: '0', fontSize: '16px' }}>Packaging Actions</h4>
-      {packagingActions.length === 0 ? (
-        <p>No packaging actions recorded.</p>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginTop: '10px' }}>
-          <thead>
-            <tr>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Package Type</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Volume (Barrels)</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Date</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {packagingActions.map((action) => (
-              <tr key={action.id}>
-                <td style={{ padding: '10px' }}>{action.packageType}</td>
-                <td style={{ padding: '10px' }}>{action.quantity}</td>
-                <td style={{ padding: '10px' }}>{action.volume.toFixed(3)}</td>
-                <td style={{ padding: '10px' }}>{action.date}</td>
-                <td style={{ padding: '10px' }}>
-                  {batch?.status === 'Completed' ? (
-                    <span style={{ color: '#555' }}>Locked</span>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => setEditPackaging(action)}
-                        style={{
-                          backgroundColor: '#2196F3',
-                          color: '#fff',
-                          padding: '8px 12px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          marginRight: '5px',
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeletePackaging(action)}
-                        style={{
-                          backgroundColor: '#F86752',
-                          color: '#fff',
-                          padding: '8px 12px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  </>
-)}
-<button
-  onClick={handleProgressBatch}
-  disabled={!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0) || batch?.status === 'Completed'}
-  style={{
-    backgroundColor: (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0) || batch?.status === 'Completed') ? '#ccc' : '#2196F3',
-    color: '#fff',
-    padding: '10px 20px',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: (!stage || (stage !== 'Completed' && stage !== 'Packaging' && !selectedEquipmentId) || (stage === 'Packaging' && packagingActions.length > 0) || batch?.status === 'Completed') ? 'not-allowed' : 'pointer',
-    fontSize: '16px',
-    width: '100%',
-  }}
->
-  {stage ? `Progress to ${stage}` : 'Select Stage to Progress'}
-</button>
+        <div>
+          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Actions</h3>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+            <button
+              onClick={handlePrintBatchSheet}
+              style={{
+                backgroundColor: '#2196F3',
+                color: '#fff',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Print Batch Sheet
+            </button>
+            {batch.status !== 'Completed' && (
+              <>
+                <button
+                  onClick={handleCompleteBatch}
+                  style={{
+                    backgroundColor: '#28A745',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Complete Batch
+                </button>
+                <button
+                  onClick={handleDeleteBatch}
+                  style={{
+                    backgroundColor: '#F86752',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Delete Batch
+                </button>
+              </>
+            )}
+          </div>
+          {batch.status !== 'Completed' && (
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{ color: '#EEC930', fontSize: '16px', marginBottom: '10px' }}>Update Equipment & Stage</h4>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <select
+                  value={selectedEquipmentId || ''}
+                  onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
+                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                >
+                  <option value="">Select Equipment</option>
+                  {equipment.map(eq => (
+                    <option key={eq.equipmentId} value={eq.equipmentId}>{eq.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={stage}
+                  onChange={(e) => setStage(e.target.value as any)}
+                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                >
+                  <option value="">Select Stage</option>
+                  {validStages.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleUpdateEquipment}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Update
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      <div className="batch-details">
-        <p><strong>Product:</strong> {product?.name || 'Unknown'}</p>
-        <p><strong>Recipe:</strong> {batch.recipeName || 'Unknown'}</p>
-        <p><strong>Site:</strong> {site?.name || batch.siteId}</p>
-        <p><strong>Status:</strong> {batch.status}</p>
-        <p><strong>Current Equipment:</strong> {batch?.equipmentId ? equipment.find((e) => e.equipmentId === batch.equipmentId)?.name || `Equipment ID: ${batch.equipmentId}` : 'None'}</p>
-        <p><strong>Stage:</strong> {batch.stage || 'None'}</p>
-        <p><strong>Volume:</strong> {batch.volume ? `${batch.volume.toFixed(2)} barrels` : 'N/A'}</p>
-        <p><strong>Date:</strong> {batch.date}</p>
-      </div>
-
-      <h3>Ingredients</h3>
-      <div className="batch-details">
-        {batch && batch.ingredients && batch.ingredients.length > 0 ? (
+      {batch.status !== 'Completed' && (
+        <div style={{ marginBottom: '20px' }}>
+          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Add Action</h3>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={newAction}
+              onChange={(e) => setNewAction(e.target.value)}
+              placeholder="Enter action description"
+              style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '300px' }}
+            />
+            <button
+              onClick={handleAddAction}
+              style={{
+                backgroundColor: '#2196F3',
+                color: '#fff',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Add Action
+            </button>
+          </div>
+        </div>
+      )}
+      <div style={{ marginBottom: '20px' }}>
+        <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Actions</h3>
+        {actions.length > 0 ? (
           <table className="inventory-table">
             <thead>
               <tr>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Unit</th>
-                <th>Source</th>
+                <th>Timestamp</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {batch.ingredients.map((ing: Ingredient, index: number) => {
-                const deletionKey = `${ing.itemName}-${ing.quantity}-${ing.unit || 'lbs'}`;
-                return (
-                  <tr key={index}>
-                    <td>{ing.itemName}</td>
-                    <td>{ing.quantity}</td>
-                    <td>{ing.unit || 'lbs'}</td>
-                    <td>{ing.isRecipe ? 'Recipe' : 'Added'}</td>
-                    <td>
-                      {batch.status === 'Completed' ? (
-                        <span style={{ color: '#555' }}>Locked</span>
-                      ) : (
-                        <button
-                          onClick={() => handleRemoveIngredient(ing)}
-                          disabled={pendingDeletions.has(deletionKey)}
-                          style={{
-                            backgroundColor: '#F86752',
-                            color: '#fff',
-                            padding: '8px 12px',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: pendingDeletions.has(deletionKey) ? 'not-allowed' : 'pointer',
-                            opacity: pendingDeletions.has(deletionKey) ? 0.6 : 1,
-                          }}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {actions.map(action => (
+                <tr key={action.id}>
+                  <td>{action.timestamp}</td>
+                  <td>{action.action}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         ) : (
-          <p>No ingredients</p>
+          <p>No actions recorded.</p>
         )}
-        <div style={{ marginTop: '20px' }}>
-          <h4>Add Ingredient</h4>
-          {batch?.status === 'Completed' ? (
-            <p style={{ color: '#555' }}>Cannot add ingredients to a completed batch.</p>
-          ) : (
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+      </div>
+      {batch.status !== 'Completed' && (
+        <div style={{ marginBottom: '20px' }}>
+          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Ingredients</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Item:
+              </label>
               <select
                 value={newIngredient.itemName}
                 onChange={(e) => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', flex: '1', minWidth: '150px' }}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
               >
                 <option value="">Select Item</option>
-                {items.filter(item => item.enabled).map((item) => (
+                {items.filter(item => item.enabled).map(item => (
                   <option key={item.name} value={item.name}>{item.name}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Quantity:
+              </label>
               <input
                 type="number"
                 value={newIngredient.quantity || ''}
                 onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) || 0 })}
                 placeholder="Quantity"
-                step="0.01"
                 min="0"
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100px' }}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
               />
+            </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Unit:
+              </label>
               <select
                 value={newIngredient.unit}
                 onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', flex: '1', minWidth: '100px' }}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
               >
                 <option value="lbs">lbs</option>
-                <option value="kg">kg</option>
-                <option value="oz">oz</option>
-                <option value="gal">gal</option>
-                <option value="l">l</option>
+                <option value="gallons">gallons</option>
+                <option value="liters">liters</option>
               </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button
                 onClick={handleAddIngredient}
                 style={{
@@ -1202,38 +1053,287 @@ useEffect(() => {
                   border: 'none',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '16px',
+                  width: '100%',
                 }}
               >
-                Add
+                Add Ingredient
               </button>
             </div>
-          )}
+          </div>
         </div>
-      </div>
-
-      <h3>Actions</h3>
+      )}
       <div style={{ marginBottom: '20px' }}>
-        {actions.length > 0 ? (
-          <ul>
-            {actions.map((action) => (
-              <li key={action.id}>{action.action} - {new Date(action.timestamp).toLocaleString()}</li>
-            ))}
-          </ul>
+        <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Ingredients</h3>
+        {batch.ingredients && batch.ingredients.length > 0 ? (
+          <table className="inventory-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Unit</th>
+                <th>Source</th>
+                {batch.status !== 'Completed' && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {batch.ingredients.map((ing, index) => (
+                <tr key={index}>
+                  <td>
+                    {newIngredients.some(n => 
+                      n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                    ) ? (
+                      <select
+                        value={newIngredients.find(n => 
+                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                        )?.itemName || ing.itemName}
+                        onChange={(e) => {
+                          const updated = { ...ing, itemName: e.target.value };
+                          setNewIngredients(prev => prev.map(n => 
+                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
+                          ));
+                        }}
+                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px' }}
+                      >
+                        <option value="">Select Item</option>
+                        {items.filter(item => item.enabled).map(item => (
+                          <option key={item.name} value={item.name}>{item.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      ing.itemName
+                    )}
+                  </td>
+                  <td>
+                    {newIngredients.some(n => 
+                      n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                    ) ? (
+                      <input
+                        type="number"
+                        value={newIngredients.find(n => 
+                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                        )?.quantity || ing.quantity}
+                        onChange={(e) => {
+                          const updated = { ...ing, quantity: parseFloat(e.target.value) || 0 };
+                          setNewIngredients(prev => prev.map(n => 
+                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
+                          ));
+                        }}
+                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px', width: '80px' }}
+                      />
+                    ) : (
+                      ing.quantity
+                    )}
+                  </td>
+                  <td>
+                    {newIngredients.some(n => 
+                      n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                    ) ? (
+                      <select
+                        value={newIngredients.find(n => 
+                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                        )?.unit || ing.unit}
+                        onChange={(e) => {
+                          const updated = { ...ing, unit: e.target.value };
+                          setNewIngredients(prev => prev.map(n => 
+                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
+                          ));
+                        }}
+                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px' }}
+                      >
+                        <option value="lbs">lbs</option>
+                        <option value="gallons">gallons</option>
+                        <option value="liters">liters</option>
+                      </select>
+                    ) : (
+                      ing.unit
+                    )}
+                  </td>
+                  <td>{ing.isRecipe ? 'Recipe' : 'Additional'}</td>
+                  {batch.status !== 'Completed' && (
+                    <td>
+                      {newIngredients.some(n => 
+                        n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                      ) ? (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button
+                            onClick={() => handleUpdateIngredient(ing, newIngredients.find(n => 
+                              n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                            )!)}
+                            style={{
+                              backgroundColor: '#2196F3',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setNewIngredients(newIngredients.filter(n => 
+                              !(n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit)
+                            ))}
+                            style={{
+                              backgroundColor: '#F86752',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button
+                            onClick={() => setNewIngredients([...newIngredients, { ...ing }])}
+                            style={{
+                              backgroundColor: '#2196F3',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteIngredient(ing)}
+                            style={{
+                              backgroundColor: '#F86752',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         ) : (
-          <p>No actions recorded</p>
+          <p>No ingredients recorded.</p>
         )}
-        <div style={{ marginTop: '20px' }}>
-          <h4>Add New Action</h4>
-          <input
-            type="text"
-            value={newAction}
-            onChange={(e) => setNewAction(e.target.value)}
-            placeholder="Enter action (e.g., Added hops)"
-            style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '300px', marginRight: '10px' }}
-          />
+      </div>
+      {batch.stage === 'Packaging' && batch.status !== 'Completed' && (
+        <div style={{ marginBottom: '20px' }}>
+          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Package Batch</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Package Type:
+              </label>
+              <select
+                value={packageType}
+                onChange={(e) => setPackageType(e.target.value)}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+              >
+                <option value="">Select Package Type</option>
+                {packageTypes
+                  .filter((pkg) => pkg.enabled && productPackageTypes.includes(pkg.name))
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((pkg) => (
+                    <option key={pkg.name} value={pkg.name}>{`${pkg.name} (${(pkg.volume * 31).toFixed(2)} gal)`}</option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Quantity:
+              </label>
+              <input
+                type="number"
+                value={packageQuantity || ''}
+                onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
+                placeholder="Quantity"
+                min="0"
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Location:
+              </label>
+              <select
+                value={packageLocation}
+                onChange={(e) => setPackageLocation(e.target.value)}
+                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+              >
+                <option value="">Select Location</option>
+                {locations.map(loc => (
+                  <option key={loc.locationId} value={loc.locationId}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {packageType.includes('Keg') && (
+            <div style={{ marginTop: '10px' }}>
+              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
+                Keg Codes:
+              </label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={currentKegCode}
+                  onChange={(e) => setCurrentKegCode(e.target.value)}
+                  placeholder="Scan or enter keg code"
+                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                />
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={manualKegEntry}
+                    onChange={(e) => setManualKegEntry(e.target.checked)}
+                  />
+                  Manual Entry
+                </label>
+                <button
+                  onClick={handleAddKegCode}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Add Keg
+                </button>
+              </div>
+              {kegCodes.length > 0 && (
+                <div>
+                  <p><strong>Added Kegs:</strong> {kegCodes.join(', ')}</p>
+                  <button
+                    onClick={() => setKegCodes([])}
+                    style={{
+                      backgroundColor: '#F86752',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear Kegs
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <button
-            onClick={handleAddAction}
+            onClick={() => handlePackage()}
             style={{
               backgroundColor: '#2196F3',
               color: '#fff',
@@ -1241,160 +1341,121 @@ useEffect(() => {
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
-              fontSize: '16px',
+              marginTop: '10px',
             }}
           >
-            Add Action
+            Package
           </button>
         </div>
+      )}
+      <div style={{ marginBottom: '20px' }}>
+        <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Packaging Actions</h3>
+        {packagingActions.length > 0 ? (
+          <table className="inventory-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Package Type</th>
+                <th>Quantity</th>
+                <th>Volume (barrels)</th>
+                <th>Location</th>
+                <th>Keg Codes</th>
+                {batch.status !== 'Completed' && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {packagingActions.map(pkg => (
+                <tr key={pkg.id}>
+                  <td>{pkg.date}</td>
+                  <td>{pkg.packageType}</td>
+                  <td>
+                    {editPackaging && editPackaging.id === pkg.id ? (
+                      <input
+                        type="number"
+                        value={editPackaging.quantity}
+                        onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
+                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px', width: '80px' }}
+                      />
+                    ) : (
+                      pkg.quantity
+                    )}
+                  </td>
+                  <td>{pkg.volume.toFixed(3)}</td>
+                  <td>{locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</td>
+                  <td>{pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</td>
+                  {batch.status !== 'Completed' && (
+                    <td>
+                      {editPackaging && editPackaging.id === pkg.id ? (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button
+                            onClick={handleEditPackaging}
+                            style={{
+                              backgroundColor: '#2196F3',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditPackaging(null)}
+                            style={{
+                              backgroundColor: '#F86752',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button
+                            onClick={() => setEditPackaging(pkg)}
+                            style={{
+                              backgroundColor: '#2196F3',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeletePackaging(pkg)}
+                            style={{
+                              backgroundColor: '#F86752',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: pendingDeletions.has(pkg.id.toString()) ? 'not-allowed' : 'pointer',
+                              opacity: pendingDeletions.has(pkg.id.toString()) ? 0.5 : 1,
+                            }}
+                            disabled={pendingDeletions.has(pkg.id.toString())}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>No packaging actions recorded.</p>
+        )}
       </div>
-
-      {editPackaging && (
-  <div
-    style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 2100,
-    }}
-  >
-    <div
-      style={{
-        backgroundColor: '#fff',
-        padding: '20px',
-        borderRadius: '8px',
-        width: '400px',
-        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-        textAlign: 'center',
-        color: '#555',
-      }}
-    >
-      <h3 style={{ color: '#555', marginBottom: '20px' }}>Edit Packaging Action</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-            Package Type:
-          </label>
-          <input
-            type="text"
-            value={editPackaging.packageType}
-            disabled
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #CCCCCC',
-              borderRadius: '4px',
-              fontSize: '16px',
-              boxSizing: 'border-box',
-              color: '#000000',
-              backgroundColor: '#F5F5F5',
-            }}
-          />
-        </div>
-        <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-            Quantity:
-          </label>
-          <input
-            type="number"
-            value={editPackaging.quantity}
-            onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
-            min="0"
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #CCCCCC',
-              borderRadius: '4px',
-              fontSize: '16px',
-              boxSizing: 'border-box',
-              color: '#000000',
-              backgroundColor: '#FFFFFF',
-            }}
-          />
-        </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
-        <button
-          onClick={async () => {
-            console.log('Edit packaging: Attempting to update', {
-              batchId,
-              packageId: editPackaging.id,
-              packageType: editPackaging.packageType,
-              newQuantity: editPackaging.quantity,
-            });
-            try {
-              const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}/package/${editPackaging.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ quantity: editPackaging.quantity }),
-              });
-              if (!res.ok) {
-                const text = await res.text();
-                console.error('Edit packaging: Failed to update', {
-                  status: res.status,
-                  response: text.slice(0, 100),
-                });
-                throw new Error(`Failed to update packaging: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-              }
-              const data = await res.json();
-              console.log('Edit packaging success:', data);
-              const packageVolume = packageTypes.find((pkg) => pkg.name === editPackaging.packageType)?.volume || 0;
-              setPackagingActions((prev) =>
-                prev.map((action) =>
-                  action.id === editPackaging.id
-                    ? { ...action, quantity: editPackaging.quantity, volume: editPackaging.quantity * packageVolume }
-                    : action
-                )
-              );
-              setBatch((prev) => prev ? { ...prev, volume: data.newBatchVolume } : prev);
-              setEditPackaging(null);
-              setSuccessMessage('Packaging action updated successfully');
-              setTimeout(() => setSuccessMessage(null), 2000);
-              setError(null);
-              await refreshInventory();
-            } catch (err: unknown) {
-              const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-              console.error('Edit packaging error:', err);
-              setError(`Failed to update packaging: ${errorMessage}`);
-            }
-          }}
-          style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-        >
-          Save
-        </button>
-        <button
-          onClick={() => setEditPackaging(null)}
-          style={{
-            backgroundColor: '#F86752',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
       {showVolumePrompt && (
         <div
           style={{
@@ -1421,9 +1482,9 @@ useEffect(() => {
               color: '#555',
             }}
           >
-            <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Volume Adjustment Required</h3>
-            <p style={{ marginBottom: '20px' }}>{showVolumePrompt.message}</p>
-            <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+            <h3 style={{ color: '#555', marginBottom: '20px' }}>Volume Adjustment Required</h3>
+            <p>{showVolumePrompt.message}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
               <button
                 onClick={() => handleVolumeAdjustment(true)}
                 style={{
@@ -1436,7 +1497,7 @@ useEffect(() => {
                   fontSize: '16px',
                 }}
               >
-                Yes
+                Adjust Volume
               </button>
               <button
                 onClick={() => handleVolumeAdjustment(false)}
@@ -1450,13 +1511,12 @@ useEffect(() => {
                   fontSize: '16px',
                 }}
               >
-                No
+                Cancel
               </button>
             </div>
           </div>
         </div>
       )}
-
       {showLossPrompt && (
         <div
           style={{
@@ -1483,11 +1543,11 @@ useEffect(() => {
               color: '#555',
             }}
           >
-            <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Unpackaged Volume Detected</h3>
-            <p style={{ marginBottom: '20px' }}>
-              {showLossPrompt.volume.toFixed(3)} barrels remain unpackaged. Do you want to report a {showLossPrompt.volume.toFixed(3)} barrel loss?
+            <h3 style={{ color: '#555', marginBottom: '20px' }}>Record Loss</h3>
+            <p>
+              {`Batch has ${showLossPrompt.volume.toFixed(3)} barrels remaining. Record as fermentation loss due to trub/spillage?`}
             </p>
-            <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
               <button
                 onClick={() => handleLossConfirmation(true)}
                 style={{
@@ -1500,7 +1560,7 @@ useEffect(() => {
                   fontSize: '16px',
                 }}
               >
-                Yes
+                Record Loss
               </button>
               <button
                 onClick={() => handleLossConfirmation(false)}
@@ -1514,7 +1574,68 @@ useEffect(() => {
                   fontSize: '16px',
                 }}
               >
-                No
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showKegPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2100,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '20px',
+              borderRadius: '8px',
+              width: '400px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+              color: '#555',
+            }}
+          >
+            <h3 style={{ color: '#555', marginBottom: '20px' }}>Scan Kegs?</h3>
+            <p>No kegs have been scanned for this packaging action. Would you like to scan kegs now?</p>
+            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
+              <button
+                onClick={() => setShowKegPrompt(false)}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                Yes, Scan Kegs
+              </button>
+              <button
+                onClick={() => handlePackage(true)}
+                style={{
+                  backgroundColor: '#F86752',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                No, Proceed
               </button>
             </div>
           </div>
