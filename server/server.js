@@ -5508,10 +5508,11 @@ app.post('/api/kegs/register', (req, res) => {
   });
 });
 
+// server.js (replace around line ~5513)
 app.get('/api/kegs/:code', (req, res) => {
   const { code } = req.params;
   db.get(
-    'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.id WHERE k.code = ?',
+    'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.customerId WHERE k.code = ?',
     [code],
     (err, keg) => {
       if (err) {
@@ -5593,6 +5594,7 @@ app.patch('/api/kegs/:code', (req, res) => {
   });
 });
 
+// server.js (replace around line ~5540)
 app.get('/api/kegs/:code/transactions', (req, res) => {
   const { code } = req.params;
   db.get('SELECT id FROM kegs WHERE code = ?', [code], (err, keg) => {
@@ -5605,7 +5607,7 @@ app.get('/api/kegs/:code/transactions', (req, res) => {
       return res.status(404).json({ error: `Keg not found: ${code}` });
     }
     db.all(
-      'SELECT kt.*, p.name AS productName, c.name AS customerName FROM keg_transactions kt LEFT JOIN products p ON kt.productId = p.id LEFT JOIN customers c ON kt.customerId = c.id WHERE kt.kegId = ? ORDER BY kt.date DESC',
+      'SELECT kt.*, p.name AS productName, c.name AS customerName FROM keg_transactions kt LEFT JOIN products p ON kt.productId = p.id LEFT JOIN customers c ON kt.customerId = c.customerId WHERE kt.kegId = ? ORDER BY kt.date DESC',
       [keg.id],
       (err, transactions) => {
         if (err) {
