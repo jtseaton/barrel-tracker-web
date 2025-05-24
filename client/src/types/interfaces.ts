@@ -1,3 +1,4 @@
+// src/types/interfaces.ts
 import { Status, Unit, MaterialType, ProductClass, Account } from './enums';
 export { Status, Unit, MaterialType, ProductClass, Account };
 
@@ -19,6 +20,7 @@ export interface PackagingAction {
   locationId: number;
   date: string;
   siteId: string;
+  keg_codes?: string; // JSON array of keg codes
 }
 
 export interface ReportData {
@@ -64,11 +66,11 @@ export interface DesignObject {
 }
 
 export interface DailySummaryItem {
-  date: string; // Add this
+  date: string;
   account: string;
-  type: string; // Add this (for the next error)
+  type: string;
   totalProofGallons: string;
-  locationId: number; // Add this (for the last error)
+  locationId: number;
 }
 
 export interface MoveForm {
@@ -99,30 +101,31 @@ export interface Product {
   id: number;
   name: string;
   abbreviation: string;
-  enabled: boolean;
+  enabled: number;
   priority: number;
   class: string;
   type: string;
   style: string;
   abv: number;
   ibu: number;
+  packageTypes?: { type: string; price: string; isKegDepositItem: boolean }[];
 }
 
 export interface User {
   email: string;
-  passwordHash: string | null; // Null until set on first login
-  role: string; // SuperAdmin, Admin, Sales, Production
+  passwordHash: string | null;
+  role: string;
   enabled: boolean;
-  passkey: string | null; // JSON string for WebAuthn credentials
+  passkey: string | null;
 }
 
 export interface Recipe {
   id: number;
   name: string;
   productId: number;
-  ingredients: { itemName: string; quantity: number }[];
   quantity: number;
-  unit: string; // Gallons, Liters, Barrels
+  unit: string;
+  ingredients: { itemName: string; quantity: number; unit: string }[];
 }
 
 export interface Ingredient {
@@ -130,6 +133,73 @@ export interface Ingredient {
   quantity: number;
   unit: string;
   isRecipe?: boolean;
+}
+
+export interface Customer {
+  customerId: number;
+  name: string;
+  email: string;
+  address?: string;
+  phone?: string;
+  contactPerson?: string;
+  licenseNumber?: string;
+  notes?: string;
+  enabled: number;
+  createdDate?: string;
+  updatedDate?: string;
+}
+
+export interface SalesOrder {
+  orderId: number;
+  customerId: number;
+  poNumber?: string;
+  status: string;
+  createdDate: string;
+  customerName?: string;
+}
+
+export interface SalesOrderItem {
+  id?: number;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  price: string;
+  hasKegDeposit: boolean;
+  kegCodes?: string[];
+}
+
+export interface InvoiceItem {
+  id?: number;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  price: string;
+  hasKegDeposit: boolean;
+  kegDeposit?: {
+    itemName: string;
+    quantity: number;
+    unit: string;
+    price: string;
+    hasKegDeposit: boolean;
+    isSubCharge: boolean;
+  } | null;
+  kegCodes?: string[];
+}
+
+export interface Invoice {
+  invoiceId: number;
+  orderId: number;
+  customerId: number;
+  status: string;
+  createdDate: string;
+  postedDate?: string;
+  customerName: string;
+  customerEmail: string;
+  items?: InvoiceItem[];
+  total: string;
+  subtotal: string;
+  keg_deposit_total: string;
+  keg_deposit_price: string;
 }
 
 export interface Batch {
@@ -146,14 +216,14 @@ export interface Batch {
   additionalIngredients?: Ingredient[];
   equipmentId?: number | null;
   fermenterId: number | null;
-  stage?: 'Mashing' | 'Boiling' | 'Fermenting' | 'Bright Tank' | 'Packaging' | 'Completed';
-  volume?: number; // New: Added volume as optional number
+  stage?: 'Brewing' | 'Fermentation' | 'Filtering/Carbonating' | 'Packaging' | 'Completed';
+  volume?: number;
 }
 
 export interface ReceiveForm {
   identifier: string;
-  item: string; // Replaces identifier
-  lotNumber: string; // New field
+  item: string;
+  lotNumber: string;
   account: Account;
   materialType: MaterialType;
   quantity: string;
@@ -166,7 +236,7 @@ export interface ReceiveForm {
   cost?: string;
   poNumber?: string;
   siteId: string;
-  locationId?: string; // Optional
+  locationId?: string;
 }
 
 export interface ReceiveItem {
@@ -181,14 +251,14 @@ export interface ReceiveItem {
   siteId: string;
   locationId: string;
   poNumber?: string;
-  account?: Account; // Add optional account
-  proof?: string; // Add optional proof
+  account?: Account;
+  proof?: string;
 }
 
 export interface ReceivableItem {
   identifier: string;
-  item: string; // Replaces identifier
-  lotNumber: string; // New field
+  item: string;
+  lotNumber: string;
   materialType: MaterialType;
   quantity: string;
   unit: Unit;
@@ -197,7 +267,7 @@ export interface ReceivableItem {
   cost?: string;
   poNumber?: string;
   siteId: string;
-  locationId?: string; // Optional
+  locationId?: string;
 }
 
 export interface InventoryItem {
@@ -220,6 +290,8 @@ export interface InventoryItem {
   poNumber?: string;
   siteId: string;
   locationId?: number;
+  price?: string;
+  isKegDepositItem?: number | null;
 }
 
 export interface BatchDetailsProps {
@@ -231,9 +303,9 @@ export interface PurchaseOrder {
   poNumber: string;
   supplier: string;
   items: PurchaseOrderItem[];
-  siteId?: string; // Added for VendorDetails.tsx
-  poDate?: string; // Added for VendorDetails.tsx
-  comments?: string; // Added for VendorDetails.tsx
+  siteId?: string;
+  poDate?: string;
+  comments?: string;
 }
 
 export interface PurchaseOrderItem {
@@ -245,10 +317,10 @@ export interface PurchaseOrderItem {
 export interface Vendor {
   name: string;
   enabled?: number;
-  type?: string; // Added for VendorDetails.tsx
-  address?: string; // Added for VendorDetails.tsx
-  email?: string; // Added for VendorDetails.tsx
-  phone?: string; // Added for VendorDetails.tsx
+  type?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface Site {
@@ -263,7 +335,7 @@ export interface Location {
   locationId: number;
   siteId: string;
   name: string;
-  abbreviation: string; // Added
+  abbreviation: string;
   enabled: number;
 }
 
@@ -271,6 +343,39 @@ export interface Equipment {
   equipmentId: number;
   siteId: string;
   name: string;
-  abbreviation: string; // Added
+  abbreviation: string;
   enabled: number;
+}
+
+export interface Keg {
+  id: number;
+  code: string; // Matches backend 'code' field
+  status: string;
+  productId?: number;
+  lastScanned: string;
+  location?: string; // Changed from locationId to location
+  customerId?: number;
+  customerName?: string; // Added for customer name
+  identifier?: string; // Added for keg identifier (e.g., KEG-001)
+  quantity?: number; // Added for quantity
+  depositStatus?: string; // Added for deposit status
+  siteId?: string; // Added for site ID
+}
+
+export interface KegTransaction {
+  id: number;
+  kegId: number;
+  action: string;
+  productId?: number;
+  batchId?: string;
+  invoiceId?: number;
+  customerId?: number;
+  date: string;
+  location?: string;
+}
+
+// Added KegTrackingProps to fix TS2305
+export interface KegTrackingProps {
+  inventory: InventoryItem[];
+  refreshInventory: () => Promise<void>;
 }
