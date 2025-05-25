@@ -397,6 +397,7 @@ const initializeDatabase = () => {
         lastScanned TEXT,
         location TEXT, -- e.g., 'Madison Brewery Cooler', 'Customer: Gulf Distributing'
         customerId INTEGER,
+        packageingType TEXT,
         FOREIGN KEY (productId) REFERENCES products(id),
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
@@ -5638,10 +5639,10 @@ app.get('/api/kegs/:code', (req, res) => {
 
 app.patch('/api/kegs/:code', (req, res) => {
   const { code } = req.params;
-  const { status, productId, location, customerId } = req.body;
-  if (!status && !productId && !location && !customerId) {
+  const { status, productId, location, customerId, lastScanned, packagingType } = req.body;
+  if (!status && !productId && !location && customerId === undefined && !lastScanned && !packagingType) {
     console.error('PATCH /api/kegs/:code: No fields provided', { code });
-    return res.status(400).json({ error: 'At least one field (status, productId, location, customerId) must be provided' });
+    return res.status(400).json({ error: 'At least one field (status, productId, location, customerId, lastScanned, packagingType) must be provided' });
   }
   if (status && !['Filled', 'Empty', 'Destroyed', 'Broken'].includes(status)) {
     console.error('PATCH /api/kegs/:code: Invalid status', { status });
@@ -5659,9 +5660,10 @@ app.patch('/api/kegs/:code', (req, res) => {
     const updates = {};
     if (status) updates.status = status;
     if (productId) updates.productId = productId;
-    if (location) updates.location = location;
+    if (location) updates.location = location; // Expects locationId
     if (customerId !== undefined) updates.customerId = customerId;
-    updates.lastScanned = new Date().toISOString().split('T')[0];
+    if (lastScanned) updates.lastScanned = lastScanned;
+    if (packagingType) updates.packagingType = packagingType;
 
     const setClause = Object.keys(updates).map(field => `${field} = ?`).join(', ');
     const values = [...Object.values(updates), code];
@@ -5675,15 +5677,23 @@ app.patch('/api/kegs/:code', (req, res) => {
           return res.status(500).json({ error: err.message });
         }
         db.run(
-          'INSERT INTO keg_transactions (kegId, action, productId, customerId, date, location) VALUES (?, ?, ?, ?, ?, ?)',
-          [keg.id, 'Updated', productId || keg.productId, customerId !== undefined ? customerId : keg.customerId, updates.lastScanned, location || keg.location],
+          'INSERT INTO keg_transactions (kegId, action, productId, customerId, date, location, packagingType) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [
+            keg.id,
+            'Updated',
+            productId || keg.productId,
+            customerId !== undefined ? customerId : keg.customerId,
+            lastScanned || new Date().toISOString().split('T')[0],
+            location || keg.location,
+            packagingType || keg.packagingType
+          ],
           (err) => {
             if (err) {
               console.error('PATCH /api/kegs/:code: Insert transaction error:', err);
               return res.status(500).json({ error: err.message });
             }
             db.get(
-              'SELECT k.*, p.name AS productName, c.name AS customerName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.id WHERE k.code = ?',
+              'SELECT k.*, p.name AS productName, c.name AS customerName, l.name AS locationName FROM kegs k LEFT JOIN products p ON k.productId = p.id LEFT JOIN customers c ON k.customerId = c.customerId LEFT JOIN locations l ON k.location = l.locationId WHERE k.code = ?',
               [code],
               (err, updatedKeg) => {
                 if (err) {
@@ -5725,6 +5735,24 @@ app.get('/api/kegs/:code/transactions', (req, res) => {
         res.json(transactions);
       }
     );
+  });
+});
+
+app.get('/api/product-package-types', (req, res) => {
+  const { productId } = req.query;
+  let query = 'SELECT id, productId, type, price, isKegDepositItem FROM product_package_types WHERE enabled = 1';
+  let params = [];
+  if (productId) {
+    query += ' AND productId = ?';
+    params.push(productId);
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('GET /api/product-package-types: Fetch packaging types error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/product-package-types: Success', { count: rows.length });
+    res.json(rows);
   });
 });
 

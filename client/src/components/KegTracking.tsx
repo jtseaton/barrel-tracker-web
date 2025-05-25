@@ -1,6 +1,6 @@
 // src/components/KegTracking.tsx
 import React, { useState, useEffect } from 'react';
-import { InventoryItem, Keg, KegTransaction, KegTrackingProps } from '../types/interfaces';
+import { InventoryItem, Keg, KegTransaction, KegTrackingProps, Location, Product, PackageType } from '../types/interfaces';
 import QRScanner from './QRScanner';
 import '../App.css';
 
@@ -14,7 +14,10 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
   const [showScanner, setShowScanner] = useState(false);
   const [detailsModal, setDetailsModal] = useState<{ keg: Keg; transactions: KegTransaction[] } | null>(null);
   const [updateModal, setUpdateModal] = useState<Keg | null>(null);
-  const [updateForm, setUpdateForm] = useState({ status: '', location: '' });
+  const [updateForm, setUpdateForm] = useState({ status: '', locationId: '', lastScanned: '', productId: '', packagingType: '' });
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [packageTypes, setPackageTypes] = useState<PackageType[]>([]);
 
   useEffect(() => {
     const fetchKegs = async () => {
@@ -26,18 +29,73 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
           throw new Error(`Failed to fetch kegs: HTTP ${res.status}`);
         }
         const data = await res.json();
-        console.log('Fetched kegs:', data); // Debug log
-        setKegs(data);
+        console.log('Fetched kegs:', data);
+        setKegs(data.sort((a: Keg, b: Keg) => a.code.localeCompare(b.code)));
       } catch (err: any) {
         setError('Failed to load kegs: ' + err.message);
       }
     };
+
+    const fetchLocations = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/locations`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch locations: HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setLocations(data);
+      } catch (err: any) {
+        setError('Failed to load locations: ' + err.message);
+      }
+    };
+
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/products`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch products: HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setProducts(data);
+      } catch (err: any) {
+        setError('Failed to load products: ' + err.message);
+      }
+    };
+
     fetchKegs();
+    fetchLocations();
+    fetchProducts();
   }, []);
+
+  useEffect(() => {
+    if (updateForm.productId) {
+      const fetchPackageTypes = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/product-package-types?productId=${updateForm.productId}`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!res.ok) {
+            throw new Error(`Failed to fetch package types: HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          setPackageTypes(data);
+        } catch (err: any) {
+          setError('Failed to load package types: ' + err.message);
+        }
+      };
+      fetchPackageTypes();
+    } else {
+      setPackageTypes([]);
+    }
+  }, [updateForm.productId]);
 
   const handleRegisterKeg = async () => {
     if (!newKegCode || !/^[A-Z0-9-]+$/.test(newKegCode)) {
-      setError('Valid keg code (e.g., KEG-001) required');
+      setError('Valid keg code (e.g., EK10000) required');
       return;
     }
     try {
@@ -51,7 +109,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
         throw new Error(`Failed to register keg: ${text}`);
       }
       const newKeg = await res.json();
-      setKegs([...kegs, newKeg]);
+      setKegs([...kegs, newKeg].sort((a, b) => a.code.localeCompare(b.code)));
       setSuccessMessage('Keg registered successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setNewKegCode('');
@@ -72,7 +130,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
         throw new Error(`Failed to fetch transactions: ${text}`);
       }
       const transactions = await res.json();
-      console.log('Fetched transactions for keg:', keg.code, transactions); // Debug log
+      console.log('Fetched transactions for keg:', keg.code, transactions);
       setDetailsModal({ keg, transactions });
     } catch (err: any) {
       setError('Failed to load keg transactions: ' + err.message);
@@ -81,15 +139,18 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
 
   const handleManualUpdate = async () => {
     if (!updateModal) return;
-    const { status, location } = updateForm;
-    if (!status && !location) {
-      setError('At least one field (status or location) must be provided');
+    const { status, locationId, lastScanned, productId, packagingType } = updateForm;
+    if (!status && !locationId && !lastScanned && !productId && !packagingType) {
+      setError('At least one field (status, location, date, product, or packaging type) must be provided');
       return;
     }
     try {
-      const updateData: { status?: string; location?: string } = {};
+      const updateData: { status?: string; location?: string; lastScanned?: string; productId?: number; packagingType?: string } = {};
       if (status) updateData.status = status;
-      if (location) updateData.location = location;
+      if (locationId) updateData.location = locationId;
+      if (lastScanned) updateData.lastScanned = lastScanned;
+      if (productId) updateData.productId = parseInt(productId);
+      if (packagingType) updateData.packagingType = packagingType;
       const res = await fetch(`${API_BASE_URL}/api/kegs/${updateModal.code}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -100,11 +161,11 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
         throw new Error(`Failed to update keg: ${text}`);
       }
       const updatedKeg = await res.json();
-      setKegs(kegs.map((k) => (k.id === updateModal.id ? updatedKeg : k)));
+      setKegs(kegs.map((k) => (k.id === updateModal.id ? updatedKeg : k)).sort((a, b) => a.code.localeCompare(b.code)));
       setSuccessMessage('Keg updated successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setUpdateModal(null);
-      setUpdateForm({ status: '', location: '' });
+      setUpdateForm({ status: '', locationId: '', lastScanned: '', productId: '', packagingType: '' });
       setError(null);
     } catch (err: any) {
       setError('Failed to update keg: ' + err.message);
@@ -138,7 +199,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
           type="text"
           value={newKegCode}
           onChange={(e) => setNewKegCode(e.target.value)}
-          placeholder="Enter keg code (e.g., KEG-001)"
+          placeholder="Enter keg code (e.g., EK10000)"
           style={{ padding: '10px', width: '200px' }}
           disabled={showScanner}
         />
@@ -354,7 +415,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
                 type="text"
                 value={updateModal.code}
                 onChange={(e) => setUpdateModal({ ...updateModal, code: e.target.value })}
-                placeholder="Enter keg code (e.g., KEG-001)"
+                placeholder="Enter keg code (e.g., EK10000)"
                 style={{ padding: '10px', width: '100%', border: '1px solid #CCCCCC', borderRadius: '4px' }}
               />
             </div>
@@ -374,13 +435,58 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
             </div>
             <div style={{ marginBottom: '10px' }}>
               <label style={{ display: 'block', marginBottom: '5px' }}>Location:</label>
+              <select
+                value={updateForm.locationId}
+                onChange={(e) => setUpdateForm({ ...updateForm, locationId: e.target.value })}
+                style={{ padding: '10px', width: '100%', border: '1px solid #CCCCCC', borderRadius: '4px' }}
+              >
+                <option value="">Select Location</option>
+                {locations.map((loc) => (
+                  <option key={loc.locationId} value={loc.locationId}>
+                    {loc.name} ({loc.siteId})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Last Scanned Date:</label>
               <input
-                type="text"
-                value={updateForm.location}
-                onChange={(e) => setUpdateForm({ ...updateForm, location: e.target.value })}
-                placeholder="Enter location (e.g., Brewery)"
+                type="date"
+                value={updateForm.lastScanned}
+                onChange={(e) => setUpdateForm({ ...updateForm, lastScanned: e.target.value })}
                 style={{ padding: '10px', width: '100%', border: '1px solid #CCCCCC', borderRadius: '4px' }}
               />
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Product:</label>
+              <select
+                value={updateForm.productId}
+                onChange={(e) => setUpdateForm({ ...updateForm, productId: e.target.value, packagingType: '' })}
+                style={{ padding: '10px', width: '100%', border: '1px solid #CCCCCC', borderRadius: '4px' }}
+              >
+                <option value="">Select Product</option>
+                {products.map((prod) => (
+                  <option key={prod.id} value={prod.id}>
+                    {prod.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Packaging Type:</label>
+              <select
+                value={updateForm.packagingType}
+                onChange={(e) => setUpdateForm({ ...updateForm, packagingType: e.target.value })}
+                style={{ padding: '10px', width: '100%', border: '1px solid #CCCCCC', borderRadius: '4px' }}
+                disabled={!updateForm.productId}
+              >
+                <option value="">Select Packaging Type</option>
+                {packageTypes.map((pt) => (
+                  <option key={pt.type} value={pt.type}>
+                    {pt.type} (${pt.price}, {pt.isKegDepositItem ? 'Keg Deposit' : 'No Deposit'})
+                  </option>
+                ))}
+              </select>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
               <button
@@ -399,7 +505,7 @@ const KegTracking: React.FC<KegTrackingProps> = ({ inventory, refreshInventory }
               <button
                 onClick={() => {
                   setUpdateModal(null);
-                  setUpdateForm({ status: '', location: '' });
+                  setUpdateForm({ status: '', locationId: '', lastScanned: '', productId: '', packagingType: '' });
                 }}
                 style={{
                   backgroundColor: '#F86752',
