@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Product, Recipe } from '../types/interfaces';
+import { Product, Recipe, PackageType } from '../types/interfaces';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -8,12 +8,6 @@ interface Ingredient {
   itemName: string;
   quantity: number;
   unit: string;
-}
-
-interface PackageType {
-  type: string;
-  price: string;
-  isKegDepositItem: boolean;
 }
 
 const ProductDetails: React.FC = () => {
