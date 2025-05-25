@@ -482,6 +482,8 @@ const insertTestData = () => {
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
       ['BR-AL-20019', 'Madison Fermenter 1', null]);
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+      ['BR-AL-20019', 'Madison Outdoor Racks', null]);
+    db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
       ['BR-AL-20019', 'Madison Fermenter 2', null]);
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
       ['BR-AL-20019', 'Madison Fermenter 3', null]);
@@ -542,6 +544,10 @@ const insertTestData = () => {
     db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
       ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
 
+    // Customers
+    db.run('INSERT OR IGNORE INTO vendors (name, email) VALUES (?, ?)',
+      ['Gulf Distributing', 'jtseaton@gmail.com']);
+
     // Vendors
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
       ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
@@ -555,8 +561,97 @@ const insertTestData = () => {
     // Customers
     db.run('INSERT OR IGNORE INTO customers (name, email) VALUES (?,?)',
       ['Gulf Distributing', 'jtseaton@gmail']);
-      
-    console.log('Test data inserted');
+
+    // New Test Data: Packaging Types for Hazy Train
+    db.get(`SELECT id FROM products WHERE name = ?`, ['Hazy Train IPA'], (err, row) => {
+      if (err) {
+        console.error('Fetch Hazy Train productId error:', err);
+        return;
+      }
+      if (!row) {
+        console.error('Hazy Train IPA product not found');
+        return;
+      }
+      const productId = row.id;
+
+      const packagingTypes = [
+        { type: '1/2 BBL Keg', price: '132.00', isKegDepositItem: 1 },
+        { type: '1/4 BBL Keg', price: '70.00', isKegDepositItem: 0 },
+        { type: '1/6 BBL Keg', price: '64.00', isKegDepositItem: 1 },
+      ];
+
+      packagingTypes.forEach((pt) => {
+        db.run(
+          `INSERT OR IGNORE INTO product_package_types (productId, type, price, isKegDepositItem) VALUES (?, ?, ?, ?)`,
+          [productId, pt.type, pt.price, pt.isKegDepositItem],
+          (err) => {
+            if (err) console.error(`Insert packaging type ${pt.type} error:`, err);
+            else console.log(`Inserted packaging type ${pt.type}`);
+          }
+        );
+      });
+    });
+
+    // New Test Data: Batch HT321654
+    db.get(`SELECT id FROM products WHERE name = ?`, ['Hazy Train IPA'], (err, row) => {
+      if (err) {
+        console.error('Fetch Hazy Train productId for batch error:', err);
+        return;
+      }
+      if (!row) {
+        console.error('Hazy Train IPA product not found for batch');
+        return;
+      }
+      const productId = row.id;
+
+      db.get(`SELECT id FROM recipes WHERE name = ?`, ['Hazy Train 20 BBL'], (err, recipeRow) => {
+        if (err) {
+          console.error('Fetch Hazy Train recipeId error:', err);
+          return;
+        }
+        if (!recipeRow) {
+          console.error('Hazy Train 20 BBL recipe not found');
+          return;
+        }
+        const recipeId = recipeRow.id;
+
+        db.run(
+          `INSERT OR IGNORE INTO batches (batchId, productId, recipeId, volume, siteId, status, stage, createdDate, recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ['HT321654', productId, recipeId, 20.000, 'BR-AL-20019', 'In Progress', 'Fermentation', '2025-05-24', 'Hazy Train 20 BBL'],
+          (err) => {
+            if (err) console.error('Insert batch HT321654 error:', err);
+            else console.log('Inserted batch HT321654');
+          }
+        );
+      });
+    });
+
+    // New Test Data: Kegs EK10000 to EK10050
+    db.get(`SELECT locationId FROM locations WHERE name = ? AND siteId = ?`, ['Madison Cold Storage', 'BR-AL-20019'], (err, row) => {
+      if (err) {
+        console.error('Fetch Madison Cold Storage locationId error:', err);
+        return;
+      }
+      if (!row) {
+        console.error('Madison Cold Storage location not found');
+        return;
+      }
+      const locationId = row.locationId;
+
+      for (let i = 10000; i <= 10050; i++) {
+        const code = `EK${i.toString().padStart(5, '0')}`;
+        db.run(
+          `INSERT OR IGNORE INTO kegs (code, status, lastScanned, location) VALUES (?, ?, ?, ?)`,
+          [code, 'Empty', '2025-05-24', locationId],
+          (err) => {
+            if (err) console.error(`Insert keg ${code} error:`, err);
+            else console.log(`Inserted keg ${code}`);
+          }
+        );
+      }
+    });
+
+    console.log('Test data insertion complete');
   });
 };
 
