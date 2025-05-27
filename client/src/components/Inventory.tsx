@@ -1,7 +1,10 @@
+// src/components/Inventory.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem, Site } from '../types/interfaces';
 import { fetchDailySummary } from '../utils/fetchUtils';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import '../App.css';
 
 const OUR_DSP = 'DSP-AL-20010';
 
@@ -46,42 +49,33 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       .catch((err) => console.error('Daily summary error:', err));
   }, []);
 
-  // Fetch locations and sites only once or when siteIds change
+  // Fetch locations and sites
   useEffect(() => {
     const fetchLocationsAndSites = async () => {
       try {
-        // Fetch sites
-        const sitesRes = await fetch(`${API_BASE_URL}/api/sites`);
+        const sitesRes = await fetch(`${API_BASE_URL}/api/sites`, { headers: { Accept: 'application/json' } });
         if (!sitesRes.ok) throw new Error(`HTTP error! status: ${sitesRes.status}`);
         const sitesData: Site[] = await sitesRes.json();
-        console.log('Fetched sites:', sitesData);
         setSites(sitesData);
 
-        // Get unique siteIds
+        // Deduplicate siteIds without Set
         const siteIds = inventory
           .map(item => item.siteId)
-          .filter(Boolean)
-          .reduce((unique, siteId) => 
-            unique.includes(siteId) ? unique : [...unique, siteId], 
-            [] as string[]
-          );
-        if (siteIds.length === 0) {
-          siteIds.push(OUR_DSP);
-        }
+          .filter((siteId): siteId is string => !!siteId)
+          .concat([OUR_DSP])
+          .filter((siteId, index, arr) => arr.indexOf(siteId) === index);
 
-        // Fetch locations for each siteId
         const locationPromises = siteIds.map(siteId =>
-          fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`).then(res => {
+          fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`, {
+            headers: { Accept: 'application/json' }
+          }).then(res => {
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             return res.json();
           })
         );
         const locationArrays = await Promise.all(locationPromises);
-        const allLocations = locationArrays.flat();
-        console.log('Fetched locations:', allLocations);
-        setLocations(allLocations);
+        setLocations(locationArrays.flat());
       } catch (err: any) {
-        console.error('Failed to fetch locations or sites:', err);
         setProductionError('Failed to fetch locations or sites: ' + err.message);
       }
     };
@@ -89,16 +83,14 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     if (inventory.length > 0) {
       fetchLocationsAndSites();
     }
-  }, [API_BASE_URL, OUR_DSP]);
+  }, [API_BASE_URL, inventory]);
 
-  // Helper function to map locationId to location name
   const getLocationName = (locationId: number | undefined) => {
     if (!locationId) return 'Unknown Location';
     const location = locations.find(loc => loc.locationId === locationId);
     return location ? location.name : 'Unknown Location';
   };
 
-  // Helper function to map siteId to site name
   const getSiteName = (siteId: string | undefined) => {
     if (!siteId) return 'Unknown Site';
     const site = sites.find(site => site.siteId === siteId);
@@ -113,7 +105,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     try {
       const res = await fetch(`${API_BASE_URL}/api/move`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -122,7 +114,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       setShowMoveModal(false);
       setProductionError(null);
     } catch (err: any) {
-      console.error('Move error:', err);
       setProductionError('Failed to move item: ' + err.message);
     }
   };
@@ -135,7 +126,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     try {
       const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }),
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -150,7 +141,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       setShowLossModal(false);
       setProductionError(null);
     } catch (err: any) {
-      console.error('Record loss error:', err);
       setProductionError('Failed to record loss: ' + err.message);
     }
   };
@@ -171,200 +161,220 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   );
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#2E4655', color: '#FFFFFF', fontFamily: 'Arial, sans-serif' }}>
-      <h2 style={{ color: '#EEC930', textAlign: 'center' }}>Inventory Management</h2>
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => navigate('/receive')}
-          style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}
-        >
+    <div className="page-container container">
+      <h2 className="text-warning mb-4">Inventory Management</h2>
+      {productionError && (
+        <div className="alert alert-danger mb-3">{productionError}</div>
+      )}
+      <div className="inventory-actions mb-4">
+        <button className="btn btn-primary" onClick={() => navigate('/receive')}>
           Receive Inventory
         </button>
-        <button
-          onClick={() => setShowMoveModal(true)}
-          style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}
-        >
-          Move Inventory
+        <button className="btn btn-primary" onClick={() => setShowMoveModal(true)}>
+          Move Item
         </button>
-        <button
-          onClick={() => setShowLossModal(true)}
-          style={{ marginLeft: '10px', padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px' }}
-        >
+        <button className="btn btn-primary" onClick={() => setShowLossModal(true)}>
           Record Loss
         </button>
       </div>
 
-      <div style={{ marginBottom: '20px' }}>
+      <div className="mb-3">
         <input
           type="text"
           placeholder="Search by Item-Lot, Type, or Description"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ padding: '10px', width: '300px', fontSize: '16px', borderRadius: '4px', border: '1px solid #ccc' }}
+          className="form-control"
+          style={{ maxWidth: '300px' }}
         />
       </div>
 
-      {productionError && (
-        <div style={{ color: '#F86752', backgroundColor: '#ffe6e6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>
-          {productionError}
-        </div>
-      )}
-
-      <h3 style={{ color: '#EEC930' }}>Received/Stored Inventory</h3>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px', marginBottom: '20px' }}>
+      <h3 className="text-warning mb-3">Received/Stored Inventory</h3>
+      <div className="inventory-table-container">
+        <table className="inventory-table table-striped">
           <thead>
             <tr>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Item-Lot</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Type</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Quantity</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Received Date</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Location</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Site</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Source</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Description</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Unit Cost</th>
+              <th>Item-Lot</th>
+              <th>Type</th>
+              <th>Quantity</th>
+              <th>Unit</th>
+              <th>Received Date</th>
+              <th>Location</th>
+              <th>Site</th>
+              <th>Source</th>
+              <th>Description</th>
+              <th>Unit Cost</th>
             </tr>
           </thead>
           <tbody>
             {filteredInventory.map((item, index) => (
               <tr key={index} onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
-                <td style={{ padding: '10px' }}>{getIdentifier(item)}</td>
-                <td style={{ padding: '10px' }}>{item.type}</td>
-                <td style={{ padding: '10px' }}>{item.quantity}</td>
-                <td style={{ padding: '10px' }}>{item.unit}</td>
-                <td style={{ padding: '10px' }}>{item.receivedDate}</td>
-                <td style={{ padding: '10px' }}>{getLocationName(item.locationId)}</td>
-                <td style={{ padding: '10px' }}>{getSiteName(item.siteId)}</td>
-                <td style={{ padding: '10px' }}>{item.source || 'Unknown'}</td>
-                <td style={{ padding: '10px' }}>{item.description || 'N/A'}</td>
-                <td style={{ padding: '10px' }}>{item.cost || 'N/A'}</td>
+                <td>{getIdentifier(item)}</td>
+                <td>{item.type}</td>
+                <td>{item.quantity}</td>
+                <td>{item.unit}</td>
+                <td>{item.receivedDate}</td>
+                <td>{getLocationName(item.locationId)}</td>
+                <td>{getSiteName(item.siteId)}</td>
+                <td>{item.source || 'Unknown'}</td>
+                <td>{item.description || 'N/A'}</td>
+                <td>{item.cost || 'N/A'}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="card-list">
+          {filteredInventory.map((item, index) => (
+            <div key={index} className="card-item card mb-2" onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
+              <div className="card-body">
+                <p className="card-text"><strong>Item-Lot:</strong> {getIdentifier(item)}</p>
+                <p className="card-text"><strong>Type:</strong> {item.type}</p>
+                <p className="card-text"><strong>Quantity:</strong> {item.quantity}</p>
+                <p className="card-text"><strong>Unit:</strong> {item.unit}</p>
+                <p className="card-text"><strong>Received Date:</strong> {item.receivedDate}</p>
+                <p className="card-text"><strong>Location:</strong> {getLocationName(item.locationId)}</p>
+                <p className="card-text"><strong>Site:</strong> {getSiteName(item.siteId)}</p>
+                <p className="card-text"><strong>Source:</strong> {item.source || 'Unknown'}</p>
+                <p className="card-text"><strong>Description:</strong> {item.description || 'N/A'}</p>
+                <p className="card-text"><strong>Unit Cost:</strong> {item.cost || 'N/A'}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <h3 style={{ color: '#EEC930' }}>Daily Summary</h3>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px' }}>
+      <h3 className="text-warning mb-3">Daily Summary</h3>
+      <div className="inventory-table-container">
+        <table className="inventory-table table-striped">
           <thead>
             <tr>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Date</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Account</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Type</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Total Proof Gallons</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Location</th>
+              <th>Date</th>
+              <th>Account</th>
+              <th>Type</th>
+              <th>Total Proof Gallons</th>
+              <th>Location</th>
             </tr>
           </thead>
           <tbody>
             {dailySummary.map((item, index) => (
               <tr key={index}>
-                <td style={{ padding: '10px' }}>{item.date}</td>
-                <td style={{ padding: '10px' }}>{item.account}</td>
-                <td style={{ padding: '10px' }}>{item.type}</td>
-                <td style={{ padding: '10px' }}>{parseFloat(item.totalProofGallons).toFixed(2)}</td>
-                <td style={{ padding: '10px' }}>{getLocationName(item.locationId)}</td>
+                <td>{item.date}</td>
+                <td>{item.account}</td>
+                <td>{item.type}</td>
+                <td>{parseFloat(item.totalProofGallons).toFixed(2)}</td>
+                <td>{getLocationName(item.locationId)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="card-list">
+          {dailySummary.map((item, index) => (
+            <div key={index} className="card-item card mb-2">
+              <div className="card-body">
+                <p className="card-text"><strong>Date:</strong> {item.date}</p>
+                <p className="card-text"><strong>Account:</strong> {item.account}</p>
+                <p className="card-text"><strong>Type:</strong> {item.type}</p>
+                <p className="card-text"><strong>Total Proof Gallons:</strong> {parseFloat(item.totalProofGallons).toFixed(2)}</p>
+                <p className="card-text"><strong>Location:</strong> {getLocationName(item.locationId)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {showMoveModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', color: '#000' }}>
-            <h3>Move Inventory</h3>
-            <input
-              type="text"
-              placeholder="Item-Lot (e.g., Grain-NGS123)"
-              value={moveForm.identifier}
-              onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <select
-              value={moveForm.toAccount}
-              onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', width: '100%' }}
-            >
-              <option value="Storage">Storage</option>
-              <option value="Processing">Processing</option>
-              <option value="Production">Production</option>
-            </select>
-            <input
-              type="number"
-              placeholder="Proof Gallons"
-              value={moveForm.proofGallons}
-              onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <button
-              onClick={handleMove}
-              style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px', marginRight: '10px' }}
-            >
-              Move
-            </button>
-            <button
-              onClick={() => setShowMoveModal(false)}
-              style={{ padding: '10px 20px', backgroundColor: '#ccc', color: '#000', border: 'none', borderRadius: '4px' }}
-            >
-              Cancel
-            </button>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title">Move Inventory</h5>
+            </div>
+            <div className="modal-body">
+              <input
+                type="text"
+                placeholder="Item-Lot (e.g., Grain-NGS123)"
+                value={moveForm.identifier}
+                onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
+                className="form-control mb-3"
+              />
+              <select
+                value={moveForm.toAccount}
+                onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })}
+                className="form-control mb-3"
+              >
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
+                <option value="Production">Production</option>
+              </select>
+              <input
+                type="number"
+                placeholder="Proof Gallons"
+                value={moveForm.proofGallons}
+                onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
+                className="form-control mb-3"
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleMove}>
+                Move
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowMoveModal(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {showLossModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '5px', color: '#000' }}>
-            <h3>Record Loss</h3>
-            <input
-              type="text"
-              placeholder="Item-Lot (e.g., Grain-NGS123)"
-              value={lossForm.identifier}
-              onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <input
-              type="number"
-              placeholder="Quantity Lost"
-              value={lossForm.quantityLost}
-              onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <input
-              type="number"
-              placeholder="Proof Gallons Lost"
-              value={lossForm.proofGallonsLost}
-              onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <input
-              type="text"
-              placeholder="Reason for Loss"
-              value={lossForm.reason}
-              onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <input
-              type="date"
-              value={lossForm.date}
-              onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
-              style={{ display: 'block', marginBottom: '10px', padding: '8px', boxSizing: 'border-box', width: '100%' }}
-            />
-            <button
-              onClick={handleRecordLoss}
-              style={{ padding: '10px 20px', backgroundColor: '#EEC930', color: '#000', border: 'none', borderRadius: '4px', marginRight: '10px' }}
-            >
-              Record Loss
-            </button>
-            <button
-              onClick={() => setShowLossModal(false)}
-              style={{ padding: '10px 20px', backgroundColor: '#ccc', color: '#000', border: 'none', borderRadius: '4px' }}
-            >
-              Cancel
-            </button>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title">Record Loss</h5>
+            </div>
+            <div className="modal-body">
+              <input
+                type="text"
+                placeholder="Item-Lot (e.g., Grain-NGS123)"
+                value={lossForm.identifier}
+                onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
+                className="form-control mb-3"
+              />
+              <input
+                type="number"
+                placeholder="Quantity Lost"
+                value={lossForm.quantityLost}
+                onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
+                className="form-control mb-3"
+              />
+              <input
+                type="number"
+                placeholder="Proof Gallons Lost"
+                value={lossForm.proofGallonsLost}
+                onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
+                className="form-control mb-3"
+              />
+              <input
+                type="text"
+                placeholder="Reason for Loss"
+                value={lossForm.reason}
+                onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
+                className="form-control mb-3"
+              />
+              <input
+                type="date"
+                value={lossForm.date}
+                onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
+                className="form-control mb-3"
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleRecordLoss}>
+                Record Loss
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowLossModal(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
