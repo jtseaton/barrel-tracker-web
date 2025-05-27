@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Invoice } from '../types/interfaces';
+import '../App.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -8,11 +10,13 @@ const InvoicesList: React.FC = () => {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/invoices`, {
+        const res = await fetch(`${API_BASE_URL}/api/invoices?page=${page}&limit=10`, {
           headers: { Accept: 'application/json' },
         });
         console.log('fetchInvoices: /api/invoices response status', res.status);
@@ -21,58 +25,89 @@ const InvoicesList: React.FC = () => {
         }
         const data = await res.json();
         console.log('fetchInvoices: /api/invoices data', data);
-        setInvoices(data);
+        setInvoices(data.invoices || []);
+        setTotalPages(data.totalPages || 1);
       } catch (err: any) {
         console.error('fetchInvoices error:', err);
         setError('Failed to load invoices: ' + err.message);
       }
     };
     fetchInvoices();
-  }, []);
+  }, [page]);
 
   return (
-    <div className="page-container">
-      <h2>Invoices</h2>
-      {error && <div className="error">{error}</div>}
+    <div className="page-container container">
+      <h2 className="text-warning mb-4">Invoices</h2>
+      {error && <div className="alert alert-danger">{error}</div>}
       {invoices.length === 0 ? (
         <p>No invoices found.</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px' }}>
-          <thead>
-            <tr>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Invoice ID</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Customer</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Status</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Created Date</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          <table className="inventory-table table table-striped">
+            <thead>
+              <tr>
+                <th>Invoice ID</th>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Created Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((invoice) => (
+                <tr key={invoice.invoiceId}>
+                  <td>{invoice.invoiceId}</td>
+                  <td>{invoice.customerName}</td>
+                  <td>{invoice.status}</td>
+                  <td>{invoice.createdDate}</td>
+                  <td>
+                    <button
+                      onClick={() => navigate(`/invoices/${invoice.invoiceId}`)}
+                      className="btn btn-primary btn-sm"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="invoice-list">
             {invoices.map((invoice) => (
-              <tr key={invoice.invoiceId}>
-                <td style={{ padding: '10px' }}>{invoice.invoiceId}</td>
-                <td style={{ padding: '10px' }}>{invoice.customerName}</td>
-                <td style={{ padding: '10px' }}>{invoice.status}</td>
-                <td style={{ padding: '10px' }}>{invoice.createdDate}</td>
-                <td style={{ padding: '10px' }}>
+              <div key={invoice.invoiceId} className="invoice-card card mb-2">
+                <div className="card-body">
+                  <h5 className="card-title">Invoice {invoice.invoiceId}</h5>
+                  <p className="card-text">Customer: {invoice.customerName}</p>
+                  <p className="card-text">Status: {invoice.status}</p>
+                  <p className="card-text">Date: {invoice.createdDate}</p>
                   <button
                     onClick={() => navigate(`/invoices/${invoice.invoiceId}`)}
-                    style={{
-                      backgroundColor: '#2196F3',
-                      color: '#fff',
-                      padding: '5px 10px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                    }}
+                    className="btn btn-primary btn-sm"
                   >
                     View
                   </button>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+          <div className="d-flex justify-content-between mt-3">
+            <button
+              className="btn btn-secondary"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </button>
+            <span>Page {page} of {totalPages}</span>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setPage(p => p + 1)}
+              disabled={page === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
