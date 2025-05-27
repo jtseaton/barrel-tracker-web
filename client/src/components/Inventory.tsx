@@ -27,7 +27,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     reason: '',
     date: new Date().toISOString().split('T')[0],
   });
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
@@ -36,37 +36,46 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
-  // Log inventory for debugging
+  // Log inventory
   useEffect(() => {
-    console.log('Inventory prop:', inventory);
-    const receivedStored = inventory?.filter((item) => ['Received', 'Stored'].includes(item?.status)) || [];
-    console.log('Filtered Received/Stored:', receivedStored);
+    console.log('[Inventory] Inventory prop:', inventory);
+    const receivedStored = inventory?.filter(item => item?.status && ['Received', 'Stored'].includes(item.status)) || [];
+    console.log('[Inventory] Received/Stored:', receivedStored);
   }, [inventory]);
 
   // Fetch daily summary
   useEffect(() => {
+    console.log('[Inventory] Fetching daily summary');
     setIsLoading(true);
     fetchDailySummary()
       .then(data => {
-        console.log('Daily summary:', data);
+        console.log('[Inventory] Daily summary:', data);
         setDailySummary(data || []);
       })
       .catch(err => {
-        console.error('Daily summary error:', err);
+        console.error('[Inventory] Daily summary error:', err);
         setProductionError('Failed to load daily summary: ' + err.message);
+        setDailySummary([]);
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        console.log('[Inventory] Daily summary fetch complete');
+        setIsLoading(false);
+      });
   }, []);
 
   // Fetch locations and sites
   useEffect(() => {
     const fetchLocationsAndSites = async () => {
       try {
+        console.log('[Inventory] Fetching sites');
         setIsLoading(true);
         const sitesRes = await fetch(`${API_BASE_URL}/api/sites`, { headers: { Accept: 'application/json' } });
-        if (!sitesRes.ok) throw new Error(`Sites fetch failed: HTTP ${sitesRes.status}`);
+        if (!sitesRes.ok) {
+          const text = await sitesRes.text();
+          throw new Error(`Sites fetch failed: HTTP ${sitesRes.status}, Response: ${text.slice(0, 50)}`);
+        }
         const sitesData: Site[] = await sitesRes.json();
-        console.log('Fetched sites:', sitesData);
+        console.log('[Inventory] Fetched sites:', sitesData);
         setSites(sitesData || []);
 
         const siteIds = inventory
@@ -75,24 +84,24 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
           .concat([OUR_DSP])
           .filter((siteId, index, arr) => arr.indexOf(siteId) === index) || [OUR_DSP];
 
-        console.log('Site IDs:', siteIds);
+        console.log('[Inventory] Site IDs:', siteIds);
 
         const locationPromises = siteIds.map(siteId =>
           fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`, {
             headers: { Accept: 'application/json' }
-          }).then(res => {
-            if (!res.ok) throw new Error(`Locations fetch failed for ${siteId}: HTTP ${res.status}`);
-            return res.json();
-          })
+          }).then(res => res.ok ? res.json() : [])
         );
         const locationArrays = await Promise.all(locationPromises);
         const allLocations = locationArrays.flat();
-        console.log('Fetched locations:', allLocations);
+        console.log('[Inventory] Fetched locations:', allLocations);
         setLocations(allLocations || []);
       } catch (err: any) {
-        console.error('Fetch locations/sites error:', err);
+        console.error('[Inventory] Fetch locations/sites error:', err);
         setProductionError('Failed to fetch locations or sites: ' + err.message);
+        setSites([]);
+        setLocations([]);
       } finally {
+        console.log('[Inventory] Locations/sites fetch complete');
         setIsLoading(false);
       }
     };
@@ -122,18 +131,24 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       return;
     }
     try {
+      console.log('[Inventory] Moving item:', moveForm);
       const res = await fetch(`${API_BASE_URL}/api/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
-      if (!res.ok) throw new Error(`Move failed: HTTP ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Move failed: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
       await refreshInventory();
       setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
       setProductionError(null);
+      console.log('[Inventory] Move successful');
     } catch (err: any) {
       setProductionError('Failed to move item: ' + err.message);
+      console.error('[Inventory] Move error:', err);
     }
   };
 
@@ -143,12 +158,16 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       return;
     }
     try {
+      console.log('[Inventory] Recording loss:', lossForm);
       const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }),
       });
-      if (!res.ok) throw new Error(`Record loss failed: HTTP ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Record loss failed: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
       await refreshInventory();
       setLossForm({
         identifier: '',
@@ -159,8 +178,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       });
       setShowLossModal(false);
       setProductionError(null);
+      console.log('[Inventory] Loss recorded');
     } catch (err: any) {
       setProductionError('Failed to record loss: ' + err.message);
+      console.error('[Inventory] Record loss error:', err);
     }
   };
 
@@ -168,19 +189,31 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
 
   const handleItemClick = (item: InventoryItem) => {
     const encodedIdentifier = encodeURIComponent(getIdentifier(item).replace(/\//g, '_'));
+    console.log('[Inventory] Navigating to:', `/inventory/${encodedIdentifier}`);
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
   const filteredInventory = inventory?.filter(item => 
-    ['Received', 'Stored'].includes(item?.status) && (
+    item?.status && ['Received', 'Stored'].includes(item.status) && (
       (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
   ) || [];
 
+  console.log('[Inventory] Render:', {
+    isLoading,
+    productionError,
+    filteredInventoryLength: filteredInventory.length,
+    dailySummaryLength: dailySummary.length,
+  });
+
   if (isLoading) {
-    return <div className="text-center text-white">Loading inventory...</div>;
+    return (
+      <div className="page-container container text-center">
+        <div className="alert alert-info">Loading inventory...</div>
+      </div>
+    );
   }
 
   return (
@@ -188,6 +221,9 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <h2 className="text-warning mb-4">Inventory Management</h2>
       {productionError && (
         <div className="alert alert-danger mb-3">{productionError}</div>
+      )}
+      {!inventory?.length && !productionError && (
+        <div className="alert alert-warning mb-3">No inventory data available.</div>
       )}
       <div className="inventory-actions mb-4 d-flex gap-2 flex-wrap">
         <button className="btn btn-primary" onClick={() => navigate('/receive')}>
@@ -268,7 +304,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
             </div>
           </>
         ) : (
-          <div className="text-white">No inventory items found.</div>
+          <div className="alert alert-info text-center">No inventory items found.</div>
         )}
       </div>
 
@@ -313,7 +349,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
             </div>
           </>
         ) : (
-          <div className="text-white">No daily summary data available.</div>
+          <div className="alert alert-info text-center">No daily summary data available.</div>
         )}
       </div>
 
