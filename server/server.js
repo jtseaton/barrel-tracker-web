@@ -617,7 +617,7 @@ const insertTestData = () => {
         const recipeId = recipeRow.id;
 
         db.run(
-          `INSERT OR IGNORE INTO batches (batchId, productId, recipeId, volume, siteId, status, stage, createdDate, recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT OR IGNORE INTO batches (batchId, productId, recipeId, volume, siteId, status, stage, date, recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ['HT321654', productId, recipeId, 20.000, 'BR-AL-20019', 'In Progress', 'Fermentation', '2025-05-24', 'Hazy Train 20 BBL'],
           (err) => {
             if (err) console.error('Insert batch HT321654 error:', err);
@@ -2391,20 +2391,33 @@ app.delete('/api/products', (req, res) => {
 });
 
 app.get('/api/batches', (req, res) => {
-  db.all(`
-    SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-           b.siteId, s.name AS siteName, b.status, b.date
-    FROM batches b
-    JOIN products p ON b.productId = p.id
-    JOIN recipes r ON b.recipeId = r.id
-    JOIN sites s ON b.siteId = s.siteId
-  `, (err, rows) => {
+  const { page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  db.get('SELECT COUNT(*) as total FROM batches', (err, countResult) => {
     if (err) {
-      console.error('Fetch batches error:', err);
+      console.error('GET /api/batches: Count error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('GET /api/batches, returning:', rows);
-    res.json(rows);
+    const totalBatches = countResult.total;
+    const totalPages = Math.ceil(totalBatches / parseInt(limit));
+    db.all(
+      `SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
+              b.siteId, s.name AS siteName, b.status, b.date
+       FROM batches b
+       JOIN products p ON b.productId = p.id
+       JOIN recipes r ON b.recipeId = r.id
+       JOIN sites s ON b.siteId = s.siteId
+       LIMIT ? OFFSET ?`,
+      [parseInt(limit), offset],
+      (err, rows) => {
+        if (err) {
+          console.error('GET /api/batches: Fetch error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('GET /api/batches: Success', { count: rows.length, page, limit, totalPages });
+        res.json({ batches: rows, totalPages });
+      }
+    );
   });
 });
 
