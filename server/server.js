@@ -546,8 +546,11 @@ const insertTestData = () => {
       ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
 
     // Customers
-    db.run('INSERT OR IGNORE INTO vendors (name, email) VALUES (?, ?)',
+    db.run('INSERT OR IGNORE INTO customers (name, email) VALUES (?, ?)',
       ['Gulf Distributing', 'jtseaton@gmail.com']);
+
+    //PackagingTypes
+    db.run(`ALTER TABLE kegs ADD COLUMN packagingType TEXT;`);
 
     // Vendors
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
@@ -559,9 +562,6 @@ const insertTestData = () => {
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
       ['Pharmco Aaper', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
 
-    // Customers
-    db.run('INSERT OR IGNORE INTO customers (name, email) VALUES (?,?)',
-      ['Gulf Distributing', 'jtseaton@gmail']);
 
     // New Test Data: Packaging Types for Hazy Train
     db.get(`SELECT id FROM products WHERE name = ?`, ['Hazy Train IPA'], (err, row) => {
@@ -792,16 +792,31 @@ app.delete('/api/customers/:id', (req, res) => {
 
 // Sales Orders
 app.get('/api/sales-orders', (req, res) => {
-  db.all(`
-    SELECT so.*, c.name AS customerName
-    FROM sales_orders so
-    JOIN customers c ON so.customerId = c.customerId
-    WHERE so.status != 'Cancelled'
-  `, (err, rows) => {
+  const { page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  db.get('SELECT COUNT(*) as total FROM sales_orders WHERE status != ?', ['Cancelled'], (err, countResult) => {
     if (err) {
+      console.error('GET /api/sales-orders: Count error:', err);
       return res.status(500).json({ error: err.message });
     }
-    res.json(rows);
+    const totalOrders = countResult.total;
+    const totalPages = Math.ceil(totalOrders / parseInt(limit));
+    db.all(
+      `SELECT so.*, c.name AS customerName
+       FROM sales_orders so
+       JOIN customers c ON so.customerId = c.customerId
+       WHERE so.status != ?
+       LIMIT ? OFFSET ?`,
+      ['Cancelled', parseInt(limit), offset],
+      (err, rows) => {
+        if (err) {
+          console.error('GET /api/sales-orders: Fetch error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('GET /api/sales-orders: Success', { count: rows.length, page, limit, totalPages });
+        res.json({ orders: rows, totalPages });
+      }
+    );
   });
 });
 
@@ -1339,16 +1354,31 @@ app.patch('/api/sales-orders/:orderId', (req, res) => {
 
 // Invoices
 app.get('/api/invoices', (req, res) => {
-  db.all(`
-    SELECT i.*, c.name AS customerName
-    FROM invoices i
-    JOIN customers c ON i.customerId = c.customerId
-    WHERE i.status != 'Cancelled'
-  `, (err, rows) => {
+  const { page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  db.get('SELECT COUNT(*) as total FROM invoices WHERE status != ?', ['Cancelled'], (err, countResult) => {
     if (err) {
+      console.error('GET /api/invoices: Count error:', err);
       return res.status(500).json({ error: err.message });
     }
-    res.json(rows);
+    const totalInvoices = countResult.total;
+    const totalPages = Math.ceil(totalInvoices / parseInt(limit));
+    db.all(
+      `SELECT i.*, c.name AS customerName
+       FROM invoices i
+       JOIN customers c ON i.customerId = c.customerId
+       WHERE i.status != ?
+       LIMIT ? OFFSET ?`,
+      ['Cancelled', parseInt(limit), offset],
+      (err, rows) => {
+        if (err) {
+          console.error('GET /api/invoices: Fetch error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('GET /api/invoices: Success', { count: rows.length, page, limit, totalPages });
+        res.json({ invoices: rows, totalPages });
+      }
+    );
   });
 });
 
@@ -4344,36 +4374,55 @@ app.post('/api/purchase-orders/email', (req, res) => {
 });
 
 app.get('/api/inventory', (req, res) => {
-  const { source, identifier, locationId, siteId } = req.query;
-  let query = 'SELECT * FROM inventory';
+  const { source, identifier, locationId, siteId, page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  let countQuery = 'SELECT COUNT(*) as total FROM inventory WHERE 1=1';
+  let query = 'SELECT identifier, account, type, quantity, unit, price, isKegDepositItem, proof, proofGallons, receivedDate, source, dspNumber, siteId, locationId, status, description, cost, totalCost FROM inventory';
   let params = [];
+  let countParams = [];
   let conditions = [];
   if (source) {
     conditions.push('source = ?');
     params.push(source);
+    countParams.push(source);
   }
   if (identifier) {
     conditions.push('identifier = ?');
     params.push(identifier);
+    countParams.push(identifier);
   }
   if (locationId) {
     conditions.push('locationId = ?');
     params.push(parseInt(locationId));
+    countParams.push(parseInt(locationId));
   }
   if (siteId) {
     conditions.push('siteId = ?');
     params.push(siteId);
+    countParams.push(siteId);
   }
   if (conditions.length > 0) {
     query += ' WHERE ' + conditions.join(' AND ');
+    countQuery += ' WHERE ' + conditions.join(' AND ');
   }
-  db.all(query, params, (err, rows) => {
+  query += ' LIMIT ? OFFSET ?';
+  params.push(parseInt(limit), offset);
+
+  db.get(countQuery, countParams, (err, countResult) => {
     if (err) {
-      console.error('Fetch inventory error:', err);
+      console.error('GET /api/inventory: Count error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('Inventory data:', rows);
-    res.json(rows);
+    const totalItems = countResult.total;
+    const totalPages = Math.ceil(totalItems / parseInt(limit));
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        console.error('GET /api/inventory: Fetch error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      console.log('GET /api/inventory: Success', { count: rows.length, page, limit, totalPages });
+      res.json({ items: rows, totalPages });
+    });
   });
 });
 
@@ -5544,13 +5593,13 @@ app.get('/styles.xml', (req, res) => {
   });
 });
 
-// server.js (replace around line ~5480)
-// server.js (replace around line ~5480)
 app.get('/api/kegs', (req, res) => {
-  const { status } = req.query;
+  const { status, page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  let countQuery = `SELECT COUNT(*) as total FROM kegs WHERE 1=1`;
   let query = `
-    SELECT k.*, p.name AS productName, c.name AS customerName, l.name AS locationName,
-           bp.packageType AS packagingType
+    SELECT k.id, k.code, k.status, k.productId, k.lastScanned, k.location, k.customerId, k.packagingType,
+           p.name AS productName, c.name AS customerName, l.name AS locationName
     FROM kegs k
     LEFT JOIN products p ON k.productId = p.id
     LEFT JOIN customers c ON k.customerId = c.customerId
@@ -5560,17 +5609,31 @@ app.get('/api/kegs', (req, res) => {
     WHERE kt.id = (SELECT MAX(id) FROM keg_transactions WHERE kegId = k.id AND action = 'Filled') OR kt.id IS NULL
   `;
   let params = [];
+  let countParams = [];
   if (status) {
     query += ' AND k.status = ?';
+    countQuery += ' AND status = ?';
     params.push(status);
+    countParams.push(status);
   }
-  db.all(query, params, (err, rows) => {
+  query += ' LIMIT ? OFFSET ?';
+  params.push(parseInt(limit), offset);
+
+  db.get(countQuery, countParams, (err, countResult) => {
     if (err) {
-      console.error('GET /api/kegs: Fetch kegs error:', err);
+      console.error('GET /api/kegs: Count kegs error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('GET /api/kegs: Success', { count: rows.length });
-    res.json(rows);
+    const totalKegs = countResult.total;
+    const totalPages = Math.ceil(totalKegs / parseInt(limit));
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        console.error('GET /api/kegs: Fetch kegs error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      console.log('GET /api/kegs: Success', { count: rows.length, page, limit, totalPages });
+      res.json({ kegs: rows, totalPages });
+    });
   });
 });
 
