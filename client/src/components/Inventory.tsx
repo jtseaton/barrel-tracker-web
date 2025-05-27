@@ -31,70 +31,89 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
   // Log inventory for debugging
   useEffect(() => {
-    console.log('Inventory prop received:', inventory);
-    const receivedStored = inventory.filter((item) => ['Received', 'Stored'].includes(item.status));
+    console.log('Inventory prop:', inventory);
+    const receivedStored = inventory?.filter((item) => ['Received', 'Stored'].includes(item?.status)) || [];
     console.log('Filtered Received/Stored:', receivedStored);
   }, [inventory]);
 
   // Fetch daily summary
   useEffect(() => {
+    setIsLoading(true);
     fetchDailySummary()
-      .then(setDailySummary)
-      .catch((err) => console.error('Daily summary error:', err));
+      .then(data => {
+        console.log('Daily summary:', data);
+        setDailySummary(data || []);
+      })
+      .catch(err => {
+        console.error('Daily summary error:', err);
+        setProductionError('Failed to load daily summary: ' + err.message);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   // Fetch locations and sites
   useEffect(() => {
     const fetchLocationsAndSites = async () => {
       try {
+        setIsLoading(true);
         const sitesRes = await fetch(`${API_BASE_URL}/api/sites`, { headers: { Accept: 'application/json' } });
-        if (!sitesRes.ok) throw new Error(`HTTP error! status: ${sitesRes.status}`);
+        if (!sitesRes.ok) throw new Error(`Sites fetch failed: HTTP ${sitesRes.status}`);
         const sitesData: Site[] = await sitesRes.json();
-        setSites(sitesData);
+        console.log('Fetched sites:', sitesData);
+        setSites(sitesData || []);
 
-        // Deduplicate siteIds without Set
         const siteIds = inventory
-          .map(item => item.siteId)
+          ?.map(item => item?.siteId)
           .filter((siteId): siteId is string => !!siteId)
           .concat([OUR_DSP])
-          .filter((siteId, index, arr) => arr.indexOf(siteId) === index);
+          .filter((siteId, index, arr) => arr.indexOf(siteId) === index) || [OUR_DSP];
+
+        console.log('Site IDs:', siteIds);
 
         const locationPromises = siteIds.map(siteId =>
           fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`, {
             headers: { Accept: 'application/json' }
           }).then(res => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            if (!res.ok) throw new Error(`Locations fetch failed for ${siteId}: HTTP ${res.status}`);
             return res.json();
           })
         );
         const locationArrays = await Promise.all(locationPromises);
-        setLocations(locationArrays.flat());
+        const allLocations = locationArrays.flat();
+        console.log('Fetched locations:', allLocations);
+        setLocations(allLocations || []);
       } catch (err: any) {
+        console.error('Fetch locations/sites error:', err);
         setProductionError('Failed to fetch locations or sites: ' + err.message);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    if (inventory.length > 0) {
+    if (inventory?.length > 0) {
       fetchLocationsAndSites();
+    } else {
+      setIsLoading(false);
     }
   }, [API_BASE_URL, inventory]);
 
   const getLocationName = (locationId: number | undefined) => {
     if (!locationId) return 'Unknown Location';
-    const location = locations.find(loc => loc.locationId === locationId);
-    return location ? location.name : 'Unknown Location';
+    const location = locations?.find(loc => loc?.locationId === locationId);
+    return location?.name || 'Unknown Location';
   };
 
   const getSiteName = (siteId: string | undefined) => {
     if (!siteId) return 'Unknown Site';
-    const site = sites.find(site => site.siteId === siteId);
-    return site ? site.name : 'Unknown Site';
+    const site = sites?.find(site => site?.siteId === siteId);
+    return site?.name || 'Unknown Site';
   };
 
   const handleMove = async () => {
@@ -108,7 +127,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) throw new Error(`Move failed: HTTP ${res.status}`);
       await refreshInventory();
       setMoveForm({ identifier: '', toAccount: 'Storage', proofGallons: '' });
       setShowMoveModal(false);
@@ -129,7 +148,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ...lossForm, dspNumber: OUR_DSP }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) throw new Error(`Record loss failed: HTTP ${res.status}`);
       await refreshInventory();
       setLossForm({
         identifier: '',
@@ -145,20 +164,24 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     }
   };
 
-  const getIdentifier = (item: InventoryItem) => item.identifier || 'N/A';
+  const getIdentifier = (item: InventoryItem) => item?.identifier || 'N/A';
 
   const handleItemClick = (item: InventoryItem) => {
     const encodedIdentifier = encodeURIComponent(getIdentifier(item).replace(/\//g, '_'));
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  const filteredInventory = inventory.filter(item => 
-    ['Received', 'Stored'].includes(item.status) && (
+  const filteredInventory = inventory?.filter(item => 
+    ['Received', 'Stored'].includes(item?.status) && (
       (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+      (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
-  );
+  ) || [];
+
+  if (isLoading) {
+    return <div className="text-center text-white">Loading inventory...</div>;
+  }
 
   return (
     <div className="page-container container">
@@ -166,7 +189,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       {productionError && (
         <div className="alert alert-danger mb-3">{productionError}</div>
       )}
-      <div className="inventory-actions mb-4">
+      <div className="inventory-actions mb-4 d-flex gap-2 flex-wrap">
         <button className="btn btn-primary" onClick={() => navigate('/receive')}>
           Receive Inventory
         </button>
@@ -191,95 +214,107 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
 
       <h3 className="text-warning mb-3">Received/Stored Inventory</h3>
       <div className="inventory-table-container">
-        <table className="inventory-table table-striped">
-          <thead>
-            <tr>
-              <th>Item-Lot</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>Unit</th>
-              <th>Received Date</th>
-              <th>Location</th>
-              <th>Site</th>
-              <th>Source</th>
-              <th>Description</th>
-              <th>Unit Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredInventory.map((item, index) => (
-              <tr key={index} onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
-                <td>{getIdentifier(item)}</td>
-                <td>{item.type}</td>
-                <td>{item.quantity}</td>
-                <td>{item.unit}</td>
-                <td>{item.receivedDate}</td>
-                <td>{getLocationName(item.locationId)}</td>
-                <td>{getSiteName(item.siteId)}</td>
-                <td>{item.source || 'Unknown'}</td>
-                <td>{item.description || 'N/A'}</td>
-                <td>{item.cost || 'N/A'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="card-list">
-          {filteredInventory.map((item, index) => (
-            <div key={index} className="card-item card mb-2" onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
-              <div className="card-body">
-                <p className="card-text"><strong>Item-Lot:</strong> {getIdentifier(item)}</p>
-                <p className="card-text"><strong>Type:</strong> {item.type}</p>
-                <p className="card-text"><strong>Quantity:</strong> {item.quantity}</p>
-                <p className="card-text"><strong>Unit:</strong> {item.unit}</p>
-                <p className="card-text"><strong>Received Date:</strong> {item.receivedDate}</p>
-                <p className="card-text"><strong>Location:</strong> {getLocationName(item.locationId)}</p>
-                <p className="card-text"><strong>Site:</strong> {getSiteName(item.siteId)}</p>
-                <p className="card-text"><strong>Source:</strong> {item.source || 'Unknown'}</p>
-                <p className="card-text"><strong>Description:</strong> {item.description || 'N/A'}</p>
-                <p className="card-text"><strong>Unit Cost:</strong> {item.cost || 'N/A'}</p>
-              </div>
+        {filteredInventory.length > 0 ? (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>Item-Lot</th>
+                  <th>Type</th>
+                  <th>Quantity</th>
+                  <th>Unit</th>
+                  <th>Received Date</th>
+                  <th>Location</th>
+                  <th>Site</th>
+                  <th>Source</th>
+                  <th>Description</th>
+                  <th>Unit Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInventory.map((item, index) => (
+                  <tr key={index} onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
+                    <td>{getIdentifier(item)}</td>
+                    <td>{item?.type || 'N/A'}</td>
+                    <td>{item?.quantity ?? 'N/A'}</td>
+                    <td>{item?.unit || 'N/A'}</td>
+                    <td>{item?.receivedDate || 'N/A'}</td>
+                    <td>{getLocationName(item?.locationId)}</td>
+                    <td>{getSiteName(item?.siteId)}</td>
+                    <td>{item?.source || 'Unknown'}</td>
+                    <td>{item?.description || 'N/A'}</td>
+                    <td>{item?.cost || 'N/A'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="card-list">
+              {filteredInventory.map((item, index) => (
+                <div key={index} className="card-item card mb-2" onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
+                  <div className="card-body">
+                    <p className="card-text"><strong>Item-Lot:</strong> {getIdentifier(item)}</p>
+                    <p className="card-text"><strong>Type:</strong> {item?.type || 'N/A'}</p>
+                    <p className="card-text"><strong>Quantity:</strong> {item?.quantity ?? 'N/A'}</p>
+                    <p className="card-text"><strong>Unit:</strong> {item?.unit || 'N/A'}</p>
+                    <p className="card-text"><strong>Received Date:</strong> {item?.receivedDate || 'N/A'}</p>
+                    <p className="card-text"><strong>Location:</strong> {getLocationName(item?.locationId)}</p>
+                    <p className="card-text"><strong>Site:</strong> {getSiteName(item?.siteId)}</p>
+                    <p className="card-text"><strong>Source:</strong> {item?.source || 'Unknown'}</p>
+                    <p className="card-text"><strong>Description:</strong> {item?.description || 'N/A'}</p>
+                    <p className="card-text"><strong>Unit Cost:</strong> {item?.cost || 'N/A'}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <div className="text-white">No inventory items found.</div>
+        )}
       </div>
 
       <h3 className="text-warning mb-3">Daily Summary</h3>
       <div className="inventory-table-container">
-        <table className="inventory-table table-striped">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Account</th>
-              <th>Type</th>
-              <th>Total Proof Gallons</th>
-              <th>Location</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dailySummary.map((item, index) => (
-              <tr key={index}>
-                <td>{item.date}</td>
-                <td>{item.account}</td>
-                <td>{item.type}</td>
-                <td>{parseFloat(item.totalProofGallons).toFixed(2)}</td>
-                <td>{getLocationName(item.locationId)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="card-list">
-          {dailySummary.map((item, index) => (
-            <div key={index} className="card-item card mb-2">
-              <div className="card-body">
-                <p className="card-text"><strong>Date:</strong> {item.date}</p>
-                <p className="card-text"><strong>Account:</strong> {item.account}</p>
-                <p className="card-text"><strong>Type:</strong> {item.type}</p>
-                <p className="card-text"><strong>Total Proof Gallons:</strong> {parseFloat(item.totalProofGallons).toFixed(2)}</p>
-                <p className="card-text"><strong>Location:</strong> {getLocationName(item.locationId)}</p>
-              </div>
+        {dailySummary.length > 0 ? (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Account</th>
+                  <th>Type</th>
+                  <th>Total Proof Gallons</th>
+                  <th>Location</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailySummary.map((item, index) => (
+                  <tr key={index}>
+                    <td>{item?.date || 'N/A'}</td>
+                    <td>{item?.account || 'N/A'}</td>
+                    <td>{item?.type || 'N/A'}</td>
+                    <td>{item?.totalProofGallons ? parseFloat(item.totalProofGallons).toFixed(2) : 'N/A'}</td>
+                    <td>{getLocationName(item?.locationId)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="card-list">
+              {dailySummary.map((item, index) => (
+                <div key={index} className="card-item card mb-2">
+                  <div className="card-body">
+                    <p className="card-text"><strong>Date:</strong> {item?.date || 'N/A'}</p>
+                    <p className="card-text"><strong>Account:</strong> {item?.account || 'N/A'}</p>
+                    <p className="card-text"><strong>Type:</strong> {item?.type || 'N/A'}</p>
+                    <p className="card-text"><strong>Total Proof Gallons:</strong> {item?.totalProofGallons ? parseFloat(item.totalProofGallons).toFixed(2) : 'N/A'}</p>
+                    <p className="card-text"><strong>Location:</strong> {getLocationName(item?.locationId)}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <div className="text-white">No daily summary data available.</div>
+        )}
       </div>
 
       {showMoveModal && (
@@ -294,12 +329,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
                 placeholder="Item-Lot (e.g., Grain-NGS123)"
                 value={moveForm.identifier}
                 onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
               <select
                 value={moveForm.toAccount}
                 onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               >
                 <option value="Storage">Storage</option>
                 <option value="Processing">Processing</option>
@@ -310,7 +345,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
                 placeholder="Proof Gallons"
                 value={moveForm.proofGallons}
                 onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
             </div>
             <div className="modal-footer">
@@ -337,34 +372,34 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
                 placeholder="Item-Lot (e.g., Grain-NGS123)"
                 value={lossForm.identifier}
                 onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
               <input
                 type="number"
                 placeholder="Quantity Lost"
                 value={lossForm.quantityLost}
                 onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
               <input
                 type="number"
                 placeholder="Proof Gallons Lost"
                 value={lossForm.proofGallonsLost}
                 onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
               <input
                 type="text"
                 placeholder="Reason for Loss"
                 value={lossForm.reason}
                 onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
               <input
                 type="date"
                 value={lossForm.date}
                 onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
-                className="form-control mb-3"
+                className="form-control mb-2"
               />
             </div>
             <div className="modal-footer">
