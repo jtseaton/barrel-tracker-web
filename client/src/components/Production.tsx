@@ -1,6 +1,9 @@
+// client/src/components/Production.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
+import '../App.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -24,6 +27,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     productId: 0,
     recipeId: 0,
     siteId: '',
+    fermenterId: null,
   });
   const [newRecipe, setNewRecipe] = useState<{
     name: string;
@@ -43,12 +47,35 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [showBatchActionsModal, setShowBatchActionsModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const fetchBatches = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/batches?page=${page}&limit=10`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch batches: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      if (!Array.isArray(data.batches)) {
+        console.error('Invalid batches data: expected array, got', data);
+        throw new Error('Invalid batches response');
+      }
+      setBatches(data.batches);
+      setTotalPages(data.totalPages || 1);
+    } catch (err: any) {
+      console.error('Fetch batches error:', err);
+      setError('Failed to load batches: ' + err.message);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const endpoints = [
-          { url: `${API_BASE_URL}/api/batches`, setter: setBatches, name: 'batches' },
           { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
           { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
           { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
@@ -66,17 +93,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           const data = await res.json();
           if (!Array.isArray(data)) {
             console.error(`Invalid ${name} data: expected array, got`, data);
-            throw new Error(`Invalid ${name} response: expected array`);
+            throw new Error(`Invalid ${name} response`);
           }
           setter(data);
         }
+        await fetchBatches();
       } catch (err: any) {
         console.error('Initial fetch error:', err);
         setError('Failed to load production data: ' + err.message);
       }
     };
     fetchData();
-  }, []);
+  }, [page]);
 
   const refreshProducts = async () => {
     try {
@@ -90,9 +118,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const data = await res.json();
       if (!Array.isArray(data)) {
         console.error('Invalid products data: expected array, got', data);
-        throw new Error('Invalid products response: expected array');
+        throw new Error('Invalid products response');
       }
-      console.log('Refreshed products:', data);
       setProducts(data);
     } catch (err: any) {
       console.error('Refresh products error:', err);
@@ -104,7 +131,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     if (newBatch.siteId) {
       const fetchFermenters = async () => {
         try {
-          console.log(`Fetching fermenters for siteId: ${newBatch.siteId}`);
           const res = await fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}&type=Fermenter`, {
             headers: { Accept: 'application/json' },
           });
@@ -113,16 +139,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
             throw new Error(`Failed to fetch fermenters: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
           const data = await res.json();
-          console.log('Fetched fermenters:', data);
           if (!Array.isArray(data)) {
             console.error('Invalid fermenters data: expected array, got', data);
-            setError('Invalid fermenters response from server');
+            setError('Invalid fermenters response');
             setEquipment([]);
             return;
           }
-          const validEquipment = data.filter((item: any) => item && typeof item === 'object' && 'equipmentId' in item && 'name' in item);
-          console.log('Valid fermenters:', validEquipment);
-          setEquipment(validEquipment);
+          setEquipment(data.filter(item => item && typeof item === 'object' && 'equipmentId' in item && 'name' in item));
         } catch (err: any) {
           console.error('Fetch fermenters error:', err);
           setError('Failed to load fermenters: ' + err.message);
@@ -131,19 +154,16 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       };
       fetchFermenters();
     } else {
-      console.log('Clearing equipment: no siteId selected');
       setEquipment([]);
     }
   }, [newBatch.siteId]);
 
   const fetchRecipes = async (productId: number) => {
     if (!productId) {
-      console.log('Clearing recipes: no productId selected');
       setRecipes([]);
       return;
     }
     try {
-      console.log(`Fetching recipes for productId: ${productId}`);
       const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${productId}`, {
         headers: { Accept: 'application/json' },
       });
@@ -154,9 +174,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const data = await res.json();
       if (!Array.isArray(data)) {
         console.error('Invalid recipes data: expected array, got', data);
-        throw new Error('Invalid recipes response: expected array');
+        throw new Error('Invalid recipes response');
       }
-      console.log('Fetched recipes:', data);
       setRecipes(data);
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
@@ -167,24 +186,16 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
   const handleAddBatch = async () => {
     if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
-      console.error('Missing required batch fields:', {
-        batchId: newBatch.batchId,
-        productId: newBatch.productId,
-        recipeId: newBatch.recipeId,
-        siteId: newBatch.siteId,
-      });
       setError('All fields are required');
       return;
     }
     const product = products.find(p => p.id === newBatch.productId);
     if (!product) {
-      console.error('Invalid product selected:', newBatch.productId);
       setError('Invalid product selected');
       return;
     }
     const recipe = recipes.find(r => r.id === newBatch.recipeId);
     if (!recipe) {
-      console.error('Invalid recipe selected:', newBatch.recipeId);
       setError('Invalid recipe selected');
       return;
     }
@@ -193,11 +204,11 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       productId: newBatch.productId,
       recipeId: newBatch.recipeId,
       siteId: newBatch.siteId,
+      fermenterId: newBatch.fermenterId || null,
       status: 'In Progress',
       date: new Date().toISOString().split('T')[0],
     };
     try {
-      console.log('Submitting batch:', batchData);
       const res = await fetch(`${API_BASE_URL}/api/batches`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -205,11 +216,10 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       });
       if (!res.ok) {
         const text = await res.text();
-        let errorMessage = `Add batch error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`;
+        let errorMessage = `Failed to add batch: HTTP ${res.status}, ${text.slice(0, 50)}`;
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
-          console.error('Batch creation error:', errorMessage);
           if (errorMessage.includes('Insufficient inventory')) {
             setErrorMessage(errorMessage);
             setShowErrorPopup(true);
@@ -217,23 +227,17 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
             setError(errorMessage);
           }
         } catch {
-          console.error('Failed to parse error response:', text);
           setError(errorMessage);
         }
         throw new Error(errorMessage);
       }
-      const addedBatch = await res.json();
-      console.log('Batch created successfully:', addedBatch);
-      setBatches([...batches, { ...addedBatch, productName: product.name, siteName: sites.find(s => s.siteId === batchData.siteId)?.name }]);
+      await res.json();
       setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '' });
+      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
       setRecipes([]);
       setEquipment([]);
-      console.log('handleAddBatch: Refreshing inventory after batch creation', { batchId: batchData.batchId });
       await refreshInventory();
-      const inventoryRes = await fetch(`${API_BASE_URL}/api/inventory?siteId=${batchData.siteId}`);
-      const inventoryData = await inventoryRes.json();
-      console.log('handleAddBatch: Inventory after batch creation', inventoryData);
+      await fetchBatches();
       setError(null);
       setErrorMessage(null);
       setShowErrorPopup(false);
@@ -253,19 +257,15 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       !newRecipe.unit ||
       newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
     ) {
-      console.error('Missing required recipe fields:', newRecipe);
       setError('Recipe name, product, valid quantity, unit, and ingredients with units are required');
       return;
     }
-    // Verify product exists in products state
     const product = products.find(p => p.id === newRecipe.productId);
     if (!product) {
-      console.error('Selected product not found:', newRecipe.productId);
-      setError('Selected product is invalid or not found. Please try refreshing or selecting another product.');
+      setError('Selected product is invalid or not found.');
       return;
     }
     try {
-      console.log('Submitting recipe:', newRecipe);
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -276,23 +276,21 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       });
       if (!res.ok) {
         const text = await res.text();
-        let errorMessage = `Add recipe error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`;
+        let errorMessage = `Failed to add recipe: HTTP ${res.status}, ${text.slice(0, 50)}`;
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
         } catch {
           console.error('Failed to parse error response:', text);
         }
-        console.error('Recipe creation error:', errorMessage);
         throw new Error(errorMessage);
       }
       const contentType = res.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const text = await res.text();
-        throw new Error(`Invalid response for recipe: Expected JSON, got ${contentType}, Response: ${text.slice(0, 50)}`);
+        throw new Error(`Invalid response: Expected JSON, got ${contentType}, ${text.slice(0, 50)}`);
       }
       const addedRecipe = await res.json();
-      console.log('Recipe created successfully:', addedRecipe);
       setRecipes([...recipes, addedRecipe]);
       setShowAddRecipeModal(false);
       setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'barrels' });
@@ -324,10 +322,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleBatchSelection = (batchId: string) => {
-    setSelectedBatchIds((prev) =>
-      prev.includes(batchId)
-        ? prev.filter((id) => id !== batchId)
-        : [...prev, batchId]
+    setSelectedBatchIds(prev =>
+      prev.includes(batchId) ? prev.filter(id => id !== batchId) : [...prev, batchId]
     );
   };
 
@@ -339,12 +335,12 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
   const handleCompleteBatches = async () => {
     try {
-      const promises = selectedBatchIds.map((batchId) =>
+      const promises = selectedBatchIds.map(batchId =>
         fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ status: 'Completed' }),
-        }).then((res) => {
+        }).then(res => {
           if (!res.ok) {
             throw new Error(`Failed to complete batch ${batchId}: HTTP ${res.status}`);
           }
@@ -352,13 +348,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         })
       );
       await Promise.all(promises);
-      setBatches((prev) =>
-        prev.map((batch) =>
-          selectedBatchIds.includes(batch.batchId)
-            ? { ...batch, status: 'Completed' }
-            : batch
-        )
-      );
+      await fetchBatches();
       setSelectedBatchIds([]);
       setShowBatchActionsModal(false);
       setError(null);
@@ -370,20 +360,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
   const handleDeleteBatches = async () => {
     try {
-      const promises = selectedBatchIds.map((batchId) =>
+      const promises = selectedBatchIds.map(batchId =>
         fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'DELETE',
           headers: { Accept: 'application/json' },
-        }).then((res) => {
+        }).then(res => {
           if (!res.ok) {
             throw new Error(`Failed to delete batch ${batchId}: HTTP ${res.status}`);
           }
         })
       );
       await Promise.all(promises);
-      setBatches((prev) =>
-        prev.filter((batch) => !selectedBatchIds.includes(batch.batchId))
-      );
+      await fetchBatches();
       setSelectedBatchIds([]);
       setShowBatchActionsModal(false);
       setError(null);
@@ -399,33 +387,36 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   );
 
   return (
-    <div className="page-container">
-      <h2>Production</h2>
-      {error && <div className="error">{error}</div>}
-      <div className="inventory-actions">
-        <button onClick={() => setShowAddBatchModal(true)}>Add New Batch</button>
-        <button onClick={() => { refreshProducts().then(() => setShowAddRecipeModal(true));}}>Add Recipe</button>
-          <button
+    <div className="page-container container">
+      <h2 className="text-warning mb-4">Production</h2>
+      {error && <div className="alert alert-danger">{error}</div>}
+      <div className="inventory-actions mb-4">
+        <button className="btn btn-primary" onClick={() => setShowAddBatchModal(true)}>
+          Add New Batch
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            refreshProducts().then(() => setShowAddRecipeModal(true));
+          }}
+        >
+          Add Recipe
+        </button>
+        <button
+          className="btn btn-primary"
           onClick={handleOpenBatchActions}
           disabled={selectedBatchIds.length === 0}
-          style={{
-            backgroundColor: selectedBatchIds.length > 0 ? '#2196F3' : '#ccc',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: selectedBatchIds.length > 0 ? 'pointer' : 'not-allowed',
-          }}
         >
           Batch Actions
         </button>
       </div>
-      <div style={{ marginBottom: '20px' }}>
+      <div className="mb-4">
         <input
           type="text"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           placeholder="Search by Batch ID or Product Name"
+          className="form-control"
           style={{
             width: '100%',
             maxWidth: '300px',
@@ -440,7 +431,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         />
       </div>
       <div className="inventory-table-container">
-        <table className="inventory-table">
+        <table className="inventory-table table table-striped">
           <thead>
             <tr>
               <th>
@@ -451,7 +442,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     setSelectedBatchIds(
                       selectedBatchIds.length === filteredBatches.length
                         ? []
-                        : filteredBatches.map((batch) => batch.batchId)
+                        : filteredBatches.map(batch => batch.batchId)
                     )
                   }
                 />
@@ -464,7 +455,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
             </tr>
           </thead>
           <tbody>
-            {filteredBatches.map((batch) => (
+            {filteredBatches.map(batch => (
               <tr key={batch.batchId}>
                 <td>
                   <input
@@ -474,7 +465,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   />
                 </td>
                 <td>
-                  <Link to={`/production/${batch.batchId}`} style={{ color: '#2196F3', textDecoration: 'underline' }}>
+                  <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
                     {batch.batchId}
                   </Link>
                 </td>
@@ -486,9 +477,50 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
             ))}
           </tbody>
         </table>
+        <div className="batch-list">
+          {filteredBatches.map(batch => (
+            <div key={batch.batchId} className="batch-card card mb-2">
+              <div className="card-body">
+                <input
+                  type="checkbox"
+                  checked={selectedBatchIds.includes(batch.batchId)}
+                  onChange={() => handleBatchSelection(batch.batchId)}
+                  className="me-2"
+                />
+                <h5 className="card-title">
+                  <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
+                    {batch.batchId}
+                  </Link>
+                </h5>
+                <p className="card-text">Product: {batch.productName || 'Unknown'}</p>
+                <p className="card-text">Site: {batch.siteName || batch.siteId}</p>
+                <p className="card-text">Status: {batch.status}</p>
+                <p className="card-text">Date: {batch.date}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="d-flex justify-content-between mt-3">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1}
+        >
+          Previous
+        </button>
+        <span>Page {page} of {totalPages}</span>
+        <button
+          className="btn btn-secondary"
+          onClick={() => setPage(p => p + 1)}
+          disabled={page === totalPages}
+        >
+          Next
+        </button>
       </div>
       {showAddBatchModal && (
         <div
+          className="modal fade show d-block"
           style={{
             position: 'fixed',
             top: 0,
@@ -511,110 +543,202 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
             }}
           >
-            <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
+            <h3
+              style={{
+                color: '#555',
+                marginBottom: '20px',
+                textAlign: 'center',
+              }}
+            >
               Add New Batch
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                Batch ID (required):
-              </label>
-              <input
-                type="text"
-                value={newBatch.batchId || ''}
-                onChange={(e) => setNewBatch({ ...newBatch, batchId: e.target.value })}
-                placeholder="Enter Batch ID"
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '4px',
-                  fontSize: '16px',
-                  boxSizing: 'border-box',
-                  color: '#000000',
-                  backgroundColor: '#FFFFFF',
-                }}
-              />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr',
+                gap: '15px',
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
+                  Batch ID (required):
+                </label>
+                <input
+                  type="text"
+                  value={newBatch.batchId || ''}
+                  onChange={e => setNewBatch({ ...newBatch, batchId: e.target.value })}
+                  placeholder="Enter Batch ID"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
+                  Product (required):
+                </label>
+                <select
+                  value={newBatch.productId || ''}
+                  onChange={e => {
+                    const productId = parseInt(e.target.value, 10);
+                    setNewBatch({ ...newBatch, productId, recipeId: 0 });
+                    fetchRecipes(productId);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
+                  Recipe (required):
+                </label>
+                <select
+                  value={newBatch.recipeId || ''}
+                  onChange={e => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
+                  disabled={!newBatch.productId}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="">Select Recipe</option>
+                  {recipes.map(recipe => (
+                    <option key={recipe.id} value={recipe.id}>
+                      {recipe.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
+                  Site (required):
+                </label>
+                <select
+                  value={newBatch.siteId || ''}
+                  onChange={e => setNewBatch({ ...newBatch, siteId: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="">Select Site</option>
+                  {sites.map(site => (
+                    <option key={site.siteId} value={site.siteId}>
+                      {site.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
+                  Fermenter (optional):
+                </label>
+                <select
+                  value={newBatch.fermenterId ?? ''}
+                  onChange={e => {
+                    const value = e.target.value;
+                    setNewBatch({
+                      ...newBatch,
+                      fermenterId: value ? parseInt(value, 10) : null,
+                    });
+                  }}
+                  disabled={!newBatch.siteId || equipment.length === 0}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                >
+                  <option value="">Select Fermenter (optional)</option>
+                  {equipment.map(item => (
+                    <option key={item.equipmentId} value={item.equipmentId}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                Product (required):
-              </label>
-              <select
-                value={newBatch.productId || ''}
-                onChange={(e) => {
-                  const productId = parseInt(e.target.value, 10);
-                  setNewBatch({ ...newBatch, productId, recipeId: 0 });
-                  fetchRecipes(productId);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '4px',
-                  fontSize: '16px',
-                  boxSizing: 'border-box',
-                  color: '#000000',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                <option value="">Select Product</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>{product.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                Recipe (required):
-              </label>
-              <select
-                value={newBatch.recipeId || ''}
-                onChange={(e) => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
-                disabled={!newBatch.productId}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '4px',
-                  fontSize: '16px',
-                  boxSizing: 'border-box',
-                  color: '#000000',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                <option value="">Select Recipe</option>
-                {recipes.map((recipe) => (
-                  <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-                Site (required):
-              </label>
-              <select
-                value={newBatch.siteId || ''}
-                onChange={(e) => setNewBatch({ ...newBatch, siteId: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '4px',
-                  fontSize: '16px',
-                  boxSizing: 'border-box',
-                  color: '#000000',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                <option value="">Select Site</option>
-                {sites.map((site) => (
-                  <option key={site.siteId} value={site.siteId}>{site.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: '20px',
+              }}
+            >
               <button
                 onClick={handleAddBatch}
                 style={{
@@ -627,8 +751,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
               >
                 Create
               </button>
@@ -648,8 +772,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#F86752')}
               >
                 Cancel
               </button>
@@ -659,6 +783,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       )}
       {showErrorPopup && (
         <div
+          className="modal fade show d-block"
           style={{
             position: 'fixed',
             top: 0,
@@ -682,8 +807,22 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               textAlign: 'center',
             }}
           >
-            <h3 style={{ color: '#F86752', marginBottom: '10px' }}>Inventory Error</h3>
-            <p style={{ color: '#555', marginBottom: '20px' }}>{errorMessage}</p>
+            <h3
+              style={{
+                color: '#F86752',
+                marginBottom: '10px',
+              }}
+            >
+              Inventory Error
+            </h3>
+            <p
+              style={{
+                color: '#555',
+                marginBottom: '20px',
+              }}
+            >
+              {errorMessage}
+            </p>
             <button
               onClick={() => {
                 setShowErrorPopup(false);
@@ -699,8 +838,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                 fontSize: '16px',
                 transition: 'background-color 0.3s',
               }}
-              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+              onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
+              onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
             >
               OK
             </button>
@@ -709,6 +848,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       )}
       {showAddRecipeModal && (
         <div
+          className="modal fade show d-block"
           style={{
             position: 'fixed',
             top: 0,
@@ -733,18 +873,37 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               overflowY: 'auto',
             }}
           >
-            <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
+            <h3
+              style={{
+                color: '#555',
+                marginBottom: '20px',
+                textAlign: 'center',
+              }}
+            >
               Create New Recipe
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr',
+                gap: '15px',
+              }}
+            >
               <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
                   Recipe Name (required):
                 </label>
                 <input
                   type="text"
                   value={newRecipe.name}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, name: e.target.value })}
+                  onChange={e => setNewRecipe({ ...newRecipe, name: e.target.value })}
                   placeholder="Enter recipe name"
                   style={{
                     width: '100%',
@@ -760,12 +919,19 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                 />
               </div>
               <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
                   Product (required):
                 </label>
                 <select
                   value={newRecipe.productId || ''}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, productId: parseInt(e.target.value, 10) })}
+                  onChange={e => setNewRecipe({ ...newRecipe, productId: parseInt(e.target.value, 10) })}
                   style={{
                     width: '100%',
                     maxWidth: '450px',
@@ -779,19 +945,28 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   }}
                 >
                   <option value="">Select Product</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>{product.name}</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
                   Recipe Quantity (required):
                 </label>
                 <input
                   type="number"
                   value={newRecipe.quantity || ''}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, quantity: parseFloat(e.target.value) || 0 })}
+                  onChange={e => setNewRecipe({ ...newRecipe, quantity: parseFloat(e.target.value) || 0 })}
                   placeholder="Enter quantity (e.g., 10)"
                   step="0.01"
                   min="0"
@@ -809,12 +984,19 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                 />
               </div>
               <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
                   Unit (required):
                 </label>
                 <select
                   value={newRecipe.unit}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, unit: e.target.value })}
+                  onChange={e => setNewRecipe({ ...newRecipe, unit: e.target.value })}
                   style={{
                     width: '100%',
                     maxWidth: '450px',
@@ -833,14 +1015,29 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                 </select>
               </div>
               <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                <label
+                  style={{
+                    fontWeight: 'bold',
+                    color: '#555',
+                    display: 'block',
+                    marginBottom: '5px',
+                  }}
+                >
                   Ingredients (required):
                 </label>
                 {newRecipe.ingredients.map((ingredient, index) => (
-                  <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      gap: '10px',
+                      marginBottom: '10px',
+                      alignItems: 'center',
+                    }}
+                  >
                     <select
                       value={ingredient.itemName}
-                      onChange={(e) => updateIngredient(index, 'itemName', e.target.value)}
+                      onChange={e => updateIngredient(index, 'itemName', e.target.value)}
                       style={{
                         width: '200px',
                         padding: '10px',
@@ -853,14 +1050,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                       }}
                     >
                       <option value="">Select Item</option>
-                      {items.filter(item => item.enabled).map((item) => (
-                        <option key={item.name} value={item.name}>{item.name}</option>
-                      ))}
+                      {items
+                        .filter(item => item.enabled)
+                        .map(item => (
+                          <option key={item.name} value={item.name}>
+                            {item.name}
+                          </option>
+                        ))}
                     </select>
                     <input
                       type="number"
                       value={ingredient.quantity || ''}
-                      onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
+                      onChange={e => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
                       placeholder="Quantity"
                       step="0.01"
                       min="0"
@@ -877,7 +1078,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     />
                     <select
                       value={ingredient.unit}
-                      onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
+                      onChange={e => updateIngredient(index, 'unit', e.target.value)}
                       style={{
                         width: '100px',
                         padding: '10px',
@@ -928,7 +1129,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                 </button>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: '20px',
+              }}
+            >
               <button
                 onClick={handleAddRecipe}
                 style={{
@@ -941,15 +1148,21 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
               >
                 Create
               </button>
               <button
                 onClick={() => {
                   setShowAddRecipeModal(false);
-                  setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'barrels' });
+                  setNewRecipe({
+                    name: '',
+                    productId: 0,
+                    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
+                    quantity: 0,
+                    unit: 'barrels',
+                  });
                   setError(null);
                 }}
                 style={{
@@ -962,8 +1175,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#F86752')}
               >
                 Cancel
               </button>
@@ -973,6 +1186,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       )}
       {showBatchActionsModal && (
         <div
+          className="modal fade show d-block"
           style={{
             position: 'fixed',
             top: 0,
@@ -996,8 +1210,21 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               textAlign: 'center',
             }}
           >
-            <h3 style={{ color: '#555', marginBottom: '20px' }}>Batch Actions</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <h3
+              style={{
+                color: '#555',
+                marginBottom: '20px',
+              }}
+            >
+              Batch Actions
+            </h3>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
               <button
                 onClick={handleCompleteBatches}
                 style={{
@@ -1010,8 +1237,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
               >
                 Complete Selected
               </button>
@@ -1027,8 +1254,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#F86752')}
               >
                 Delete Selected
               </button>
@@ -1047,8 +1274,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   fontSize: '16px',
                   transition: 'background-color 0.3s',
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#bbb')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ccc')}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#bbb')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#ccc')}
               >
                 Cancel
               </button>
