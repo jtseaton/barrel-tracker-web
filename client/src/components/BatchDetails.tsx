@@ -1,10 +1,11 @@
-// src/components/BatchDetails.tsx
+// src/components/BatchDetails.tsx (Part 1)
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site, Equipment, Ingredient, Location, InventoryItem, PackagingAction, BatchDetailsProps } from '../types/interfaces';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -73,8 +74,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           { url: `${API_BASE_URL}/api/package-types`, setter: setPackageTypes, name: 'packageTypes' },
         ].filter(endpoint => endpoint.url !== null);
 
-        console.log('Fetching endpoints:', endpoints.map(e => e.url));
-
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
         );
@@ -82,33 +81,27 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         for (let i = 0; i < responses.length; i++) {
           const res = responses[i];
           const { name, setter, single } = endpoints[i];
-          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
-
           if (!res.ok) {
             const text = await res.text();
-            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
             throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
-
           const contentType = res.headers.get('content-type');
           if (!contentType || !contentType.includes('application/json')) {
             const text = await res.text();
-            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
             throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
           }
-
           const data = await res.json();
           setter(single ? data : data);
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Fetch error:', err);
         setError('Failed to load batch details: ' + errorMessage);
       }
     };
     fetchData();
   }, [batchId]);
 
+  // src/components/BatchDetails.tsx (Part 2)
   useEffect(() => {
     if (batch && products.length > 0) {
       const product = products.find((p: Product) => p.id === batch.productId);
@@ -126,23 +119,19 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           { url: `${API_BASE_URL}/api/equipment?siteId=${batch.siteId}`, setter: setEquipment, name: 'equipment' },
           { url: `${API_BASE_URL}/api/locations?siteId=${batch.siteId}`, setter: setLocations, name: 'locations' },
         ];
-        console.log('Fetching site endpoints:', endpoints.map(e => e.url));
         const responses = await Promise.all(
           endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
         );
         for (let i = 0; i < responses.length; i++) {
           const res = responses[i];
           const { name, setter } = endpoints[i];
-          console.log(`Response for ${name}:`, { url: endpoints[i].url, status: res.status, ok: res.ok });
           if (!res.ok) {
             const text = await res.text();
-            console.error(`Failed to fetch ${name}: HTTP ${res.status}, Response:`, text.slice(0, 100));
             throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
           const contentType = res.headers.get('content-type');
           if (!contentType || !contentType.includes('application/json')) {
             const text = await res.text();
-            console.error(`Invalid content-type for ${name}:`, contentType, 'Response:', text.slice(0, 100));
             throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
           }
           const data = await res.json();
@@ -150,7 +139,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Fetch site data error:', err);
         setError('Failed to load site data: ' + errorMessage);
       }
     };
@@ -182,15 +170,12 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Add keg code error:', err);
       setError('Failed to add keg: ' + errorMessage);
     }
   };
 
   const handlePackage = async (skipKegPrompt: boolean = false) => {
-    console.log('handlePackage: Attempting to package', { batchId, packageType, packageQuantity, packageLocation, kegCodes });
     if (!packageType || packageQuantity <= 0 || !packageLocation) {
-      console.error('handlePackage: Invalid input', { packageType, packageQuantity, packageLocation });
       setError('Please select a package type, quantity (> 0), and location');
       return;
     }
@@ -209,14 +194,11 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           kegCodes: packageType.includes('Keg') ? kegCodes : [],
         }),
       });
-      console.log('handlePackage: Response received', { status: res.status, ok: res.ok });
       if (!res.ok) {
         const text = await res.text();
-        console.error('handlePackage: Failed to package', { status: res.status, response: text.slice(0, 100) });
         throw new Error(`Failed to package: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
-      console.log('handlePackage: Response data', data);
       if (data.prompt === 'volumeAdjustment') {
         setShowVolumePrompt({ message: data.message, shortfall: data.shortfall });
         return;
@@ -225,9 +207,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         headers: { Accept: 'application/json' },
       });
       if (!batchRes.ok) {
-        const text = await batchRes.text();
-        console.error('handlePackage: Failed to refresh batch', { status: batchRes.status, response: text });
-        throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}, Response: ${text.slice(0, 50)}`);
+        throw new Error(`Failed to refresh batch: HTTP ${batchRes.status}`);
       }
       const updatedBatch = await batchRes.json();
       setBatch(updatedBatch);
@@ -235,10 +215,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         headers: { Accept: 'application/json' },
       });
       if (packagingRes.ok) {
-        const packagingData = await packagingRes.json();
-        setPackagingActions(packagingData);
-      } else {
-        console.error('handlePackage: Failed to refresh packaging actions', { status: packagingRes.status });
+        setPackagingActions(await packagingRes.json());
       }
       await refreshInventory();
       setPackageType('');
@@ -251,11 +228,11 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Package error:', err);
       setError('Failed to package: ' + errorMessage);
     }
   };
 
+// src/components/BatchDetails.tsx (Part 3)
   const handleVolumeAdjustment = async (confirm: boolean) => {
     if (!showVolumePrompt) return;
     if (!confirm) {
@@ -307,7 +284,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Volume adjustment error:', err);
       setError('Failed to adjust volume or package: ' + errorMessage);
     }
   };
@@ -335,7 +311,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Add action error:', err);
       setError('Failed to add action: ' + errorMessage);
     }
   };
@@ -362,7 +337,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Complete batch error:', err);
       setError('Failed to complete batch: ' + errorMessage);
     }
   };
@@ -379,7 +353,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         });
         if (!res.ok) {
           const text = await res.text();
-          console.error('handleLossConfirmation: Complete batch failed', { status: res.status, response: text });
           throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
         setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null } : null);
@@ -388,7 +361,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         setError(null);
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Complete batch error:', err);
         setError('Failed to complete batch: ' + errorMessage);
       }
       return;
@@ -402,13 +374,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         date: new Date().toISOString().split('T')[0],
         dspNumber: 'DSP-AL-20010',
       };
-      console.log('handleLossConfirmation: Sending loss payload', {
-        batchId: batch.batchId,
-        productName: batch.productName,
-        siteId: batch.siteId,
-        volume: batch.volume,
-        payload: lossPayload,
-      });
       const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -416,11 +381,8 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
       if (!res.ok) {
         const text = await res.text();
-        console.error('handleLossConfirmation: Loss recording failed', { status: res.status, response: text });
         throw new Error(`Failed to record loss: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      const responseData = await res.json();
-      console.log('handleLossConfirmation: Loss recorded', responseData);
       const updateRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -428,7 +390,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
       if (!updateRes.ok) {
         const text = await updateRes.text();
-        console.error('handleLossConfirmation: Update batch volume failed', { status: updateRes.status, response: text });
         throw new Error(`Failed to update batch volume: HTTP ${updateRes.status}, Response: ${text.slice(0, 50)}`);
       }
       const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
@@ -438,7 +399,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
       if (!completeRes.ok) {
         const text = await completeRes.text();
-        console.error('handleLossConfirmation: Complete batch failed', { status: completeRes.status, response: text });
         throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
       }
       setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null, volume: 0 } : null);
@@ -448,7 +408,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Loss confirmation error:', err);
       setError('Failed to record loss or complete batch: ' + errorMessage);
     }
   };
@@ -478,7 +437,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       }, 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Update batch ID error:', err);
       setError('Failed to update batch ID: ' + errorMessage);
     }
   };
@@ -502,7 +460,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       }, 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Delete batch error:', err);
       setError('Failed to delete batch: ' + errorMessage);
     }
   };
@@ -530,7 +487,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Add ingredient error:', err);
       setError('Failed to add ingredient: ' + errorMessage);
     }
   };
@@ -561,7 +517,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Update ingredient error:', err);
       setError('Failed to update ingredient: ' + errorMessage);
     }
   };
@@ -591,7 +546,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Delete ingredient error:', err);
       setError('Failed to delete ingredient: ' + errorMessage);
     }
   };
@@ -620,7 +574,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Update equipment error:', err);
       setError('Failed to update equipment: ' + errorMessage);
     }
   };
@@ -653,8 +606,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         headers: { Accept: 'application/json' },
       });
       if (packagingRes.ok) {
-        const packagingData = await packagingRes.json();
-        setPackagingActions(packagingData);
+        setPackagingActions(await packagingRes.json());
       }
       await refreshInventory();
       setEditPackaging(null);
@@ -663,7 +615,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Edit packaging error:', err);
       setError('Failed to update packaging: ' + errorMessage);
     }
   };
@@ -692,8 +643,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         headers: { Accept: 'application/json' },
       });
       if (packagingRes.ok) {
-        const packagingData = await packagingRes.json();
-        setPackagingActions(packagingData);
+        setPackagingActions(await packagingRes.json());
       }
       await refreshInventory();
       setSuccessMessage('Packaging deleted successfully');
@@ -701,7 +651,6 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Delete packaging error:', err);
       setError('Failed to delete packaging: ' + errorMessage);
     } finally {
       setPendingDeletions(prev => {
@@ -711,7 +660,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
       });
     }
   };
-
+  // src/components/BatchDetails.tsx (Part 4)
   const handlePrintBatchSheet = () => {
     if (!batch) return;
     const doc = new jsPDF();
@@ -752,6 +701,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           2: { cellWidth: contentWidth * 0.2 },
           3: { cellWidth: contentWidth * 0.2 },
         },
+        styles: { fontSize: 8 },
       });
       yPos = doc.lastAutoTable.finalY + 10;
     }
@@ -770,6 +720,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           0: { cellWidth: contentWidth * 0.3 },
           1: { cellWidth: contentWidth * 0.7 },
         },
+        styles: { fontSize: 8 },
       });
       yPos = doc.lastAutoTable.finalY + 10;
     }
@@ -799,6 +750,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           4: { cellWidth: contentWidth * 0.2 },
           5: { cellWidth: contentWidth * 0.2 },
         },
+        styles: { fontSize: 8 },
       });
     }
 
@@ -810,19 +762,15 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
   }
 
   return (
-    <div className="page-container">
-      <h2 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px' }}>
-        Batch {batch.batchId}
-      </h2>
-      {error && <div className="error">{error}</div>}
+    <div className="page-container container">
+      <h2 className="text-warning mb-4">Batch {batch.batchId}</h2>
+      {error && <div className="alert alert-danger">{error}</div>}
       {successMessage && (
-        <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>
-          {successMessage}
-        </div>
+        <div className="alert alert-success">{successMessage}</div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        <div>
-          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Batch Details</h3>
+      <div className="row mb-4">
+        <div className="col-md-6">
+          <h3 className="text-warning mb-3">Batch Details</h3>
           <p><strong>Product:</strong> {batch.productName || 'N/A'}</p>
           <p><strong>Site:</strong> {batch.siteName || 'N/A'}</p>
           <p><strong>Status:</strong> {batch.status}</p>
@@ -831,88 +779,50 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           <p><strong>Stage:</strong> {batch.stage || 'N/A'}</p>
           <p><strong>Equipment:</strong> {equipment.find(e => e.equipmentId === batch.equipmentId)?.name || 'N/A'}</p>
           {batch.status !== 'Completed' && (
-            <div style={{ marginTop: '20px' }}>
-              <h4 style={{ color: '#EEC930', fontSize: '16px', marginBottom: '10px' }}>Update Batch ID</h4>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div className="mt-3">
+              <h4 className="text-warning mb-2">Update Batch ID</h4>
+              <div className="d-flex gap-2 align-items-center">
                 <input
                   type="text"
                   value={newBatchId}
                   onChange={(e) => setNewBatchId(e.target.value)}
                   placeholder="New Batch ID"
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                  className="form-control"
+                  style={{ maxWidth: '200px' }}
                 />
-                <button
-                  onClick={handleEditBatchName}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button className="btn btn-primary" onClick={handleEditBatchName}>
                   Update ID
                 </button>
               </div>
             </div>
           )}
         </div>
-        <div>
-          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Actions</h3>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button
-              onClick={handlePrintBatchSheet}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
+        <div className="col-md-6">
+          <h3 className="text-warning mb-3">Actions</h3>
+          <div className="d-flex gap-2 mb-3 flex-wrap">
+            <button className="btn btn-primary" onClick={handlePrintBatchSheet}>
               Print Batch Sheet
             </button>
             {batch.status !== 'Completed' && (
               <>
-                <button
-                  onClick={handleCompleteBatch}
-                  style={{
-                    backgroundColor: '#28A745',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button className="btn btn-success" onClick={handleCompleteBatch}>
                   Complete Batch
                 </button>
-                <button
-                  onClick={handleDeleteBatch}
-                  style={{
-                    backgroundColor: '#F86752',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button className="btn btn-danger" onClick={handleDeleteBatch}>
                   Delete Batch
                 </button>
               </>
             )}
           </div>
           {batch.status !== 'Completed' && (
-            <div style={{ marginBottom: '20px' }}>
-              <h4 style={{ color: '#EEC930', fontSize: '16px', marginBottom: '10px' }}>Update Equipment & Stage</h4>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div className="mb-3">
+              <h4 className="text-warning mb-2">Update Equipment & Stage</h4>
+              <div className="d-flex gap-2 align-items-center flex-wrap">
                 <select
                   value={selectedEquipmentId || ''}
                   onChange={(e) => setSelectedEquipmentId(parseInt(e.target.value) || null)}
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                  className="form-control"
+                  style={{ maxWidth: '200px' }}
                 >
                   <option value="">Select Equipment</option>
                   {equipment.map(eq => (
@@ -922,24 +832,15 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                 <select
                   value={stage}
                   onChange={(e) => setStage(e.target.value as any)}
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                  className="form-control"
+                  style={{ maxWidth: '200px' }}
                 >
                   <option value="">Select Stage</option>
                   {validStages.map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
-                <button
-                  onClick={handleUpdateEquipment}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button className="btn btn-primary" onClick={handleUpdateEquipment}>
                   Update
                 </button>
               </div>
@@ -948,67 +849,68 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         </div>
       </div>
       {batch.status !== 'Completed' && (
-        <div style={{ marginBottom: '20px' }}>
-          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Add Action</h3>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="mb-4">
+          <h3 className="text-warning mb-3">Add Action</h3>
+          <div className="d-flex gap-2 align-items-center">
             <input
               type="text"
               value={newAction}
               onChange={(e) => setNewAction(e.target.value)}
               placeholder="Enter action description"
-              style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '300px' }}
+              className="form-control"
+              style={{ maxWidth: '300px' }}
             />
-            <button
-              onClick={handleAddAction}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
+            <button className="btn btn-primary" onClick={handleAddAction}>
               Add Action
             </button>
           </div>
         </div>
       )}
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Actions</h3>
+      <div className="mb-4">
+        <h3 className="text-warning mb-3">Actions</h3>
         {actions.length > 0 ? (
-          <table className="inventory-table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {actions.map(action => (
-                <tr key={action.id}>
-                  <td>{action.timestamp}</td>
-                  <td>{action.action}</td>
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Action</th>
                 </tr>
+              </thead>
+              <tbody>
+                {actions.map(action => (
+                  <tr key={action.id}>
+                    <td>{action.timestamp}</td>
+                    <td>{action.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="action-list">
+              {actions.map(action => (
+                <div key={action.id} className="action-card card mb-2">
+                  <div className="card-body">
+                    <p className="card-text"><strong>Timestamp:</strong> {action.timestamp}</p>
+                    <p className="card-text"><strong>Action:</strong> {action.action}</p>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         ) : (
           <p>No actions recorded.</p>
         )}
       </div>
       {batch.status !== 'Completed' && (
-        <div style={{ marginBottom: '20px' }}>
-          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Ingredients</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Item:
-              </label>
+        <div className="mb-4">
+          <h3 className="text-warning mb-3">Ingredients</h3>
+          <div className="row g-2 mb-3">
+            <div className="col-md-3">
+              <label className="form-label text-warning">Item:</label>
               <select
                 value={newIngredient.itemName}
                 onChange={(e) => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+                className="form-control"
               >
                 <option value="">Select Item</option>
                 {items.filter(item => item.enabled).map(item => (
@@ -1016,228 +918,214 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                 ))}
               </select>
             </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Quantity:
-              </label>
+            <div className="col-md-3">
+              <label className="form-label text-warning">Quantity:</label>
               <input
                 type="number"
                 value={newIngredient.quantity || ''}
                 onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) || 0 })}
                 placeholder="Quantity"
                 min="0"
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+                className="form-control"
               />
             </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Unit:
-              </label>
+            <div className="col-md-3">
+              <label className="form-label text-warning">Unit:</label>
               <select
                 value={newIngredient.unit}
                 onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+                className="form-control"
               >
                 <option value="lbs">lbs</option>
                 <option value="gallons">gallons</option>
                 <option value="liters">liters</option>
               </select>
             </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <button
-                onClick={handleAddIngredient}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  width: '100%',
-                }}
-              >
+            <div className="col-md-3 d-flex align-items-end">
+              <button className="btn btn-primary w-100" onClick={handleAddIngredient}>
                 Add Ingredient
               </button>
             </div>
           </div>
         </div>
       )}
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Ingredients</h3>
+      <div className="mb-4">
+        <h3 className="text-warning mb-3">Ingredients</h3>
         {batch.ingredients && batch.ingredients.length > 0 ? (
-          <table className="inventory-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Unit</th>
-                <th>Source</th>
-                {batch.status !== 'Completed' && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {batch.ingredients.map((ing, index) => (
-                <tr key={index}>
-                  <td>
-                    {newIngredients.some(n => 
-                      n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                    ) ? (
-                      <select
-                        value={newIngredients.find(n => 
-                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                        )?.itemName || ing.itemName}
-                        onChange={(e) => {
-                          const updated = { ...ing, itemName: e.target.value };
-                          setNewIngredients(prev => prev.map(n => 
-                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
-                          ));
-                        }}
-                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px' }}
-                      >
-                        <option value="">Select Item</option>
-                        {items.filter(item => item.enabled).map(item => (
-                          <option key={item.name} value={item.name}>{item.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      ing.itemName
-                    )}
-                  </td>
-                  <td>
-                    {newIngredients.some(n => 
-                      n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                    ) ? (
-                      <input
-                        type="number"
-                        value={newIngredients.find(n => 
-                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                        )?.quantity || ing.quantity}
-                        onChange={(e) => {
-                          const updated = { ...ing, quantity: parseFloat(e.target.value) || 0 };
-                          setNewIngredients(prev => prev.map(n => 
-                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
-                          ));
-                        }}
-                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px', width: '80px' }}
-                      />
-                    ) : (
-                      ing.quantity
-                    )}
-                  </td>
-                  <td>
-                    {newIngredients.some(n => 
-                      n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                    ) ? (
-                      <select
-                        value={newIngredients.find(n => 
-                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                        )?.unit || ing.unit}
-                        onChange={(e) => {
-                          const updated = { ...ing, unit: e.target.value };
-                          setNewIngredients(prev => prev.map(n => 
-                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
-                          ));
-                        }}
-                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px' }}
-                      >
-                        <option value="lbs">lbs</option>
-                        <option value="gallons">gallons</option>
-                        <option value="liters">liters</option>
-                      </select>
-                    ) : (
-                      ing.unit
-                    )}
-                  </td>
-                  <td>{ing.isRecipe ? 'Recipe' : 'Additional'}</td>
-                  {batch.status !== 'Completed' && (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                  <th>Unit</th>
+                  <th>Source</th>
+                  {batch.status !== 'Completed' && <th>Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {batch.ingredients.map((ing, index) => (
+                  <tr key={index}>
                     <td>
                       {newIngredients.some(n => 
                         n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
                       ) ? (
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button
-                            onClick={() => handleUpdateIngredient(ing, newIngredients.find(n => 
-                              n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
-                            )!)}
-                            style={{
-                              backgroundColor: '#2196F3',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setNewIngredients(newIngredients.filter(n => 
-                              !(n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit)
-                            ))}
-                            style={{
-                              backgroundColor: '#F86752',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                        <select
+                          value={newIngredients.find(n => 
+                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                          )?.itemName || ing.itemName}
+                          onChange={(e) => {
+                            const updated = { ...ing, itemName: e.target.value };
+                            setNewIngredients(prev => prev.map(n => 
+                              n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
+                            ));
+                          }}
+                          className="form-control"
+                        >
+                          <option value="">Select Item</option>
+                          {items.filter(item => item.enabled).map(item => (
+                            <option key={item.name} value={item.name}>{item.name}</option>
+                          ))}
+                        </select>
                       ) : (
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button
-                            onClick={() => setNewIngredients([...newIngredients, { ...ing }])}
-                            style={{
-                              backgroundColor: '#2196F3',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteIngredient(ing)}
-                            style={{
-                              backgroundColor: '#F86752',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        ing.itemName
                       )}
                     </td>
-                  )}
-                </tr>
+                    <td>
+                      {newIngredients.some(n => 
+                        n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                      ) ? (
+                        <input
+                          type="number"
+                          value={newIngredients.find(n => 
+                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                          )?.quantity || ing.quantity}
+                          onChange={(e) => {
+                            const updated = { ...ing, quantity: parseFloat(e.target.value) || 0 };
+                            setNewIngredients(prev => prev.map(n => 
+                              n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
+                            ));
+                          }}
+                          className="form-control"
+                          style={{ width: '80px' }}
+                        />
+                      ) : (
+                        ing.quantity
+                      )}
+                    </td>
+                    <td>
+                      {newIngredients.some(n => 
+                        n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                      ) ? (
+                        <select
+                          value={newIngredients.find(n => 
+                            n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                          )?.unit || ing.unit}
+                          onChange={(e) => {
+                            const updated = { ...ing, unit: e.target.value };
+                            setNewIngredients(prev => prev.map(n => 
+                              n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit ? updated : n
+                            ));
+                          }}
+                          className="form-control"
+                        >
+                          <option value="lbs">lbs</option>
+                          <option value="gallons">gallons</option>
+                          <option value="liters">liters</option>
+                        </select>
+                      ) : (
+                        ing.unit
+                      )}
+                    </td>
+                    <td>{ing.isRecipe ? 'Recipe' : 'Additional'}</td>
+                    {batch.status !== 'Completed' && (
+                      <td>
+                        {newIngredients.some(n => 
+                          n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                        ) ? (
+                          <div className="d-flex gap-2">
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => handleUpdateIngredient(ing, newIngredients.find(n => 
+                                n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
+                              )!)}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => setNewIngredients(newIngredients.filter(n => 
+                                !(n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit)
+                              ))}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="d-flex gap-2">
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => setNewIngredients([...newIngredients, { ...ing }])}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => handleDeleteIngredient(ing)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="ingredient-list">
+              {batch.ingredients.map((ing, index) => (
+                <div key={index} className="ingredient-card card mb-2">
+                  <div className="card-body">
+                    <p className="card-text"><strong>Item:</strong> {ing.itemName}</p>
+                    <p className="card-text"><strong>Quantity:</strong> {ing.quantity}</p>
+                    <p className="card-text"><strong>Unit:</strong> {ing.unit}</p>
+                    <p className="card-text"><strong>Source:</strong> {ing.isRecipe ? 'Recipe' : 'Additional'}</p>
+                    {batch.status !== 'Completed' && (
+                      <div className="d-flex gap-2">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setNewIngredients([...newIngredients, { ...ing }])}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDeleteIngredient(ing)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         ) : (
           <p>No ingredients recorded.</p>
         )}
       </div>
       {batch.stage === 'Packaging' && batch.status !== 'Completed' && (
-        <div style={{ marginBottom: '20px' }}>
-          <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Package Batch</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Package Type:
-              </label>
+        <div className="mb-4">
+          <h3 className="text-warning mb-3">Package Batch</h3>
+          <div className="row g-2 mb-3">
+            <div className="col-md-4">
+              <label className="form-label text-warning">Package Type:</label>
               <select
                 value={packageType}
                 onChange={(e) => setPackageType(e.target.value)}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+                className="form-control"
               >
                 <option value="">Select Package Type</option>
                 {packageTypes
@@ -1248,27 +1136,23 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                   ))}
               </select>
             </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Quantity:
-              </label>
+            <div className="col-md-4">
+              <label className="form-label text-warning">Quantity:</label>
               <input
                 type="number"
                 value={packageQuantity || ''}
                 onChange={(e) => setPackageQuantity(parseInt(e.target.value) || 0)}
                 placeholder="Quantity"
                 min="0"
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+                className="form-control"
               />
             </div>
-            <div>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Location:
-              </label>
+            <div className="col-md-4">
+              <label className="form-label text-warning">Location:</label>
               <select
                 value={packageLocation}
                 onChange={(e) => setPackageLocation(e.target.value)}
-                style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '100%' }}
+                className="form-control"
               >
                 <option value="">Select Location</option>
                 {locations.map(loc => (
@@ -1278,239 +1162,160 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
             </div>
           </div>
           {packageType.includes('Keg') && (
-            <div style={{ marginTop: '10px' }}>
-              <label style={{ fontWeight: 'bold', color: '#EEC930', display: 'block', marginBottom: '5px' }}>
-                Keg Codes:
-              </label>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+            <div className="mt-3">
+              <label className="form-label text-warning">Keg Codes:</label>
+              <div className="d-flex gap-2 align-items-center mb-2">
                 <input
                   type="text"
                   value={currentKegCode}
                   onChange={(e) => setCurrentKegCode(e.target.value)}
                   placeholder="Scan or enter keg code"
-                  style={{ padding: '10px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '16px', width: '200px' }}
+                  className="form-control"
+                  style={{ maxWidth: '200px' }}
                 />
-                <label>
+                <label className="form-check-label">
                   <input
                     type="checkbox"
                     checked={manualKegEntry}
                     onChange={(e) => setManualKegEntry(e.target.checked)}
+                    className="form-check-input"
                   />
                   Manual Entry
                 </label>
-                <button
-                  onClick={handleAddKegCode}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button className="btn btn-primary" onClick={handleAddKegCode}>
                   Add Keg
                 </button>
               </div>
               {kegCodes.length > 0 && (
                 <div>
                   <p><strong>Added Kegs:</strong> {kegCodes.join(', ')}</p>
-                  <button
-                    onClick={() => setKegCodes([])}
-                    style={{
-                      backgroundColor: '#F86752',
-                      color: '#fff',
-                      padding: '8px 12px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                    }}
-                  >
+                  <button className="btn btn-danger btn-sm" onClick={() => setKegCodes([])}>
                     Clear Kegs
                   </button>
                 </div>
               )}
             </div>
           )}
-          <button
-            onClick={() => handlePackage()}
-            style={{
-              backgroundColor: '#2196F3',
-              color: '#fff',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              marginTop: '10px',
-            }}
-          >
+          <button className="btn btn-primary mt-3" onClick={() => handlePackage()}>
             Package
           </button>
         </div>
       )}
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ color: '#EEC930', fontSize: '18px', marginBottom: '10px' }}>Packaging Actions</h3>
+      <div className="mb-4">
+        <h3 className="text-warning mb-3">Packaging Actions</h3>
         {packagingActions.length > 0 ? (
-          <table className="inventory-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Package Type</th>
-                <th>Quantity</th>
-                <th>Volume (barrels)</th>
-                <th>Location</th>
-                <th>Keg Codes</th>
-                {batch.status !== 'Completed' && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {packagingActions.map(pkg => (
-                <tr key={pkg.id}>
-                  <td>{pkg.date}</td>
-                  <td>{pkg.packageType}</td>
-                  <td>
-                    {editPackaging && editPackaging.id === pkg.id ? (
-                      <input
-                        type="number"
-                        value={editPackaging.quantity}
-                        onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
-                        style={{ padding: '5px', border: '1px solid #CCCCCC', borderRadius: '4px', fontSize: '14px', width: '80px' }}
-                      />
-                    ) : (
-                      pkg.quantity
-                    )}
-                  </td>
-                  <td>{pkg.volume.toFixed(3)}</td>
-                  <td>{locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</td>
-                  <td>{pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</td>
-                  {batch.status !== 'Completed' && (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Package Type</th>
+                  <th>Quantity</th>
+                  <th>Volume (barrels)</th>
+                  <th>Location</th>
+                  <th>Keg Codes</th>
+                  {batch.status !== 'Completed' && <th>Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {packagingActions.map(pkg => (
+                  <tr key={pkg.id}>
+                    <td>{pkg.date}</td>
+                    <td>{pkg.packageType}</td>
                     <td>
                       {editPackaging && editPackaging.id === pkg.id ? (
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button
-                            onClick={handleEditPackaging}
-                            style={{
-                              backgroundColor: '#2196F3',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditPackaging(null)}
-                            style={{
-                              backgroundColor: '#F86752',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                        <input
+                          type="number"
+                          value={editPackaging.quantity}
+                          onChange={(e) => setEditPackaging({ ...editPackaging, quantity: parseInt(e.target.value) || 0 })}
+                          className="form-control"
+                          style={{ width: '80px' }}
+                        />
                       ) : (
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button
-                            onClick={() => setEditPackaging(pkg)}
-                            style={{
-                              backgroundColor: '#2196F3',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeletePackaging(pkg)}
-                            style={{
-                              backgroundColor: '#F86752',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: pendingDeletions.has(pkg.id.toString()) ? 'not-allowed' : 'pointer',
-                              opacity: pendingDeletions.has(pkg.id.toString()) ? 0.5 : 1,
-                            }}
-                            disabled={pendingDeletions.has(pkg.id.toString())}
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        pkg.quantity
                       )}
                     </td>
-                  )}
-                </tr>
+                    <td>{pkg.volume.toFixed(3)}</td>
+                    <td>{locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</td>
+                    <td>{pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</td>
+                    {batch.status !== 'Completed' && (
+                      <td>
+                        {editPackaging && editPackaging.id === pkg.id ? (
+                          <div className="d-flex gap-2">
+                            <button className="btn btn-primary btn-sm" onClick={handleEditPackaging}>
+                              Save
+                            </button>
+                            <button className="btn btn-danger btn-sm" onClick={() => setEditPackaging(null)}>
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="d-flex gap-2">
+                            <button className="btn btn-primary btn-sm" onClick={() => setEditPackaging(pkg)}>
+                              Edit
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => handleDeletePackaging(pkg)}
+                              disabled={pendingDeletions.has(pkg.id.toString())}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="packaging-list">
+              {packagingActions.map(pkg => (
+                <div key={pkg.id} className="packaging-card card mb-2">
+                  <div className="card-body">
+                    <p className="card-text"><strong>Date:</strong> {pkg.date}</p>
+                    <p className="card-text"><strong>Package Type:</strong> {pkg.packageType}</p>
+                    <p className="card-text"><strong>Quantity:</strong> {pkg.quantity}</p>
+                    <p className="card-text"><strong>Volume:</strong> {pkg.volume.toFixed(3)} barrels</p>
+                    <p className="card-text"><strong>Location:</strong> {locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</p>
+                    <p className="card-text"><strong>Keg Codes:</strong> {pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</p>
+                    {batch.status !== 'Completed' && (
+                      <div className="d-flex gap-2">
+                        <button className="btn btn-primary btn-sm" onClick={() => setEditPackaging(pkg)}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDeletePackaging(pkg)}
+                          disabled={pendingDeletions.has(pkg.id.toString())}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         ) : (
           <p>No packaging actions recorded.</p>
         )}
       </div>
       {showVolumePrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2100,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-              color: '#555',
-            }}
-          >
-            <h3 style={{ color: '#555', marginBottom: '20px' }}>Volume Adjustment Required</h3>
-            <p>{showVolumePrompt.message}</p>
-            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
-              <button
-                onClick={() => handleVolumeAdjustment(true)}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title">Volume Adjustment Required</h5>
+            </div>
+            <div className="modal-body">
+              <p>{showVolumePrompt.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => handleVolumeAdjustment(true)}>
                 Adjust Volume
               </button>
-              <button
-                onClick={() => handleVolumeAdjustment(false)}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
+              <button className="btn btn-danger" onClick={() => handleVolumeAdjustment(false)}>
                 Cancel
               </button>
             </div>
@@ -1518,62 +1323,19 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         </div>
       )}
       {showLossPrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2100,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-              color: '#555',
-            }}
-          >
-            <h3 style={{ color: '#555', marginBottom: '20px' }}>Record Loss</h3>
-            <p>
-              {`Batch has ${showLossPrompt.volume.toFixed(3)} barrels remaining. Record as fermentation loss due to trub/spillage?`}
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
-              <button
-                onClick={() => handleLossConfirmation(true)}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title">Record Loss</h5>
+            </div>
+            <div className="modal-body">
+              <p>{`Batch has ${showLossPrompt.volume.toFixed(3)} barrels remaining. Record as fermentation loss due to trub/spillage?`}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => handleLossConfirmation(true)}>
                 Record Loss
               </button>
-              <button
-                onClick={() => handleLossConfirmation(false)}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
+              <button className="btn btn-danger" onClick={() => handleLossConfirmation(false)}>
                 Skip
               </button>
             </div>
@@ -1581,60 +1343,19 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         </div>
       )}
       {showKegPrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2100,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-              color: '#555',
-            }}
-          >
-            <h3 style={{ color: '#555', marginBottom: '20px' }}>Scan Kegs?</h3>
-            <p>No kegs have been scanned for this packaging action. Would you like to scan kegs now?</p>
-            <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '20px' }}>
-              <button
-                onClick={() => setShowKegPrompt(false)}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title">Scan Kegs?</h5>
+            </div>
+            <div className="modal-body">
+              <p>No kegs have been scanned for this packaging action. Would you like to scan kegs now?</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setShowKegPrompt(false)}>
                 Yes, Scan Kegs
               </button>
-              <button
-                onClick={() => handlePackage(true)}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-              >
+              <button className="btn btn-danger" onClick={() => handlePackage(true)}>
                 No, Proceed
               </button>
             </div>
