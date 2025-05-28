@@ -1,6 +1,9 @@
+// client/src/components/VendorDetails.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Vendor, InventoryItem, PurchaseOrder } from '../types/interfaces';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import '../App.css';
 
 interface VendorDetailsProps {
   vendors: Vendor[];
@@ -43,41 +46,30 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
     }
   }, [name, vendors]);
 
-  const fetchVendorDetails = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/vendors/${name}`);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      setVendorDetails(data);
-      setEditedVendor(data);
-    } catch (err: any) {
-      console.error('Fetch vendor error:', err);
-      setProductionError('Failed to fetch vendor: ' + err.message);
-    }
-  };
-
   const fetchReceipts = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inventory?source=${name}`);
+      const res = await fetch(`${API_BASE_URL}/api/inventory?source=${name}`, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      setReceipts(data.filter((item: InventoryItem) => ['Received', 'Stored'].includes(item.status || '')));
+      console.log('[VendorDetails] Fetched receipts:', data.items);
+      setReceipts(data.items.filter((item: InventoryItem) => ['Received', 'Stored'].includes(item.status || '')));
       setProductionError(null);
     } catch (err: any) {
-      console.error('Fetch receipts error:', err);
       setProductionError('Failed to fetch receipts: ' + err.message);
+      console.error('[VendorDetails] Fetch receipts error:', err);
     }
   };
 
   const fetchPurchaseOrders = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${name}`);
+      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${name}`, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
+      console.log('[VendorDetails] Fetched purchase orders:', data);
       setPurchaseOrders(data);
     } catch (err: any) {
-      console.error('Fetch purchase orders error:', err);
       setProductionError('Failed to fetch purchase orders: ' + err.message);
+      console.error('[VendorDetails] Fetch purchase orders error:', err);
     }
   };
 
@@ -94,10 +86,14 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
         : { ...editedVendor };
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
+      }
+      console.log('[VendorDetails] Saved vendor:', editedVendor);
       setVendorDetails(editedVendor);
       setEditing(false);
       await refreshVendors();
@@ -108,12 +104,13 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
         navigate(`/vendors/${editedVendor.name}`);
       }
     } catch (err: any) {
-      console.error('Save vendor error:', err);
       setProductionError('Failed to save vendor: ' + err.message);
+      console.error('[VendorDetails] Save vendor error:', err);
     }
   };
 
   const handleCancel = () => {
+    console.log('[VendorDetails] Cancel edit');
     if (name && name !== 'new') {
       setEditing(false);
       setEditedVendor(vendorDetails || { name: '', type: 'Supplier', enabled: 1, address: '', email: '', phone: '' });
@@ -154,83 +151,76 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
     }
   }, [location.state, name]);
 
-  if (name && name !== 'new' && !vendorDetails) return <div>Loading...</div>;
+  console.log('[VendorDetails] Render:', {
+    vendor: name,
+    activeTab,
+    editing,
+    receiptsLength: receipts.length,
+    purchaseOrdersLength: purchaseOrders.length,
+    productionError,
+    isMobile: window.innerWidth <= 768,
+  });
+
+  if (name && name !== 'new' && !vendorDetails) return <div className="alert alert-info text-center">Loading...</div>;
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#2E4655', borderRadius: '8px', maxWidth: '800px', margin: '20px auto' }}>
-      <h2 style={{ color: '#EEC930', fontSize: '28px', marginBottom: '20px' }}>
-        {name === 'new' ? 'Add New Vendor' : `${vendorDetails?.name} Details`}
-      </h2>
+    <div className="page-container container">
+      <h2 className="app-header mb-4">{name === 'new' ? 'Add New Vendor' : `${vendorDetails?.name} Details`}</h2>
       {name !== 'new' && (
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <div className="vendor-tabs">
           <button
+            className={activeTab === 'info' ? 'active' : ''}
             onClick={() => setActiveTab('info')}
-            style={{
-              backgroundColor: activeTab === 'info' ? '#F86752' : '#000000',
-              color: activeTab === 'info' ? '#FFFFFF' : '#EEC930',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '16px',
-              cursor: 'pointer',
-            }}
           >
             Information
           </button>
           <button
+            className={activeTab === 'receipts' ? 'active' : ''}
             onClick={() => setActiveTab('receipts')}
-            style={{
-              backgroundColor: activeTab === 'receipts' ? '#F86752' : '#000000',
-              color: activeTab === 'receipts' ? '#FFFFFF' : '#EEC930',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '16px',
-              cursor: 'pointer',
-            }}
           >
             Inventory Receipts
           </button>
           <button
+            className={activeTab === 'orders' ? 'active' : ''}
             onClick={handleViewPOs}
-            style={{
-              backgroundColor: activeTab === 'orders' ? '#F86752' : '#000000',
-              color: activeTab === 'orders' ? '#FFFFFF' : '#EEC930',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '16px',
-              cursor: 'pointer',
-            }}
           >
             Purchase Orders
           </button>
+          <select
+            value={activeTab}
+            onChange={(e) => setActiveTab(e.target.value as 'info' | 'receipts' | 'orders')}
+            className="form-control"
+          >
+            <option value="info">Information</option>
+            <option value="receipts">Inventory Receipts</option>
+            <option value="orders">Purchase Orders</option>
+          </select>
         </div>
       )}
-      {productionError && <p style={{ color: '#F86752', fontSize: '16px' }}>{productionError}</p>}
+      {productionError && <div className="alert alert-danger">{productionError}</div>}
       
       {activeTab === 'info' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <label style={{ color: '#EEC930', fontSize: '18px' }}>
+        <div className="vendor-form">
+          <label className="form-label">
             Name:
             {editing ? (
               <input
                 type="text"
                 value={editedVendor.name}
                 onChange={(e) => setEditedVendor({ ...editedVendor, name: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
+                className="form-control"
               />
             ) : (
-              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.name}</span>
+              <span>{vendorDetails?.name}</span>
             )}
           </label>
-          <label style={{ color: '#EEC930', fontSize: '18px' }}>
+          <label className="form-label">
             Type:
             {editing ? (
               <select
-                value={editedVendor.type || ''} // Default to empty string if undefined
+                value={editedVendor.type || ''}
                 onChange={(e) => setEditedVendor({ ...editedVendor, type: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px' }}
+                className="form-control"
               >
                 <option value="Supplier">Supplier</option>
                 <option value="Customer">Customer</option>
@@ -238,146 +228,180 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
                 <option value="Delivery">Delivery</option>
               </select>
             ) : (
-              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.type || 'N/A'}</span>
+              <span>{vendorDetails?.type || 'N/A'}</span>
             )}
           </label>
-          <label style={{ color: '#EEC930', fontSize: '18px' }}>
+          <label className="form-label">
             Address:
             {editing ? (
               <textarea
-                value={editedVendor.address || ''} // Default to empty string if undefined
+                value={editedVendor.address || ''}
                 onChange={(e) => setEditedVendor({ ...editedVendor, address: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', minHeight: '60px', boxSizing: 'border-box' }}
+                className="form-control"
               />
             ) : (
-              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.address || 'N/A'}</span>
+              <span>{vendorDetails?.address || 'N/A'}</span>
             )}
           </label>
-          <label style={{ color: '#EEC930', fontSize: '18px' }}>
+          <label className="form-label">
             Email:
             {editing ? (
               <input
                 type="email"
-                value={editedVendor.email || ''} // Default to empty string if undefined
+                value={editedVendor.email || ''}
                 onChange={(e) => setEditedVendor({ ...editedVendor, email: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
+                className="form-control"
               />
             ) : (
-              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.email || 'N/A'}</span>
+              <span>{vendorDetails?.email || 'N/A'}</span>
             )}
           </label>
-          <label style={{ color: '#EEC930', fontSize: '18px' }}>
+          <label className="form-label">
             Phone:
             {editing ? (
               <input
                 type="tel"
-                value={editedVendor.phone || ''} // Default to empty string if undefined
+                value={editedVendor.phone || ''}
                 onChange={(e) => setEditedVendor({ ...editedVendor, phone: e.target.value })}
-                style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #000000', marginTop: '5px', boxSizing: 'border-box' }}
+                className="form-control"
               />
             ) : (
-              <span style={{ color: '#FFFFFF', marginLeft: '10px' }}>{vendorDetails?.phone || 'N/A'}</span>
+              <span>{vendorDetails?.phone || 'N/A'}</span>
             )}
           </label>
-          {editing && (
-            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <button
-                onClick={handleSave}
-                style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }}
-              >
-                Save
-              </button>
-              <button
-                onClick={handleCancel}
-                style={{ backgroundColor: '#000000', color: '#EEC930', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', marginLeft: '10px', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-          {!editing && (
-            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <button
-                onClick={() => setEditing(true)}
-                style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }}
-              >
+          <div className="inventory-actions">
+            {editing ? (
+              <>
+                <button onClick={handleSave} className="btn btn-primary">
+                  Save
+                </button>
+                <button onClick={handleCancel} className="btn btn-danger">
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setEditing(true)} className="btn btn-primary">
                 Edit
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {activeTab === 'receipts' && name !== 'new' && (
         <div>
-          <h3 style={{ color: '#EEC930', fontSize: '20px', marginBottom: '10px' }}>Inventory Receipts</h3>
-          <button
-            onClick={handleAddReceipt}
-            style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer', marginBottom: '20px' }}
-          >
-            Add Receipt
-          </button>
-          <table>
-            <thead>
-              <tr>
-                <th>Item-Lot</th>
-                <th>Type</th>
-                <th>Quantity</th>
-                <th>Date Received</th>
-              </tr>
-            </thead>
-            <tbody>
-              {receipts.map((receipt) => (
-                <tr key={getIdentifier(receipt)}>
-                  <td>{getIdentifier(receipt)}</td>
-                  <td>{receipt.type}</td>
-                  <td>{receipt.quantity}</td>
-                  <td>{receipt.receivedDate}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3 className="app-header mb-3">Inventory Receipts</h3>
+          <div className="inventory-actions mb-4">
+            <button onClick={handleAddReceipt} className="btn btn-primary">
+              Add Receipt
+            </button>
+          </div>
+          <div className="inventory-table-container">
+            {receipts.length > 0 ? (
+              <>
+                <table className="inventory-table table table-striped">
+                  <thead>
+                    <tr>
+                      <th>Item-Lot</th>
+                      <th>Type</th>
+                      <th>Quantity</th>
+                      <th>Date Received</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receipts.map((receipt) => (
+                      <tr key={getIdentifier(receipt)}>
+                        <td>{getIdentifier(receipt)}</td>
+                        <td>{receipt.type}</td>
+                        <td>{receipt.quantity}</td>
+                        <td>{receipt.receivedDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="vendor-receipts-list">
+                  {receipts.map((receipt) => (
+                    <div key={getIdentifier(receipt)} className="vendor-receipts-item card mb-2">
+                      <div className="card-body">
+                        <p className="card-text"><strong>Item-Lot:</strong> {getIdentifier(receipt)}</p>
+                        <p className="card-text"><strong>Type:</strong> {receipt.type}</p>
+                        <p className="card-text"><strong>Quantity:</strong> {receipt.quantity}</p>
+                        <p className="card-text"><strong>Date Received:</strong> {receipt.receivedDate}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="alert alert-info text-center">No receipts found.</div>
+            )}
+          </div>
         </div>
       )}
 
       {activeTab === 'orders' && name !== 'new' && (
         <div>
-          <h3 style={{ color: '#EEC930', fontSize: '20px', marginBottom: '10px' }}>Purchase Orders</h3>
-          <button
-            onClick={handleAddPurchaseOrder}
-            style={{ backgroundColor: '#F86752', color: '#FFFFFF', padding: '10px 20px', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer', marginBottom: '20px' }}
-          >
-            Add Purchase Order
-          </button>
-          <table>
-            <thead>
-              <tr> 
-                <th>PO Number</th>
-                <th>Site</th>
-                <th>PO Date</th>
-                <th>Comments</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {purchaseOrders.map((order) => (
-                <tr key={order.poNumber}>
-                  <td>{order.poNumber}</td>
-                  <td>{order.siteId || 'N/A'}</td>
-                  <td>{order.poDate || 'N/A'}</td>
-                  <td>{order.comments || 'N/A'}</td>
-                  <td>
-                    <button
-                      onClick={() => handleEditPO(order.poNumber)}
-                      style={{ backgroundColor: '#EEC930', color: '#000000', padding: '5px 10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3 className="app-header mb-3">Purchase Orders</h3>
+          <div className="inventory-actions mb-4">
+            <button onClick={handleAddPurchaseOrder} className="btn btn-primary">
+              Add Purchase Order
+            </button>
+          </div>
+          <div className="inventory-table-container">
+            {purchaseOrders.length > 0 ? (
+              <>
+                <table className="inventory-table table table-striped">
+                  <thead>
+                    <tr>
+                      <th>PO Number</th>
+                      <th>Site</th>
+                      <th>PO Date</th>
+                      <th>Comments</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {purchaseOrders.map((order) => (
+                      <tr key={order.poNumber}>
+                        <td>{order.poNumber}</td>
+                        <td>{order.siteId || 'N/A'}</td>
+                        <td>{order.poDate || 'N/A'}</td>
+                        <td>{order.comments || 'N/A'}</td>
+                        <td>
+                          <button
+                            onClick={() => handleEditPO(order.poNumber)}
+                            className="btn btn-primary"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="vendor-orders-list">
+                  {purchaseOrders.map((order) => (
+                    <div key={order.poNumber} className="vendor-orders-item card mb-2">
+                      <div className="card-body">
+                        <p className="card-text"><strong>PO Number:</strong> {order.poNumber}</p>
+                        <p className="card-text"><strong>Site:</strong> {order.siteId || 'N/A'}</p>
+                        <p className="card-text"><strong>PO Date:</strong> {order.poDate || 'N/A'}</p>
+                        <p className="card-text"><strong>Comments:</strong> {order.comments || 'N/A'}</p>
+                        <button
+                          onClick={() => handleEditPO(order.poNumber)}
+                          className="btn btn-primary"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="alert alert-info text-center">No purchase orders found.</div>
+            )}
+          </div>
         </div>
       )}
     </div>

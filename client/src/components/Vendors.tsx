@@ -1,6 +1,9 @@
+// client/src/components/Vendors.tsx
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Vendor } from '../types/interfaces'; // Updated import
+import { Vendor } from '../types/interfaces';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import '../App.css';
 
 interface VendorsProps {
   vendors: Vendor[];
@@ -15,7 +18,7 @@ const Vendors: React.FC<VendorsProps> = ({ vendors, refreshVendors }) => {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
   useEffect(() => {
-    refreshVendors(); // Fetch on mount
+    refreshVendors();
   }, [refreshVendors]);
 
   const handleAddVendor = () => {
@@ -30,15 +33,20 @@ const Vendors: React.FC<VendorsProps> = ({ vendors, refreshVendors }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/vendors`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ names: selectedVendors }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
+      }
+      console.log('[Vendors] Deleted vendors:', selectedVendors);
       setSelectedVendors([]);
       await refreshVendors();
       setProductionError(null);
     } catch (err: any) {
       setProductionError('Failed to delete vendors: ' + err.message);
+      console.error('[Vendors] Delete vendors error:', err);
     }
   };
 
@@ -50,15 +58,20 @@ const Vendors: React.FC<VendorsProps> = ({ vendors, refreshVendors }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/vendors`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ names: selectedVendors, enabled: enable }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
+      }
+      console.log('[Vendors] Toggled enable:', { enable, vendors: selectedVendors });
       setSelectedVendors([]);
       await refreshVendors();
       setProductionError(null);
     } catch (err: any) {
       setProductionError(`Failed to ${enable ? 'enable' : 'disable'} vendors: ` + err.message);
+      console.error('[Vendors] Toggle enable error:', err);
     }
   };
 
@@ -68,42 +81,98 @@ const Vendors: React.FC<VendorsProps> = ({ vendors, refreshVendors }) => {
     );
   };
 
+  console.log('[Vendors] Render:', {
+    vendorsLength: vendors.length,
+    selectedVendors,
+    isMobile: window.innerWidth <= 768 ? 'cards' : 'table',
+    productionError,
+  });
+
   return (
-    <div>
-      <h2>Vendors List</h2>
-      {productionError && <p style={{ color: '#F86752' }}>{productionError}</p>}
-      <div style={{ marginBottom: '20px' }}>
-        <button onClick={handleAddVendor}>Add Vendor</button>
-        <button onClick={handleDeleteVendors} style={{ marginLeft: '10px' }}>Delete Vendor</button>
-        <button onClick={() => handleToggleEnable(true)} style={{ marginLeft: '10px' }}>Enable Vendor</button>
-        <button onClick={() => handleToggleEnable(false)} style={{ marginLeft: '10px' }}>Disable Vendor</button>
+    <div className="page-container container">
+      <h2 className="app-header mb-4">Vendors List</h2>
+      {productionError && <div className="alert alert-danger">{productionError}</div>}
+      <div className="inventory-actions mb-4">
+        <button onClick={handleAddVendor} className="btn btn-primary">
+          Add Vendor
+        </button>
+        <button onClick={handleDeleteVendors} className="btn btn-danger">
+          Delete Vendor
+        </button>
+        <button onClick={() => handleToggleEnable(true)} className="btn btn-primary">
+          Enable Vendor
+        </button>
+        <button onClick={() => handleToggleEnable(false)} className="btn btn-primary">
+          Disable Vendor
+        </button>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Select</th>
-            <th>Vendor Name</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {vendors.map((vendor) => (
-            <tr key={vendor.name}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selectedVendors.includes(vendor.name)}
-                  onChange={() => handleCheckboxChange(vendor.name)}
-                />
-              </td>
-              <td>
-                <Link to={`/vendors/${vendor.name}`}>{vendor.name}</Link>
-              </td>
-              <td>{vendor.enabled ? 'Enabled' : 'Disabled'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="inventory-table-container">
+        {vendors.length > 0 ? (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={selectedVendors.length === vendors.length && vendors.length > 0}
+                      onChange={() =>
+                        setSelectedVendors(
+                          selectedVendors.length === vendors.length ? [] : vendors.map(v => v.name)
+                        )
+                      }
+                    />
+                  </th>
+                  <th>Vendor Name</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vendors.map((vendor) => (
+                  <tr key={vendor.name}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedVendors.includes(vendor.name)}
+                        onChange={() => handleCheckboxChange(vendor.name)}
+                      />
+                    </td>
+                    <td>
+                      <Link to={`/vendors/${vendor.name}`} className="text-primary text-decoration-underline">
+                        {vendor.name}
+                      </Link>
+                    </td>
+                    <td>{vendor.enabled ? 'Enabled' : 'Disabled'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="vendor-card-list">
+              {vendors.map((vendor) => (
+                <div key={vendor.name} className="vendor-card-item card mb-2">
+                  <div className="card-body">
+                    <input
+                      type="checkbox"
+                      checked={selectedVendors.includes(vendor.name)}
+                      onChange={() => handleCheckboxChange(vendor.name)}
+                      className="me-2"
+                    />
+                    <p className="card-text">
+                      <strong>Name:</strong>{' '}
+                      <Link to={`/vendors/${vendor.name}`} className="text-primary text-decoration-underline">
+                        {vendor.name}
+                      </Link>
+                    </p>
+                    <p className="card-text"><strong>Status:</strong> {vendor.enabled ? 'Enabled' : 'Disabled'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="alert alert-info text-center">No vendors found.</div>
+        )}
+      </div>
     </div>
   );
 };
