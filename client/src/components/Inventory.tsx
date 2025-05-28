@@ -36,11 +36,17 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
-  // Log inventory
+  // Log inventory prop
   useEffect(() => {
-    console.log('[Inventory] Inventory prop:', inventory);
-    const receivedStored = inventory?.filter(item => item?.status && ['Received', 'Stored'].includes(item.status)) || [];
-    console.log('[Inventory] Received/Stored:', receivedStored);
+    console.log('[Inventory] Inventory prop:', {
+      inventory,
+      isArray: Array.isArray(inventory),
+      length: Array.isArray(inventory) ? inventory.length : 'N/A',
+      type: typeof inventory,
+    });
+    if (!Array.isArray(inventory)) {
+      setProductionError('Invalid inventory data: Expected an array.');
+    }
   }, [inventory]);
 
   // Fetch daily summary
@@ -78,11 +84,13 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         console.log('[Inventory] Fetched sites:', sitesData);
         setSites(sitesData || []);
 
-        const siteIds = inventory
-          ?.map(item => item?.siteId)
-          .filter((siteId): siteId is string => !!siteId)
-          .concat([OUR_DSP])
-          .filter((siteId, index, arr) => arr.indexOf(siteId) === index) || [OUR_DSP];
+        const siteIds = Array.isArray(inventory)
+          ? inventory
+              .map(item => item?.siteId)
+              .filter((siteId): siteId is string => !!siteId)
+              .concat([OUR_DSP])
+              .filter((siteId, index, arr) => arr.indexOf(siteId) === index)
+          : [OUR_DSP];
 
         console.log('[Inventory] Site IDs:', siteIds);
 
@@ -106,7 +114,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       }
     };
 
-    if (inventory?.length > 0) {
+    if (Array.isArray(inventory) && inventory.length > 0) {
       fetchLocationsAndSites();
     } else {
       setIsLoading(false);
@@ -193,13 +201,15 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  const filteredInventory = inventory?.filter(item => 
-    item?.status && ['Received', 'Stored'].includes(item.status) && (
-      (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  ) || [];
+  const filteredInventory = Array.isArray(inventory)
+    ? inventory.filter(item => 
+        item?.status && ['Received', 'Stored'].includes(item.status) && (
+          (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      )
+    : [];
 
   console.log('[Inventory] Render:', {
     isLoading,
@@ -222,7 +232,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       {productionError && (
         <div className="alert alert-danger mb-3">{productionError}</div>
       )}
-      {!inventory?.length && !productionError && (
+      {!Array.isArray(inventory) && !productionError && (
+        <div className="alert alert-danger mb-3">Invalid inventory data: Expected an array.</div>
+      )}
+      {Array.isArray(inventory) && !inventory.length && !productionError && (
         <div className="alert alert-warning mb-3">No inventory data available.</div>
       )}
       <div className="inventory-actions mb-4 d-flex gap-2 flex-wrap">
