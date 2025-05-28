@@ -4264,9 +4264,17 @@ app.get('/api/vendors', (req, res) => {
 
 app.get('/api/vendors/:name', (req, res) => {
   const { name } = req.params;
+  console.log('GET /api/vendors/:name: Fetching', { name });
   db.get('SELECT * FROM vendors WHERE name = ?', [name], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Vendor not found' });
+    if (err) {
+      console.error('GET /api/vendors/:name: Database error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) {
+      console.log('GET /api/vendors/:name: Vendor not found', { name });
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+    console.log('GET /api/vendors/:name: Success', row);
     res.json(row);
   });
 });
@@ -4286,13 +4294,39 @@ app.post('/api/vendors', (req, res) => {
 
 app.put('/api/vendors', (req, res) => {
   const { oldName, newVendor } = req.body;
-  if (!oldName || !newVendor || !newVendor.name) return res.status(400).json({ error: 'Old name and new vendor details are required' });
+  if (!oldName || !newVendor || !newVendor.name) {
+    console.error('PUT /api/vendors: Invalid request', { oldName, newVendor });
+    return res.status(400).json({ error: 'Old name and new vendor details are required' });
+  }
+  console.log('PUT /api/vendors: Updating vendor', { oldName, newVendor });
   db.run(
     'UPDATE vendors SET name = ?, type = ?, enabled = ?, address = ?, email = ?, phone = ? WHERE name = ?',
-    [newVendor.name, newVendor.type, newVendor.enabled, newVendor.address, newVendor.email, newVendor.phone, oldName],
-    (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Vendor updated successfully', oldName, newName: newVendor.name });
+    [
+      newVendor.name,
+      newVendor.type || 'Supplier',
+      newVendor.enabled ?? 1,
+      newVendor.address || '',
+      newVendor.email || '',
+      newVendor.phone || '',
+      oldName,
+    ],
+    function (err) {
+      if (err) {
+        console.error('PUT /api/vendors: Update error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        console.log('PUT /api/vendors: Vendor not found', { oldName });
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+      db.get('SELECT * FROM vendors WHERE name = ?', [newVendor.name], (err, row) => {
+        if (err) {
+          console.error('PUT /api/vendors: Fetch updated vendor error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('PUT /api/vendors: Success', row);
+        res.json(row);
+      });
     }
   );
 });

@@ -11,7 +11,7 @@ interface VendorDetailsProps {
   refreshInventory: () => Promise<void>;
 }
 
-const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, refreshInventory }) => {
+const VendorDetails: React.FC<VendorDetailsProps> = ({ refreshVendors, refreshInventory }) => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -34,36 +34,70 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
 
   const getIdentifier = (item: InventoryItem) => `${item.item}-${item.lotNumber}`;
 
+  const fetchVendorDetails = async () => {
+    if (!name || name === 'new') return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/vendors/${encodeURIComponent(name)}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('[VendorDetails] Fetched vendor:', data);
+      setVendorDetails(data);
+      setEditedVendor({
+        name: data.name || '',
+        type: data.type || 'Supplier',
+        enabled: data.enabled ?? 1,
+        address: data.address || '',
+        email: data.email || '',
+        phone: data.phone || '',
+      });
+      setProductionError(null);
+    } catch (err: any) {
+      setProductionError('Failed to fetch vendor details: ' + err.message);
+      setVendorDetails({ name, type: 'Supplier', enabled: 1, address: '', email: '', phone: '' });
+      console.error('[VendorDetails] Fetch vendor error:', err);
+    }
+  };
+
   useEffect(() => {
     if (name && name !== 'new') {
-      const vendor = vendors.find(v => v.name === name);
-      if (vendor) {
-        setVendorDetails(vendor);
-        setEditedVendor(vendor);
-      }
+      fetchVendorDetails();
       fetchReceipts();
       fetchPurchaseOrders();
     }
-  }, [name, vendors]);
+  }, [name]);
 
   const fetchReceipts = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inventory?source=${name}`, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const encodedName = encodeURIComponent(name || '');
+      console.log('[VendorDetails] Fetching receipts:', { url: `${API_BASE_URL}/api/inventory?source=${encodedName}` });
+      const res = await fetch(`${API_BASE_URL}/api/inventory?source=${encodedName}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
+      }
       const data = await res.json();
       console.log('[VendorDetails] Fetched receipts:', data.items);
       setReceipts(data.items.filter((item: InventoryItem) => ['Received', 'Stored'].includes(item.status || '')));
       setProductionError(null);
     } catch (err: any) {
       setProductionError('Failed to fetch receipts: ' + err.message);
+      setReceipts([]);
       console.error('[VendorDetails] Fetch receipts error:', err);
     }
   };
 
   const fetchPurchaseOrders = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${name}`, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const encodedName = encodeURIComponent(name || '');
+      console.log('[VendorDetails] Fetching purchase orders:', { url: `${API_BASE_URL}/api/purchase-orders?supplier=${encodedName}` });
+      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedName}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
+      }
       const data = await res.json();
       console.log('[VendorDetails] Fetched purchase orders:', data);
       setPurchaseOrders(data);
@@ -80,10 +114,28 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
     }
     try {
       const method = name && name !== 'new' ? 'PUT' : 'POST';
-      const url = method === 'PUT' ? `${API_BASE_URL}/api/vendors` : `${API_BASE_URL}/api/vendors`;
+      const url = `${API_BASE_URL}/api/vendors`;
       const body = method === 'PUT'
-        ? { oldName: name, newVendor: editedVendor }
-        : { ...editedVendor };
+        ? {
+            oldName: name,
+            newVendor: {
+              name: editedVendor.name,
+              type: editedVendor.type || 'Supplier',
+              enabled: editedVendor.enabled ?? 1,
+              address: editedVendor.address || '',
+              email: editedVendor.email || '',
+              phone: editedVendor.phone || '',
+            },
+          }
+        : {
+            name: editedVendor.name,
+            type: editedVendor.type || 'Supplier',
+            enabled: editedVendor.enabled ?? 1,
+            address: editedVendor.address || '',
+            email: editedVendor.email || '',
+            phone: editedVendor.phone || '',
+          };
+      console.log('[VendorDetails] Saving vendor:', { method, url, body });
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -93,8 +145,10 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
         const text = await res.text();
         throw new Error(`HTTP error! status: ${res.status}, ${text.slice(0, 50)}`);
       }
-      console.log('[VendorDetails] Saved vendor:', editedVendor);
-      setVendorDetails(editedVendor);
+      const updatedVendor = await res.json();
+      console.log('[VendorDetails] Saved vendor:', updatedVendor);
+      setVendorDetails(method === 'PUT' ? updatedVendor : body);
+      setEditedVendor(method === 'PUT' ? updatedVendor : body);
       setEditing(false);
       await refreshVendors();
       setProductionError(null);
@@ -103,6 +157,8 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
       } else {
         navigate(`/vendors/${editedVendor.name}`);
       }
+      // Refetch to ensure sync
+      await fetchVendorDetails();
     } catch (err: any) {
       setProductionError('Failed to save vendor: ' + err.message);
       console.error('[VendorDetails] Save vendor error:', err);
@@ -153,6 +209,8 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
 
   console.log('[VendorDetails] Render:', {
     vendor: name,
+    vendorDetails,
+    editedVendor,
     activeTab,
     editing,
     receiptsLength: receipts.length,
@@ -168,22 +226,13 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
       <h2 className="app-header mb-4">{name === 'new' ? 'Add New Vendor' : `${vendorDetails?.name} Details`}</h2>
       {name !== 'new' && (
         <div className="vendor-tabs">
-          <button
-            className={activeTab === 'info' ? 'active' : ''}
-            onClick={() => setActiveTab('info')}
-          >
+          <button className={activeTab === 'info' ? 'active' : ''} onClick={() => setActiveTab('info')}>
             Information
           </button>
-          <button
-            className={activeTab === 'receipts' ? 'active' : ''}
-            onClick={() => setActiveTab('receipts')}
-          >
+          <button className={activeTab === 'receipts' ? 'active' : ''} onClick={() => setActiveTab('receipts')}>
             Inventory Receipts
           </button>
-          <button
-            className={activeTab === 'orders' ? 'active' : ''}
-            onClick={handleViewPOs}
-          >
+          <button className={activeTab === 'orders' ? 'active' : ''} onClick={handleViewPOs}>
             Purchase Orders
           </button>
           <select
@@ -198,7 +247,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
         </div>
       )}
       {productionError && <div className="alert alert-danger">{productionError}</div>}
-      
+
       {activeTab === 'info' && (
         <div className="vendor-form">
           <label className="form-label">
@@ -218,7 +267,7 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
             Type:
             {editing ? (
               <select
-                value={editedVendor.type || ''}
+                value={editedVendor.type || 'Supplier'}
                 onChange={(e) => setEditedVendor({ ...editedVendor, type: e.target.value })}
                 className="form-control"
               >
@@ -323,10 +372,18 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
                   {receipts.map((receipt) => (
                     <div key={getIdentifier(receipt)} className="vendor-receipts-item card mb-2">
                       <div className="card-body">
-                        <p className="card-text"><strong>Item-Lot:</strong> {getIdentifier(receipt)}</p>
-                        <p className="card-text"><strong>Type:</strong> {receipt.type}</p>
-                        <p className="card-text"><strong>Quantity:</strong> {receipt.quantity}</p>
-                        <p className="card-text"><strong>Date Received:</strong> {receipt.receivedDate}</p>
+                        <p className="card-text">
+                          <strong>Item-Lot:</strong> {getIdentifier(receipt)}
+                        </p>
+                        <p className="card-text">
+                          <strong>Type:</strong> {receipt.type}
+                        </p>
+                        <p className="card-text">
+                          <strong>Quantity:</strong> {receipt.quantity}
+                        </p>
+                        <p className="card-text">
+                          <strong>Date Received:</strong> {receipt.receivedDate}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -383,10 +440,18 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
                   {purchaseOrders.map((order) => (
                     <div key={order.poNumber} className="vendor-orders-item card mb-2">
                       <div className="card-body">
-                        <p className="card-text"><strong>PO Number:</strong> {order.poNumber}</p>
-                        <p className="card-text"><strong>Site:</strong> {order.siteId || 'N/A'}</p>
-                        <p className="card-text"><strong>PO Date:</strong> {order.poDate || 'N/A'}</p>
-                        <p className="card-text"><strong>Comments:</strong> {order.comments || 'N/A'}</p>
+                        <p className="card-text">
+                          <strong>PO Number:</strong> {order.poNumber}
+                        </p>
+                        <p className="card-text">
+                          <strong>Site:</strong> {order.siteId || 'N/A'}
+                        </p>
+                        <p className="card-text">
+                          <strong>PO Date:</strong> {order.poDate || 'N/A'}
+                        </p>
+                        <p className="card-text">
+                          <strong>Comments:</strong> {order.comments || 'N/A'}
+                        </p>
                         <button
                           onClick={() => handleEditPO(order.poNumber)}
                           className="btn btn-primary"
@@ -399,7 +464,9 @@ const VendorDetails: React.FC<VendorDetailsProps> = ({ vendors, refreshVendors, 
                 </div>
               </>
             ) : (
-              <div className="alert alert-info text-center">No purchase orders found.</div>
+              <div className="alert alert-info text-center">
+                No purchase orders found.
+              </div>
             )}
           </div>
         </div>
