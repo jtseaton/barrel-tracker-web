@@ -257,7 +257,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     !newRecipe.unit ||
     newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
   ) {
-    setError('Recipe name, product, valid quantity, unit, and ingredients with units are required');
+    setError('Recipe name, product, valid quantity, unit, and ingredients are required');
     return;
   }
   const product = products.find(p => p.id === newRecipe.productId);
@@ -265,10 +265,15 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     setError('Selected product is invalid or not found.');
     return;
   }
-  // Validate ingredients against inventory.identifier
+  // Validate ingredients against inventory.identifier and normalize unit
   const invalidIngredients = newRecipe.ingredients.filter(ing => {
     const inventoryItem = inventory.find(i => i.identifier === ing.itemName);
-    return !inventoryItem;
+    if (!inventoryItem) return true;
+    // Normalize unit to 'lbs' if inventory uses 'Pounds' or 'lbs'
+    if (inventoryItem.unit.toLowerCase() === 'pounds' || inventoryItem.unit === 'lbs') {
+      ing.unit = 'lbs'; // Matches Unit enum
+    }
+    return false;
   });
   if (invalidIngredients.length > 0) {
     setError(`Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory`);
@@ -283,7 +288,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         ingredients: newRecipe.ingredients.map(ing => ({
           itemName: ing.itemName,
           quantity: ing.quantity,
-          unit: ing.unit,
+          unit: ing.unit, // 'lbs' for Flaked Corn
         })),
       }),
     });
@@ -300,7 +305,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     }
     const addedRecipe = await res.json();
     console.log('[Production] Added recipe:', addedRecipe);
-    // Update recipes state and refetch for the product
     setRecipes([...recipes, addedRecipe]);
     await fetchRecipes(newRecipe.productId);
     setShowAddRecipeModal(false);
