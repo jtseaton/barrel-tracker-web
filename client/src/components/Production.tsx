@@ -247,7 +247,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   }
 };
 
-  const handleAddRecipe = async () => {
+const handleAddRecipe = async () => {
   if (
     !newRecipe.name ||
     !newRecipe.productId ||
@@ -264,7 +264,25 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     return;
   }
   const invalidIngredients = newRecipe.ingredients.filter(ing => {
-    const inventoryItem = inventory.find(i => i.identifier === ing.itemName);
+    const inventoryItem = inventory.find(i => 
+      i.identifier === ing.itemName && 
+      (i.status as string) === 'Stored' && // Cast to string to bypass TS2367
+      i.siteId === newBatch.siteId &&
+      (i.type === 'Spirits' ? i.account === 'Storage' : true)
+    );
+    console.log('[Production] Checking ingredient:', {
+      itemName: ing.itemName,
+      inventoryItem: inventoryItem ? { 
+        identifier: inventoryItem.identifier, 
+        type: inventoryItem.type,
+        account: inventoryItem.account, 
+        status: inventoryItem.status, 
+        siteId: inventoryItem.siteId, 
+        locationId: inventoryItem.locationId, 
+        quantity: inventoryItem.quantity, 
+        unit: inventoryItem.unit 
+      } : null
+    });
     if (!inventoryItem) return true;
     if (['pounds', 'lbs'].includes(inventoryItem.unit.toLowerCase())) {
       ing.unit = 'lbs';
@@ -272,7 +290,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     return false;
   });
   if (invalidIngredients.length > 0) {
-    setError(`Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory`);
+    setError(`Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory (Stored, correct site)`);
     return;
   }
   try {
@@ -295,7 +313,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         const errorData = JSON.parse(text);
         errorMessage = errorData.error || errorMessage;
       } catch {
-        console.error('[Production] Failed to parse error response:', text);
+        console.error('[Production] Recipe error:', text);
       }
       throw new Error(errorMessage);
     }
@@ -307,14 +325,15 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     setNewRecipe({
       name: '',
       productId: 0,
-      ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
+      ingredients: [],
       quantity: 0,
       unit: 'barrels',
     });
     setError(null);
-  } catch (err: any) {
+  } catch (err: unknown) { // Fix TS1196
     console.error('[Production] Add recipe error:', err);
-    setError('Failed to save recipe: ' + err.message);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    setError('Failed to save recipe: ' + errorMessage);
   }
 };
 
@@ -448,7 +467,7 @@ return (
                       setSelectedBatchIds(
                         selectedBatchIds.length === filteredBatches.length
                           ? []
-                          : filteredBatches.map(batch => batch.batchId)
+                          : filteredBatches.map(b => b.batchId)
                       )
                     }
                   />
@@ -471,7 +490,7 @@ return (
                     />
                   </td>
                   <td>
-                    <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
+                    <Link to={`/production/${batch.batchId}`} className="text-primary">
                       {batch.batchId}
                     </Link>
                   </td>
@@ -485,7 +504,7 @@ return (
           </table>
           <div className="batch-list">
             {filteredBatches.map(batch => (
-              <div key={batch.batchId} className="batch-card card mb-2">
+              <div key={batch.batchId} className="batch-card-body card mb-3">
                 <div className="card-body">
                   <input
                     type="checkbox"
@@ -494,7 +513,7 @@ return (
                     className="me-2"
                   />
                   <h5 className="card-title">
-                    <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
+                    <Link to={`/production/${batch.batchId}`} className="text-primary">
                       {batch.batchId}
                     </Link>
                   </h5>
@@ -599,7 +618,7 @@ return (
               <label className="form-label">
                 Fermenter (optional):
                 <select
-                  value={newBatch.fermenterId ?? ''}
+                  value={newBatch.fermenterId || ''}
                   onChange={e => {
                     const value = e.target.value;
                     setNewBatch({ ...newBatch, fermenterId: value ? parseInt(value, 10) : null });
@@ -780,7 +799,7 @@ return (
                 setNewRecipe({
                   name: '',
                   productId: 0,
-                  ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
+                  ingredients: [],
                   quantity: 0,
                   unit: 'barrels',
                 });
