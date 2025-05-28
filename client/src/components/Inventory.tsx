@@ -41,6 +41,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     console.log('[Inventory] Inventory prop:', {
       length: inventory.length,
       items: inventory.map(item => item.identifier),
+      styles: {
+        pageContainer: 'background: #FFFFFF, color: #000000',
+        header: 'color: #FFFFFF',
+        table: 'background: #FFFFFF, color: #555555',
+        buttons: 'background: #2196F3, hover: #1976D2',
+      },
     });
   }, [inventory]);
 
@@ -219,12 +225,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
 
   return (
     <div className="page-container container">
-      <h2 className="text-warning mb-4">Inventory Management</h2>
+      <h2 className="app-header mb-4">Inventory Management</h2>
       {productionError && (
         <div className="alert alert-danger mb-3">{productionError}</div>
       )}
-      {!inventory.length && !productionError && (
-        <div className="alert alert-warning mb-3">No inventory data available.</div>
+      {!filteredInventory.length && !productionError && (
+        <div className="alert alert-warning mb-3">No inventory items found.</div>
       )}
       <div className="inventory-actions mb-4 d-flex gap-2 flex-wrap">
         <button className="btn btn-primary" onClick={() => navigate('/receive')}>
@@ -249,7 +255,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         />
       </div>
 
-      <h3 className="text-warning mb-3">Received/Stored Inventory</h3>
+      <h3 className="app-header mb-3">Received/Stored Inventory</h3>
       <div className="inventory-table-container">
         {filteredInventory.length > 0 ? (
           <>
@@ -309,7 +315,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         )}
       </div>
 
-      <h3 className="text-warning mb-3">Daily Summary</h3>
+      <h3 className="app-header mb-3">Daily Summary</h3>
       <div className="inventory-table-container">
         {dailySummary.length > 0 ? (
           <>
@@ -355,10 +361,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       </div>
 
       {showMoveModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto', backgroundColor: '#FFFFFF' }}>
             <div className="modal-header">
-              <h5 className="modal-title">Move Inventory</h5>
+              <h5 className="modal-title" style={{ color: '#555555' }}>Move Inventory</h5>
             </div>
             <div className="modal-body">
               <input
@@ -389,7 +395,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               <button className="btn btn-primary" onClick={handleMove}>
                 Move
               </button>
-              <button className="btn btn-secondary" onClick={() => setShowMoveModal(false)}>
+              <button className="btn btn-danger" onClick={() => setShowMoveModal(false)}>
                 Cancel
               </button>
             </div>
@@ -398,10 +404,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       )}
 
       {showLossModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto', backgroundColor: '#FFFFFF' }}>
             <div className="modal-header">
-              <h5 className="modal-title">Record Loss</h5>
+              <h5 className="modal-title" style={{ color: '#555555' }}>Record Loss</h5>
             </div>
             <div className="modal-body">
               <input
@@ -443,7 +449,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
               <button className="btn btn-primary" onClick={handleRecordLoss}>
                 Record Loss
               </button>
-              <button className="btn btn-secondary" onClick={() => setShowLossModal(false)}>
+              <button className="btn btn-danger" onClick={() => setShowLossModal(false)}>
                 Cancel
               </button>
             </div>
