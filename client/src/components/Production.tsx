@@ -185,69 +185,67 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleAddBatch = async () => {
-    if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
-      setError('All fields are required');
-      return;
-    }
-    const product = products.find(p => p.id === newBatch.productId);
-    if (!product) {
-      setError('Invalid product selected');
-      return;
-    }
-    const recipe = recipes.find(r => r.id === newBatch.recipeId);
-    if (!recipe) {
-      setError('Invalid recipe selected');
-      return;
-    }
-    const batchData = {
-      batchId: newBatch.batchId,
-      productId: newBatch.productId,
-      recipeId: newBatch.recipeId,
-      siteId: newBatch.siteId,
-      fermenterId: newBatch.fermenterId || null,
-      status: 'In Progress',
-      date: new Date().toISOString().split('T')[0],
-    };
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/batches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(batchData),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        let errorMessage = `Failed to add batch: HTTP ${res.status}, ${text.slice(0, 50)}`;
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.error || errorMessage;
-          if (errorMessage.includes('Insufficient inventory')) {
-            setErrorMessage(errorMessage);
-            setShowErrorPopup(true);
-          } else {
-            setError(errorMessage);
-          }
-        } catch {
-          setError(errorMessage);
-        }
-        throw new Error(errorMessage);
-      }
-      await res.json();
-      setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
-      setRecipes([]);
-      setEquipment([]);
-      await refreshInventory();
-      await fetchBatches();
-      setError(null);
-      setErrorMessage(null);
-      setShowErrorPopup(false);
-    } catch (err: any) {
-      console.error('Add batch error:', err);
-      if (!showErrorPopup) {
-        setError('Failed to add batch: ' + err.message);
-      }
-    }
+  if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
+    setError('All fields are required');
+    return;
+  }
+  const product = products.find(p => p.id === newBatch.productId);
+  if (!product) {
+    setError('Invalid product selected');
+    return;
+  }
+  const recipe = recipes.find(r => r.id === newBatch.recipeId);
+  if (!recipe) {
+    setError('Invalid recipe selected');
+    return;
+  }
+  const batchData = {
+    batchId: newBatch.batchId,
+    productId: newBatch.productId,
+    recipeId: newBatch.recipeId,
+    siteId: newBatch.siteId,
+    fermenterId: newBatch.fermenterId || null,
+    status: 'In Progress',
+    date: new Date().toISOString().split('T')[0],
   };
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/batches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(batchData),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let errorMessage = `Failed to add batch: HTTP ${res.status}, ${text.slice(0, 50)}`;
+      try {
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        console.error('[Production] Failed to parse error response:', text);
+      }
+      setErrorMessage(errorMessage);
+      setShowErrorPopup(true);
+      setShowAddBatchModal(false); // Close modal on error
+      throw new Error(errorMessage);
+    }
+    await res.json();
+    console.log('[Production] Added batch:', batchData);
+    setShowAddBatchModal(false);
+    setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+    setRecipes([]);
+    setEquipment([]);
+    await refreshInventory();
+    await fetchBatches();
+    setError(null);
+    setErrorMessage(null);
+    setShowErrorPopup(false);
+  } catch (err: any) {
+    console.error('[Production] Add batch error:', err);
+    if (!showErrorPopup) {
+      setError('Failed to add batch: ' + err.message);
+    }
+  }
+};
 
   const handleAddRecipe = async () => {
   if (
@@ -265,13 +263,11 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     setError('Selected product is invalid or not found.');
     return;
   }
-  // Validate ingredients against inventory.identifier and normalize unit
   const invalidIngredients = newRecipe.ingredients.filter(ing => {
     const inventoryItem = inventory.find(i => i.identifier === ing.itemName);
     if (!inventoryItem) return true;
-    // Normalize unit to 'lbs' if inventory uses 'Pounds' or 'lbs'
-    if (inventoryItem.unit.toLowerCase() === 'pounds' || inventoryItem.unit === 'lbs') {
-      ing.unit = 'lbs'; // Matches Unit enum
+    if (['pounds', 'lbs'].includes(inventoryItem.unit.toLowerCase())) {
+      ing.unit = 'lbs';
     }
     return false;
   });
@@ -288,7 +284,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         ingredients: newRecipe.ingredients.map(ing => ({
           itemName: ing.itemName,
           quantity: ing.quantity,
-          unit: ing.unit, // 'lbs' for Flaked Corn
+          unit: ing.unit,
         })),
       }),
     });
@@ -407,7 +403,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     (batch.productName && batch.productName.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  return (
+return (
   <div className="page-container container">
     <h2 className="app-header mb-4">Production</h2>
     {error && <div className="alert alert-danger">{error}</div>}
@@ -417,9 +413,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       </button>
       <button
         className="btn btn-primary"
-        onClick={() => {
-          refreshProducts().then(() => setShowAddRecipeModal(true));
-        }}
+        onClick={() => refreshProducts().then(() => setShowAddRecipeModal(true))}
       >
         Add Recipe
       </button>
@@ -642,19 +636,21 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       </div>
     )}
     {showErrorPopup && (
-      <div className="modal fade show d-block">
+      <div className="modal fade show d-block error-modal">
         <div className="modal-dialog modal-content">
           <div className="modal-header">
-            <h5 className="modal-title text-danger">Inventory Error</h5>
+            <h5 className="modal-title text-danger">Error</h5>
           </div>
           <div className="modal-body">
-            <p>{errorMessage}</p>
+            <p>{errorMessage || error}</p>
           </div>
           <div className="modal-footer">
             <button
               onClick={() => {
                 setShowErrorPopup(false);
                 setErrorMessage(null);
+                setError(null);
+                setShowAddBatchModal(false);
               }}
               className="btn btn-primary"
             >
@@ -827,7 +823,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       </div>
     )}
   </div>
-  );
+);
 };
 
 export default Production;
