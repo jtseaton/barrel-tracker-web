@@ -401,12 +401,19 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       <h2 className="app-header mb-4">Production</h2>
       {error && <div className="alert alert-danger">{error}</div>}
       <div className="inventory-actions mb-4">
-        <button className="btn btn-primary" onClick={() => setShowAddBatchModal(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            console.log('[Production] Add New Batch button clicked');
+            setShowAddBatchModal(true);
+          }}
+        >
           Add New Batch
         </button>
         <button
           className="btn btn-primary"
           onClick={() => {
+            console.log('[Production] Add Recipe button clicked');
             refreshProducts().then(() => setShowAddRecipeModal(true));
           }}
         >
@@ -533,16 +540,145 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         products={products}
         items={items}
       />
+      {showAddBatchModal && (
+        <div
+          className="modal"
+          style={{
+            display: 'block',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 2100,
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+        >
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: '500px',
+              margin: '100px auto',
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              padding: '20px',
+            }}
+          >
+            <div className="modal-header" style={{ borderBottom: '1px solid #ddd', marginBottom: '15px' }}>
+              <h5 style={{ color: '#555', margin: 0 }}>Add New Batch</h5>
+            </div>
+            <div className="modal-body">
+              <div className="recipe-form">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                  Batch ID (required):
+                  <input
+                    type="text"
+                    value={newBatch.batchId || ''}
+                    onChange={e => setNewBatch({ ...newBatch, batchId: e.target.value })}
+                    placeholder="Enter batch ID"
+                    className="form-control"
+                  />
+                </label>
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                  Product (required):
+                  <select
+                    value={newBatch.productId || ''}
+                    onChange={e => {
+                      const productId = parseInt(e.target.value, 10);
+                      setNewBatch({ ...newBatch, productId, recipeId: 0 });
+                      fetchRecipes(productId);
+                    }}
+                    className="form-control"
+                  >
+                    <option value="">Select Product</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                  Recipe (required):
+                  <select
+                    value={newBatch.recipeId || ''}
+                    onChange={e => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
+                    disabled={!newBatch.productId}
+                    className="form-control"
+                  >
+                    <option value="">Select Recipe</option>
+                    {recipes.map(recipe => (
+                      <option key={recipe.id} value={recipe.id}>
+                        {recipe.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                  Site (required):
+                  <select
+                    value={newBatch.siteId || ''}
+                    onChange={e => setNewBatch({ ...newBatch, siteId: e.target.value })}
+                    className="form-control"
+                  >
+                    <option value="">Select Site</option>
+                    {sites.map(site => (
+                      <option key={site.siteId} value={site.siteId}>
+                        {site.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                  Fermenter (optional):
+                  <select
+                    value={newBatch.fermenterId || ''}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setNewBatch({ ...newBatch, fermenterId: value ? parseInt(e.target.value, 10) : null });
+                    }}
+                    disabled={!newBatch.siteId || equipment.length === 0}
+                    className="form-control"
+                  >
+                    <option value="">Select Fermenter (optional)</option>
+                    {equipment.map(item => (
+                      <option key={item.equipmentId} value={item.equipmentId}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ borderTop: '1px solid #ddd', marginTop: '15px' }}>
+              <button onClick={handleAddBatch} className="btn btn-primary">
+                Create
+              </button>
+              <button
+                onClick={() => {
+                  console.log('[Production] Batch modal Cancel clicked');
+                  setShowAddBatchModal(false);
+                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+                  setError(null);
+                }}
+                className="btn btn-danger"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showErrorPopup && (
-        <div className="modal fade show d-block error-modal" style={{ zIndex: 2100 }}>
-          <div className="modal-dialog modal-content">
-            <div className="modal-header">
+        <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100 }}>
+          <div className="modal-content" style={{ maxWidth: '500px', margin: '100px auto', backgroundColor: '#fff', borderRadius: '8px', padding: '20px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #ddd', marginBottom: '15px' }}>
               <h5 className="modal-title text-danger">Error</h5>
             </div>
             <div className="modal-body">
               <p>{errorMessage || error}</p>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ borderTop: '1px solid #ddd', marginTop: '15px' }}>
               <button
                 onClick={() => {
                   setShowErrorPopup(false);
@@ -554,34 +690,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
               >
                 OK
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showBatchActionsModal && (
-        <div className="modal fade show d-block" style={{ zIndex: 2100 }}>
-          <div className="modal-dialog modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Batch Actions</h5>
-            </div>
-            <div className="modal-body">
-              <div className="d-flex flex-column gap-2">
-                <button onClick={handleCompleteBatches} className="btn btn-primary">
-                  Complete Selected
-                </button>
-                <button onClick={handleDeleteBatches} className="btn btn-danger">
-                  Delete Selected
-                </button>
-                <button
-                  onClick={() => {
-                    setShowBatchActionsModal(false);
-                    setError(null);
-                  }}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
         </div>
