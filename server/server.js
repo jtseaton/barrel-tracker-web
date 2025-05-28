@@ -176,6 +176,16 @@ const initializeDatabase = () => {
       )
     `);
     db.run(`
+      CREATE TABLE IF NOT EXISTS recipe_ingredients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipeId INTEGER NOT NULL,
+        itemName TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        FOREIGN KEY (recipeId) REFERENCES recipes(id)
+      )
+    `);
+    db.run(`
       CREATE TABLE IF NOT EXISTS sales_orders (
         orderId INTEGER PRIMARY KEY AUTOINCREMENT,
         customerId INTEGER NOT NULL,
@@ -2451,7 +2461,7 @@ app.post('/api/batches', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   console.log('POST /api/batches:', { batchId, recipeId });
-  db.all('SELECT * FROM recipe_ingredients WHERE recipeId = ?', [parseInt(recipeId)], (err, ingredients) => {
+  db.all('SELECT itemName, quantity, unit FROM recipe_ingredients WHERE recipeId = ?', [parseInt(recipeId)], (err, ingredients) => {
     if (err) {
       console.error('POST /api/batches: Fetch ingredients error:', err);
       return res.status(500).json({ error: err.message });
@@ -2460,14 +2470,11 @@ app.post('/api/batches', (req, res) => {
     const errors = [];
     let pending = ingredients.length;
     if (!pending) {
-      // No ingredients to validate, proceed with insertion
       insertBatch();
       return;
     }
-
     for (const ing of ingredients) {
-      const inventoryItemName = ingredientMap[ing.itemName] || ing.itemName;
-      // Normalize unit (lbs or Pounds to lowercase)
+      const inventoryItemName = ing.itemName;
       const recipeUnit = ing.unit.toLowerCase() === 'pounds' ? 'lbs' : ing.unit.toLowerCase();
       db.all(
         'SELECT identifier, quantity, unit FROM inventory WHERE identifier = ? AND siteId = ? AND status = ?',
@@ -2478,7 +2485,6 @@ app.post('/api/batches', (req, res) => {
             return res.status(500).json({ error: err.message });
           }
           console.log('POST /api/batches: Inventory rows for', { item: inventoryItemName, rows });
-          // Filter rows with matching normalized unit
           const totalAvailable = rows.reduce((sum, row) => {
             const inventoryUnit = row.unit.toLowerCase() === 'pounds' ? 'lbs' : row.unit.toLowerCase();
             return inventoryUnit === recipeUnit ? sum + parseFloat(row.quantity) : sum;
@@ -2505,7 +2511,6 @@ app.post('/api/batches', (req, res) => {
         }
       );
     }
-
     function insertBatch() {
       db.run(
         'INSERT INTO batches (batchId, productId, recipeId, siteId, fermenterId, status, date) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -4023,23 +4028,39 @@ app.get('/api/batches/:batchId/brewlog', (req, res) => {
   });
 });
 
-// Update /api/recipes to handle ingredients (replace existing /api/recipes, ~line 600)
 app.get('/api/recipes', (req, res) => {
   const productId = req.query.productId;
   if (!productId) {
     return res.status(400).json({ error: 'productId query parameter is required' });
   }
-  db.all('SELECT id, name, productId, ingredients, quantity, unit FROM recipes WHERE productId = ?', [productId], (err, rows) => {
+  db.all('SELECT id, name, productId, quantity, unit FROM recipes WHERE productId = ?', [productId], (err, rows) => {
     if (err) {
       console.error('Fetch recipes error:', err);
       return res.status(500).json({ error: err.message });
     }
-    const recipes = rows.map(row => ({
-      ...row,
-      ingredients: JSON.parse(row.ingredients || '[]'),
-    }));
-    console.log('GET /api/recipes, returning:', recipes);
-    res.json(recipes);
+    let remaining = rows.length;
+    if (remaining === 0) {
+      res.json([]);
+      return;
+    }
+    const recipes = [];
+    rows.forEach(row => {
+      db.all(
+        'SELECT itemName, quantity, unit FROM recipe_ingredients WHERE recipeId = ?',
+        [row.id],
+        (err, ingredients) => {
+          if (err) {
+            console.error('Fetch recipe ingredients error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          recipes.push({ ...row, ingredients });
+          if (--remaining === 0) {
+            console.log('GET /api/recipes, returning:', recipes);
+            res.json(recipes);
+          }
+        }
+      );
+    });
   });
 });
 
@@ -4058,34 +4079,44 @@ app.post('/api/recipes', (req, res) => {
   db.get('SELECT id FROM products WHERE id = ?', [productId], (err, product) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!product) return res.status(400).json({ error: 'Invalid productId' });
-    const invalidIngredients = ingredients.filter(ing => !ing.itemName || isNaN(ing.quantity) || ing.quantity <= 0);
+    const invalidIngredients = ingredients.filter(ing => !ing.itemName || isNaN(ing.quantity) || ing.quantity <= 0 || !ing.unit);
     if (invalidIngredients.length > 0) {
-      return res.status(400).json({ error: 'All ingredients must have a valid itemName and positive quantity' });
+      return res.status(400).json({ error: 'All ingredients must have valid itemName, quantity, and unit' });
     }
-    const checks = ingredients.map(ing => new Promise((resolve, reject) => {
-      db.get('SELECT name FROM items WHERE name = ? AND enabled = 1', [ing.itemName], (err, item) => {
-        if (err) return reject(err);
-        if (!item) return reject(new Error(`Item not found: ${ing.itemName}`));
-        resolve();
-      });
-    }));
-    Promise.all(checks).then(() => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
       db.run(
-        'INSERT INTO recipes (name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?)',
-        [name, productId, JSON.stringify(ingredients), quantity, unit.toLowerCase()],
-        function(err) {
+        'INSERT INTO recipes (name, productId, quantity, unit) VALUES (?, ?, ?, ?)',
+        [name, productId, quantity, unit.toLowerCase()],
+        function (err) {
           if (err) {
+            db.run('ROLLBACK');
             console.error('Insert recipe error:', err);
             return res.status(500).json({ error: err.message });
           }
-          const newRecipe = { id: this.lastID, name, productId, ingredients, quantity, unit: unit.toLowerCase() };
-          console.log('POST /api/recipes, added:', newRecipe);
-          res.json(newRecipe);
+          const recipeId = this.lastID;
+          let remaining = ingredients.length;
+          ingredients.forEach(ing => {
+            db.run(
+              'INSERT INTO recipe_ingredients (recipeId, itemName, quantity, unit) VALUES (?, ?, ?, ?)',
+              [recipeId, ing.itemName, ing.quantity, ing.unit.toLowerCase()],
+              (err) => {
+                if (err) {
+                  db.run('ROLLBACK');
+                  console.error('Insert recipe ingredient error:', err);
+                  return res.status(500).json({ error: err.message });
+                }
+                if (--remaining === 0) {
+                  db.run('COMMIT');
+                  const newRecipe = { id: recipeId, name, productId, ingredients, quantity, unit: unit.toLowerCase() };
+                  console.log('POST /api/recipes, added:', newRecipe);
+                  res.json(newRecipe);
+                }
+              }
+            );
+          });
         }
       );
-    }).catch(err => {
-      console.error('Ingredient validation error:', err);
-      res.status(400).json({ error: err.message });
     });
   });
 });
