@@ -1,9 +1,11 @@
+// client/src/components/Customers.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Customer } from '../types/interfaces';
+import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://tilly.onrender.com';
 
 const Customers: React.FC = () => {
   const navigate = useNavigate();
@@ -14,28 +16,29 @@ const Customers: React.FC = () => {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(`${API_BASE_URL}/api/customers`, {
           headers: { Accept: 'application/json' },
-          credentials: 'include', // Include cookies for authentication
+          signal: controller.signal,
         });
-        console.log('Fetch /api/customers: Status:', res.status, 'OK:', res.ok);
+        clearTimeout(timeoutId);
+        console.log('[Customers] Fetch /api/customers: Status:', res.status);
         if (!res.ok) {
           const text = await res.text();
-          console.error('Fetch /api/customers: Error Response:', text);
-          throw new Error(`Failed to fetch customers: HTTP ${res.status}, Response: ${text.slice(0, 100)}`);
+          throw new Error(`HTTP ${res.status}: ${text.slice(0, 100)}`);
         }
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
           const text = await res.text();
-          console.error('Fetch /api/customers: Invalid content-type:', contentType, 'Response:', text);
-          throw new Error(`Invalid response: Expected JSON, got ${contentType || 'none'}`);
+          throw new Error(`Expected JSON, got ${contentType || 'none'}: ${text}`);
         }
         const data = await res.json();
-        console.log('Fetch /api/customers: Success, Data:', data);
+        console.log('[Customers] Fetched customers:', data);
         setCustomers(data);
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Fetch customers error:', err);
+        console.error('[Customers] Fetch error:', err);
         setError('Failed to load customers: ' + errorMessage);
       }
     };
@@ -51,108 +54,98 @@ const Customers: React.FC = () => {
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Failed to delete customer: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 50)}`);
       }
+      console.log('[Customers] Deleted customer:', customerId);
       setCustomers(customers.filter(c => c.customerId !== customerId));
       setSuccessMessage('Customer deleted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[Customers] Delete error:', err);
       setError('Failed to delete customer: ' + errorMessage);
     }
   };
 
+  console.log('[Customers] Render:', {
+    customersLength: customers.length,
+    error,
+    successMessage,
+    isMobile: window.innerWidth <= 768 ? 'cards' : 'table',
+  });
+
   return (
-    <div className="page-container">
-      <h2 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px' }}>Customers</h2>
-      {error && <div className="error">{error}</div>}
-      {successMessage && (
-        <div
-          style={{
-            color: '#28A745',
-            backgroundColor: '#e6ffe6',
-            padding: '10px',
-            borderRadius: '4px',
-            marginBottom: '10px',
-            textAlign: 'center',
-          }}
-        >
-          {successMessage}
-        </div>
-      )}
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => navigate('/customers/new')}
-          style={{
-            backgroundColor: '#2196F3',
-            color: '#fff',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-        >
+    <div className="page-container container">
+      <h2 className="app-header mb-4">Customers</h2>
+      {error && <div className="alert alert-danger">{error}</div>}
+      {successMessage && <div className="alert alert-success">{successMessage}</div>}
+      <div className="inventory-actions mb-4">
+        <button onClick={() => navigate('/customers/new')} className="btn btn-primary">
           Add Customer
         </button>
       </div>
-      {customers.length === 0 ? (
-        <p style={{ color: '#555' }}>No customers found.</p>
-      ) : (
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            backgroundColor: '#fff',
-            borderRadius: '8px',
-            marginTop: '10px',
-          }}
-        >
-          <thead>
-            <tr>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Name</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Email</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Phone</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Enabled</th>
-              <th style={{ padding: '10px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', color: '#555' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customers.map((customer) => (
-              <tr
-                key={customer.customerId}
-                style={{ cursor: 'pointer' }}
-                onClick={() => navigate(`/customers/${customer.customerId}`)}
-              >
-                <td style={{ padding: '10px' }}>{customer.name}</td>
-                <td style={{ padding: '10px' }}>{customer.email}</td>
-                <td style={{ padding: '10px' }}>{customer.phone || 'N/A'}</td>
-                <td style={{ padding: '10px' }}>{customer.enabled ? 'Yes' : 'No'}</td>
-                <td style={{ padding: '10px' }}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(customer.customerId);
-                    }}
-                    style={{
-                      backgroundColor: '#F86752',
-                      color: '#fff',
-                      padding: '8px 12px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                    }}
+      <div className="inventory-table-container">
+        {customers.length === 0 ? (
+          <div className="alert alert-info text-center">No customers found.</div>
+        ) : (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Enabled</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((customer) => (
+                  <tr
+                    key={customer.customerId}
+                    onClick={() => navigate(`/customers/${customer.customerId}`)}
                   >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+                    <td>{customer.name}</td>
+                    <td>{customer.email}</td>
+                    <td>{customer.phone || 'N/A'}</td>
+                    <td>{customer.enabled ? 'Yes' : 'No'}</td>
+                    <td>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(customer.customerId);
+                        }}
+                        className="btn btn-danger"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="customer-card-list">
+              {customers.map((customer) => (
+                <div key={customer.customerId} className="customer-card-item card mb-2">
+                  <div className="card-body">
+                    <p className="card-text"><strong>Name:</strong> {customer.name}</p>
+                    <p className="card-text"><strong>Email:</strong> {customer.email}</p>
+                    <p className="card-text"><strong>Phone:</strong> {customer.phone || 'N/A'}</p>
+                    <p className="card-text"><strong>Enabled:</strong> {customer.enabled ? 'Yes' : 'No'}</p>
+                    <button
+                      onClick={() => handleDelete(customer.customerId)}
+                      className="btn btn-danger"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

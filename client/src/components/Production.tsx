@@ -250,56 +250,73 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleAddRecipe = async () => {
-    if (
-      !newRecipe.name ||
-      !newRecipe.productId ||
-      newRecipe.quantity <= 0 ||
-      !newRecipe.unit ||
-      newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
-    ) {
-      setError('Recipe name, product, valid quantity, unit, and ingredients with units are required');
-      return;
-    }
-    const product = products.find(p => p.id === newRecipe.productId);
-    if (!product) {
-      setError('Selected product is invalid or not found.');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/recipes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          ...newRecipe,
-          ingredients: newRecipe.ingredients.map(ing => ({ itemName: ing.itemName, quantity: ing.quantity, unit: ing.unit })),
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        let errorMessage = `Failed to add recipe: HTTP ${res.status}, ${text.slice(0, 50)}`;
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          console.error('Failed to parse error response:', text);
-        }
-        throw new Error(errorMessage);
+  if (
+    !newRecipe.name ||
+    !newRecipe.productId ||
+    newRecipe.quantity <= 0 ||
+    !newRecipe.unit ||
+    newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
+  ) {
+    setError('Recipe name, product, valid quantity, unit, and ingredients with units are required');
+    return;
+  }
+  const product = products.find(p => p.id === newRecipe.productId);
+  if (!product) {
+    setError('Selected product is invalid or not found.');
+    return;
+  }
+  // Validate ingredients against inventory.identifier
+  const invalidIngredients = newRecipe.ingredients.filter(ing => {
+    const inventoryItem = inventory.find(i => i.identifier === ing.itemName);
+    return !inventoryItem;
+  });
+  if (invalidIngredients.length > 0) {
+    setError(`Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory`);
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/recipes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        ...newRecipe,
+        ingredients: newRecipe.ingredients.map(ing => ({
+          itemName: ing.itemName,
+          quantity: ing.quantity,
+          unit: ing.unit,
+        })),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let errorMessage = `Failed to add recipe: HTTP ${res.status}, ${text.slice(0, 50)}`;
+      try {
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        console.error('[Production] Failed to parse error response:', text);
       }
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        throw new Error(`Invalid response: Expected JSON, got ${contentType}, ${text.slice(0, 50)}`);
-      }
-      const addedRecipe = await res.json();
-      setRecipes([...recipes, addedRecipe]);
-      setShowAddRecipeModal(false);
-      setNewRecipe({ name: '', productId: 0, ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'barrels' });
-      setError(null);
-    } catch (err: any) {
-      console.error('Add recipe error:', err);
-      setError('Failed to add recipe: ' + err.message);
+      throw new Error(errorMessage);
     }
-  };
+    const addedRecipe = await res.json();
+    console.log('[Production] Added recipe:', addedRecipe);
+    // Update recipes state and refetch for the product
+    setRecipes([...recipes, addedRecipe]);
+    await fetchRecipes(newRecipe.productId);
+    setShowAddRecipeModal(false);
+    setNewRecipe({
+      name: '',
+      productId: 0,
+      ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
+      quantity: 0,
+      unit: 'barrels',
+    });
+    setError(null);
+  } catch (err: any) {
+    console.error('[Production] Add recipe error:', err);
+    setError('Failed to save recipe: ' + err.message);
+  }
+};
 
   const addIngredient = () => {
     setNewRecipe({
@@ -387,217 +404,152 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   );
 
   return (
-    <div className="page-container container">
-      <h2 className="text-warning mb-4">Production</h2>
-      {error && <div className="alert alert-danger">{error}</div>}
-      <div className="inventory-actions mb-4">
-        <button className="btn btn-primary" onClick={() => setShowAddBatchModal(true)}>
-          Add New Batch
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            refreshProducts().then(() => setShowAddRecipeModal(true));
-          }}
-        >
-          Add Recipe
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={handleOpenBatchActions}
-          disabled={selectedBatchIds.length === 0}
-        >
-          Batch Actions
-        </button>
-      </div>
-      <div className="mb-4">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="Search by Batch ID or Product Name"
-          className="form-control"
-          style={{
-            width: '100%',
-            maxWidth: '300px',
-            padding: '10px',
-            border: '1px solid #CCCCCC',
-            borderRadius: '4px',
-            fontSize: '16px',
-            boxSizing: 'border-box',
-            color: '#000000',
-            backgroundColor: '#FFFFFF',
-          }}
-        />
-      </div>
-      <div className="inventory-table-container">
-        <table className="inventory-table table table-striped">
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  checked={selectedBatchIds.length === filteredBatches.length && filteredBatches.length > 0}
-                  onChange={() =>
-                    setSelectedBatchIds(
-                      selectedBatchIds.length === filteredBatches.length
-                        ? []
-                        : filteredBatches.map(batch => batch.batchId)
-                    )
-                  }
-                />
-              </th>
-              <th>Batch ID</th>
-              <th>Product</th>
-              <th>Site</th>
-              <th>Status</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
+  <div className="page-container container">
+    <h2 className="app-header mb-4">Production</h2>
+    {error && <div className="alert alert-danger">{error}</div>}
+    <div className="inventory-actions mb-4">
+      <button className="btn btn-primary" onClick={() => setShowAddBatchModal(true)}>
+        Add New Batch
+      </button>
+      <button
+        className="btn btn-primary"
+        onClick={() => {
+          refreshProducts().then(() => setShowAddRecipeModal(true));
+        }}
+      >
+        Add Recipe
+      </button>
+      <button
+        className="btn btn-primary"
+        onClick={handleOpenBatchActions}
+        disabled={selectedBatchIds.length === 0}
+      >
+        Batch Actions
+      </button>
+    </div>
+    <div className="mb-4">
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        placeholder="Search by Batch ID or Product Name"
+        className="form-control"
+      />
+    </div>
+    <div className="inventory-table-container">
+      {filteredBatches.length > 0 ? (
+        <>
+          <table className="inventory-table table table-striped">
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={selectedBatchIds.length === filteredBatches.length && filteredBatches.length > 0}
+                    onChange={() =>
+                      setSelectedBatchIds(
+                        selectedBatchIds.length === filteredBatches.length
+                          ? []
+                          : filteredBatches.map(batch => batch.batchId)
+                      )
+                    }
+                  />
+                </th>
+                <th>Batch ID</th>
+                <th>Product</th>
+                <th>Site</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBatches.map(batch => (
+                <tr key={batch.batchId}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedBatchIds.includes(batch.batchId)}
+                      onChange={() => handleBatchSelection(batch.batchId)}
+                    />
+                  </td>
+                  <td>
+                    <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
+                      {batch.batchId}
+                    </Link>
+                  </td>
+                  <td>{batch.productName || 'Unknown'}</td>
+                  <td>{batch.siteName || batch.siteId}</td>
+                  <td>{batch.status}</td>
+                  <td>{batch.date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="batch-list">
             {filteredBatches.map(batch => (
-              <tr key={batch.batchId}>
-                <td>
+              <div key={batch.batchId} className="batch-card card mb-2">
+                <div className="card-body">
                   <input
                     type="checkbox"
                     checked={selectedBatchIds.includes(batch.batchId)}
                     onChange={() => handleBatchSelection(batch.batchId)}
+                    className="me-2"
                   />
-                </td>
-                <td>
-                  <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
-                    {batch.batchId}
-                  </Link>
-                </td>
-                <td>{batch.productName || 'Unknown'}</td>
-                <td>{batch.siteName || batch.siteId}</td>
-                <td>{batch.status}</td>
-                <td>{batch.date}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="batch-list">
-          {filteredBatches.map(batch => (
-            <div key={batch.batchId} className="batch-card card mb-2">
-              <div className="card-body">
-                <input
-                  type="checkbox"
-                  checked={selectedBatchIds.includes(batch.batchId)}
-                  onChange={() => handleBatchSelection(batch.batchId)}
-                  className="me-2"
-                />
-                <h5 className="card-title">
-                  <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
-                    {batch.batchId}
-                  </Link>
-                </h5>
-                <p className="card-text">Product: {batch.productName || 'Unknown'}</p>
-                <p className="card-text">Site: {batch.siteName || batch.siteId}</p>
-                <p className="card-text">Status: {batch.status}</p>
-                <p className="card-text">Date: {batch.date}</p>
+                  <h5 className="card-title">
+                    <Link to={`/production/${batch.batchId}`} className="text-primary text-decoration-underline">
+                      {batch.batchId}
+                    </Link>
+                  </h5>
+                  <p className="card-text"><strong>Product:</strong> {batch.productName || 'Unknown'}</p>
+                  <p className="card-text"><strong>Site:</strong> {batch.siteName || batch.siteId}</p>
+                  <p className="card-text"><strong>Status:</strong> {batch.status}</p>
+                  <p className="card-text"><strong>Date:</strong> {batch.date}</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="d-flex justify-content-between mt-3">
-        <button
-          className="btn btn-secondary"
-          onClick={() => setPage(p => Math.max(1, p - 1))}
-          disabled={page === 1}
-        >
-          Previous
-        </button>
-        <span>Page {page} of {totalPages}</span>
-        <button
-          className="btn btn-secondary"
-          onClick={() => setPage(p => p + 1)}
-          disabled={page === totalPages}
-        >
-          Next
-        </button>
-      </div>
-      {showAddBatchModal && (
-        <div
-          className="modal fade show d-block"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-            }}
-          >
-            <h3
-              style={{
-                color: '#555',
-                marginBottom: '20px',
-                textAlign: 'center',
-              }}
-            >
-              Add New Batch
-            </h3>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr',
-                gap: '15px',
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Batch ID (required):
-                </label>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="alert alert-info text-center">No batches found.</div>
+      )}
+    </div>
+    <div className="d-flex justify-content-between mt-3">
+      <button
+        className="btn btn-secondary"
+        onClick={() => setPage(p => Math.max(1, p - 1))}
+        disabled={page === 1}
+      >
+        Previous
+      </button>
+      <span>Page {page} of {totalPages}</span>
+      <button
+        className="btn btn-secondary"
+        onClick={() => setPage(p => p + 1)}
+        disabled={page === totalPages}
+      >
+        Next
+      </button>
+    </div>
+    {showAddBatchModal && (
+      <div className="modal fade show d-block">
+        <div className="modal-dialog modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">Add New Batch</h5>
+          </div>
+          <div className="modal-body">
+            <div className="recipe-form">
+              <label className="form-label">
+                Batch ID (required):
                 <input
                   type="text"
                   value={newBatch.batchId || ''}
                   onChange={e => setNewBatch({ ...newBatch, batchId: e.target.value })}
                   placeholder="Enter Batch ID"
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Product (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Product (required):
                 <select
                   value={newBatch.productId || ''}
                   onChange={e => {
@@ -605,16 +557,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     setNewBatch({ ...newBatch, productId, recipeId: 0 });
                     fetchRecipes(productId);
                   }}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Product</option>
                   {products.map(product => (
@@ -623,32 +566,14 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Recipe (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Recipe (required):
                 <select
                   value={newBatch.recipeId || ''}
                   onChange={e => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
                   disabled={!newBatch.productId}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Recipe</option>
                   {recipes.map(recipe => (
@@ -657,31 +582,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Site (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Site (required):
                 <select
                   value={newBatch.siteId || ''}
                   onChange={e => setNewBatch({ ...newBatch, siteId: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Site</option>
                   {sites.map(site => (
@@ -690,38 +597,17 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Fermenter (optional):
-                </label>
+              </label>
+              <label className="form-label">
+                Fermenter (optional):
                 <select
                   value={newBatch.fermenterId ?? ''}
                   onChange={e => {
                     const value = e.target.value;
-                    setNewBatch({
-                      ...newBatch,
-                      fermenterId: value ? parseInt(value, 10) : null,
-                    });
+                    setNewBatch({ ...newBatch, fermenterId: value ? parseInt(value, 10) : null });
                   }}
                   disabled={!newBatch.siteId || equipment.length === 0}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Fermenter (optional)</option>
                   {equipment.map(item => (
@@ -730,219 +616,74 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     </option>
                   ))}
                 </select>
-              </div>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginTop: '20px',
-              }}
-            >
-              <button
-                onClick={handleAddBatch}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
-              >
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddBatchModal(false);
-                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
-                  setError(null);
-                }}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#F86752')}
-              >
-                Cancel
-              </button>
+              </label>
             </div>
           </div>
+          <div className="modal-footer">
+            <button onClick={handleAddBatch} className="btn btn-primary">
+              Create
+            </button>
+            <button
+              onClick={() => {
+                setShowAddBatchModal(false);
+                setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+                setError(null);
+              }}
+              className="btn btn-danger"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      )}
-      {showErrorPopup && (
-        <div
-          className="modal fade show d-block"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2100,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '300px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-            }}
-          >
-            <h3
-              style={{
-                color: '#F86752',
-                marginBottom: '10px',
-              }}
-            >
-              Inventory Error
-            </h3>
-            <p
-              style={{
-                color: '#555',
-                marginBottom: '20px',
-              }}
-            >
-              {errorMessage}
-            </p>
+      </div>
+    )}
+    {showErrorPopup && (
+      <div className="modal fade show d-block">
+        <div className="modal-dialog modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title text-danger">Inventory Error</h5>
+          </div>
+          <div className="modal-body">
+            <p>{errorMessage}</p>
+          </div>
+          <div className="modal-footer">
             <button
               onClick={() => {
                 setShowErrorPopup(false);
                 setErrorMessage(null);
               }}
-              style={{
-                backgroundColor: '#2196F3',
-                color: '#fff',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                transition: 'background-color 0.3s',
-              }}
-              onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
-              onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
+              className="btn btn-primary"
             >
               OK
             </button>
           </div>
         </div>
-      )}
-      {showAddRecipeModal && (
-        <div
-          className="modal fade show d-block"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '500px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}
-          >
-            <h3
-              style={{
-                color: '#555',
-                marginBottom: '20px',
-                textAlign: 'center',
-              }}
-            >
-              Create New Recipe
-            </h3>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr',
-                gap: '15px',
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Recipe Name (required):
-                </label>
+      </div>
+    )}
+    {showAddRecipeModal && (
+      <div className="modal fade show d-block">
+        <div className="modal-dialog modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">Create New Recipe</h5>
+          </div>
+          <div className="modal-body">
+            <div className="recipe-form">
+              <label className="form-label">
+                Recipe Name (required):
                 <input
                   type="text"
                   value={newRecipe.name}
                   onChange={e => setNewRecipe({ ...newRecipe, name: e.target.value })}
                   placeholder="Enter recipe name"
-                  style={{
-                    width: '100%',
-                    maxWidth: '450px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Product (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Product (required):
                 <select
                   value={newRecipe.productId || ''}
                   onChange={e => setNewRecipe({ ...newRecipe, productId: parseInt(e.target.value, 10) })}
-                  style={{
-                    width: '100%',
-                    maxWidth: '450px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Product</option>
                   {products.map(product => (
@@ -951,18 +692,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Recipe Quantity (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Recipe Quantity (required):
                 <input
                   type="number"
                   value={newRecipe.quantity || ''}
@@ -970,93 +702,36 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   placeholder="Enter quantity (e.g., 10)"
                   step="0.01"
                   min="0"
-                  style={{
-                    width: '100%',
-                    maxWidth: '450px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Unit (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Unit (required):
                 <select
                   value={newRecipe.unit}
                   onChange={e => setNewRecipe({ ...newRecipe, unit: e.target.value })}
-                  style={{
-                    width: '100%',
-                    maxWidth: '450px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="barrels">Barrels</option>
                   <option value="gallons">Gallons</option>
                   <option value="liters">Liters</option>
                 </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontWeight: 'bold',
-                    color: '#555',
-                    display: 'block',
-                    marginBottom: '5px',
-                  }}
-                >
-                  Ingredients (required):
-                </label>
+              </label>
+              <label className="form-label">
+                Ingredients (required):
                 {newRecipe.ingredients.map((ingredient, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      gap: '10px',
-                      marginBottom: '10px',
-                      alignItems: 'center',
-                    }}
-                  >
+                  <div key={index} className="d-flex gap-2 mb-2 align-items-center">
                     <select
                       value={ingredient.itemName}
                       onChange={e => updateIngredient(index, 'itemName', e.target.value)}
-                      style={{
-                        width: '200px',
-                        padding: '10px',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        fontSize: '16px',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#FFFFFF',
-                      }}
+                      className="form-control"
                     >
                       <option value="">Select Item</option>
-                      {items
-                        .filter(item => item.enabled)
-                        .map(item => (
-                          <option key={item.name} value={item.name}>
-                            {item.name}
-                          </option>
-                        ))}
+                      {inventory.map(item => (
+                        <option key={item.identifier} value={item.identifier}>
+                          {item.identifier}
+                        </option>
+                      ))}
                     </select>
                     <input
                       type="number"
@@ -1065,30 +740,14 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                       placeholder="Quantity"
                       step="0.01"
                       min="0"
-                      style={{
-                        width: '100px',
-                        padding: '10px',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        fontSize: '16px',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#FFFFFF',
-                      }}
+                      className="form-control"
+                      style={{ width: '100px' }}
                     />
                     <select
                       value={ingredient.unit}
                       onChange={e => updateIngredient(index, 'unit', e.target.value)}
-                      style={{
-                        width: '100px',
-                        padding: '10px',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        fontSize: '16px',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#FFFFFF',
-                      }}
+                      className="form-control"
+                      style={{ width: '100px' }}
                     >
                       <option value="lbs">lbs</option>
                       <option value="kg">kg</option>
@@ -1098,165 +757,55 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     </select>
                     <button
                       onClick={() => removeIngredient(index)}
-                      style={{
-                        backgroundColor: '#F86752',
-                        color: '#fff',
-                        padding: '8px 12px',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                      }}
+                      className="btn btn-danger"
+                      style={{ padding: '8px 12px' }}
                     >
                       Remove
                     </button>
                   </div>
                 ))}
-                <button
-                  onClick={addIngredient}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '8px 12px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    marginTop: '10px',
-                  }}
-                >
+                <button onClick={addIngredient} className="btn btn-primary mt-2">
                   Add Ingredient
                 </button>
-              </div>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginTop: '20px',
-              }}
-            >
-              <button
-                onClick={handleAddRecipe}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
-              >
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddRecipeModal(false);
-                  setNewRecipe({
-                    name: '',
-                    productId: 0,
-                    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
-                    quantity: 0,
-                    unit: 'barrels',
-                  });
-                  setError(null);
-                }}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#F86752')}
-              >
-                Cancel
-              </button>
+              </label>
             </div>
           </div>
+          <div className="modal-footer">
+            <button onClick={handleAddRecipe} className="btn btn-primary">
+              Create
+            </button>
+            <button
+              onClick={() => {
+                setShowAddRecipeModal(false);
+                setNewRecipe({
+                  name: '',
+                  productId: 0,
+                  ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
+                  quantity: 0,
+                  unit: 'barrels',
+                });
+                setError(null);
+              }}
+              className="btn btn-danger"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      )}
-      {showBatchActionsModal && (
-        <div
-          className="modal fade show d-block"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '300px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-            }}
-          >
-            <h3
-              style={{
-                color: '#555',
-                marginBottom: '20px',
-              }}
-            >
-              Batch Actions
-            </h3>
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <button
-                onClick={handleCompleteBatches}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2196F3')}
-              >
+      </div>
+    )}
+    {showBatchActionsModal && (
+      <div className="modal fade show d-block">
+        <div className="modal-dialog modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">Batch Actions</h5>
+          </div>
+          <div className="modal-body">
+            <div className="d-flex flex-column gap-2">
+              <button onClick={handleCompleteBatches} className="btn btn-primary">
                 Complete Selected
               </button>
-              <button
-                onClick={handleDeleteBatches}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#F86752')}
-              >
+              <button onClick={handleDeleteBatches} className="btn btn-danger">
                 Delete Selected
               </button>
               <button
@@ -1264,26 +813,16 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                   setShowBatchActionsModal(false);
                   setError(null);
                 }}
-                style={{
-                  backgroundColor: '#ccc',
-                  color: '#555',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#bbb')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#ccc')}
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    )}
+  </div>
   );
 };
 
