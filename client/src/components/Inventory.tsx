@@ -11,7 +11,7 @@ const OUR_DSP = 'DSP-AL-20010';
 interface InventoryProps {
   vendors: Vendor[];
   refreshVendors: () => Promise<void>;
-  inventory: InventoryItem[] | undefined; // Allow undefined
+  inventory: InventoryItem[];
   refreshInventory: () => Promise<void>;
 }
 
@@ -39,15 +39,9 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   // Log inventory prop
   useEffect(() => {
     console.log('[Inventory] Inventory prop:', {
-      isArray: Array.isArray(inventory),
-      length: Array.isArray(inventory) ? inventory.length : 'N/A',
-      type: typeof inventory,
-      value: inventory,
-      note: 'If not an array, check App.tsx refreshInventory or GET /api/inventory response.',
+      length: inventory.length,
+      items: inventory.map(item => item.identifier),
     });
-    if (!Array.isArray(inventory)) {
-      setProductionError('Invalid inventory data: Expected an array. Check App.tsx or GET /api/inventory.');
-    }
   }, [inventory]);
 
   // Fetch daily summary
@@ -85,13 +79,11 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
         console.log('[Inventory] Fetched sites:', sitesData);
         setSites(sitesData || []);
 
-        const siteIds = Array.isArray(inventory)
-          ? inventory
-              .map(item => item?.siteId)
-              .filter((siteId): siteId is string => !!siteId)
-              .concat([OUR_DSP])
-              .filter((siteId, index, arr) => arr.indexOf(siteId) === index)
-          : [OUR_DSP];
+        const siteIds = inventory
+          .map(item => item?.siteId)
+          .filter((siteId): siteId is string => !!siteId)
+          .concat([OUR_DSP])
+          .filter((siteId, index, arr) => arr.indexOf(siteId) === index);
 
         console.log('[Inventory] Site IDs:', siteIds);
 
@@ -115,7 +107,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       }
     };
 
-    if (Array.isArray(inventory) && inventory.length > 0) {
+    if (inventory.length > 0) {
       fetchLocationsAndSites();
     } else {
       setIsLoading(false);
@@ -202,15 +194,13 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  const filteredInventory = Array.isArray(inventory)
-    ? inventory.filter(item => 
-        item?.status && ['Received', 'Stored'].includes(item.status) && (
-          (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      )
-    : [];
+  const filteredInventory = inventory.filter(item => 
+    item?.status && ['Received', 'Stored'].includes(item.status) && (
+      (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  );
 
   console.log('[Inventory] Render:', {
     isLoading,
@@ -233,7 +223,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       {productionError && (
         <div className="alert alert-danger mb-3">{productionError}</div>
       )}
-      {Array.isArray(inventory) && !inventory.length && !productionError && (
+      {!inventory.length && !productionError && (
         <div className="alert alert-warning mb-3">No inventory data available.</div>
       )}
       <div className="inventory-actions mb-4 d-flex gap-2 flex-wrap">
@@ -373,7 +363,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
             <div className="modal-body">
               <input
                 type="text"
-                placeholder="Item-Lot (e.g., Grain-NGS123)"
+                placeholder="Item-Lot (e.g., Flaked Corn)"
                 value={moveForm.identifier}
                 onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
                 className="form-control mb-2"
@@ -416,7 +406,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
             <div className="modal-body">
               <input
                 type="text"
-                placeholder="Item-Lot (e.g., Grain-NGS123)"
+                placeholder="Item-Lot (e.g., Flaked Corn)"
                 value={lossForm.identifier}
                 onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
                 className="form-control mb-2"
