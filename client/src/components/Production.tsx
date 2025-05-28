@@ -188,7 +188,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
     setError('All fields are required');
     setShowErrorPopup(true);
-    setShowAddBatchModal(false); // Close modal on error
+    setShowAddBatchModal(false);
     return;
   }
   const product = products.find(p => p.id === newBatch.productId);
@@ -205,16 +205,27 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     setShowAddBatchModal(false);
     return;
   }
-  const batchData = {
-    batchId: newBatch.batchId,
-    productId: newBatch.productId,
-    recipeId: newBatch.recipeId,
-    siteId: newBatch.siteId,
-    fermenterId: newBatch.fermenterId || null,
-    status: 'In Progress',
-    date: new Date().toISOString().split('T')[0],
-  };
   try {
+    console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
+    await refreshInventory(); // Ensure latest inventory
+    console.log('[Production] Inventory state:', inventory.map(i => ({
+      identifier: i.identifier,
+      type: i.type,
+      status: i.status,
+      siteId: i.siteId,
+      account: i.account,
+      quantity: i.quantity,
+      unit: i.unit
+    })));
+    const batchData = {
+      batchId: newBatch.batchId,
+      productId: newBatch.productId,
+      recipeId: newBatch.recipeId,
+      siteId: newBatch.siteId,
+      fermenterId: newBatch.fermenterId || null,
+      status: 'In Progress',
+      date: new Date().toISOString().split('T')[0],
+    };
     const res = await fetch(`${API_BASE_URL}/api/batches`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -232,7 +243,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       console.log('[Production] Batch creation error:', errorMessage);
       setErrorMessage(errorMessage);
       setShowErrorPopup(true);
-      setShowAddBatchModal(false); // Close modal on error
+      setShowAddBatchModal(false);
       throw new Error(errorMessage);
     }
     await res.json();
@@ -249,11 +260,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   } catch (err: unknown) {
     console.error('[Production] Add batch error:', err);
     const errorMessage = err instanceof Error ? err.message : String(err);
-    if (!showErrorPopup) {
-      setError('Failed to add batch: ' + errorMessage);
-      setShowErrorPopup(true);
-      setShowAddBatchModal(false); // Close modal on error
-    }
+    setError('Failed to add batch: ' + errorMessage);
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
   }
 };
 
@@ -275,43 +284,48 @@ const handleAddRecipe = async () => {
     setShowErrorPopup(true);
     return;
   }
-  const invalidIngredients = newRecipe.ingredients.filter(ing => {
-    const inventoryItem = inventory.find(i => 
-      i.identifier === ing.itemName && 
-      (i.status as string) === 'Stored' && 
-      i.siteId === newBatch.siteId &&
-      (i.type === 'Spirits' ? i.account === 'Storage' : true)
-    );
-    console.log('[Production] Checking ingredient:', {
-      itemName: ing.itemName,
-      inventoryItem: inventoryItem ? { 
-        identifier: inventoryItem.identifier, 
-        type: inventoryItem.type,
-        account: inventoryItem.account, 
-        status: inventoryItem.status, 
-        siteId: inventoryItem.siteId, 
-        locationId: inventoryItem.locationId, 
-        quantity: inventoryItem.quantity, 
-        unit: inventoryItem.unit 
-      } : null
-    });
-    return !inventoryItem;
-  });
-  if (invalidIngredients.length > 0) {
-    const errorMessage = `Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory (Stored, correct site)`;
-    console.log('[Production] Recipe validation error:', errorMessage);
-    setError(errorMessage);
-    setShowErrorPopup(true);
-    return;
-  }
   try {
+    console.log('[Production] Refreshing inventory before recipe validation', { siteId: newBatch.siteId });
+    await refreshInventory(); // Ensure latest inventory
     console.log('[Production] Inventory state:', inventory.map(i => ({
       identifier: i.identifier,
       type: i.type,
       status: i.status,
       siteId: i.siteId,
-      account: i.account
+      account: i.account,
+      quantity: i.quantity,
+      unit: i.unit
     })));
+    const invalidIngredients = newRecipe.ingredients.filter(ing => {
+      const inventoryItem = inventory.find(i => 
+        i.identifier === ing.itemName && 
+        (i.status as string) === 'Stored' && 
+        i.siteId === newBatch.siteId &&
+        (i.type === 'Spirits' ? i.account === 'Storage' : true)
+      );
+      console.log('[Production] Checking ingredient:', {
+        itemName: ing.itemName,
+        siteId: newBatch.siteId,
+        inventoryItem: inventoryItem ? { 
+          identifier: inventoryItem.identifier, 
+          type: inventoryItem.type,
+          account: inventoryItem.account, 
+          status: inventoryItem.status, 
+          siteId: inventoryItem.siteId, 
+          locationId: inventoryItem.locationId, 
+          quantity: inventoryItem.quantity, 
+          unit: inventoryItem.unit 
+        } : null
+      });
+      return !inventoryItem;
+    });
+    if (invalidIngredients.length > 0) {
+      const errorMessage = `Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory (Stored, site: ${newBatch.siteId})`;
+      console.log('[Production] Recipe validation error:', errorMessage);
+      setError(errorMessage);
+      setShowErrorPopup(true);
+      return;
+    }
     const res = await fetch(`${API_BASE_URL}/api/recipes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
