@@ -2460,7 +2460,7 @@ app.post('/api/batches', (req, res) => {
   if (!batchId || !productId || !recipeId || !siteId) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
-  console.log('POST /api/batches:', { batchId, recipeId });
+  console.log('POST /api/batches:', { batchId, recipeId, siteId });
   db.all('SELECT itemName, quantity, unit FROM recipe_ingredients WHERE recipeId = ?', [parseInt(recipeId)], (err, ingredients) => {
     if (err) {
       console.error('POST /api/batches: Fetch ingredients error:', err);
@@ -2477,14 +2477,19 @@ app.post('/api/batches', (req, res) => {
       const inventoryItemName = ing.itemName;
       const recipeUnit = ing.unit.toLowerCase() === 'pounds' ? 'lbs' : ing.unit.toLowerCase();
       db.all(
-        'SELECT identifier, quantity, unit FROM inventory WHERE identifier = ? AND siteId = ? AND status = ?',
+        'SELECT identifier, quantity, unit, receivedDate, account, status, siteId, locationId FROM inventory WHERE identifier = ? AND siteId = ? AND status = ?',
         [inventoryItemName, siteId, 'Stored'],
         (err, rows) => {
           if (err) {
             console.error('POST /api/batches: Inventory check error:', err);
             return res.status(500).json({ error: err.message });
           }
-          console.log('POST /api/batches: Inventory rows for', { item: inventoryItemName, rows });
+          console.log('POST /api/batches: Inventory query', {
+            item: inventoryItemName,
+            siteId,
+            status: 'Stored',
+            rows: rows.map(r => ({ identifier: r.identifier, account: r.account, status: r.status, siteId: r.siteId, locationId: r.locationId, quantity: r.quantity, unit: r.unit }))
+          });
           const totalAvailable = rows.reduce((sum, row) => {
             const inventoryUnit = row.unit.toLowerCase() === 'pounds' ? 'lbs' : row.unit.toLowerCase();
             return inventoryUnit === recipeUnit ? sum + parseFloat(row.quantity) : sum;
@@ -2494,6 +2499,7 @@ app.post('/api/batches', (req, res) => {
             unit: recipeUnit,
             available: totalAvailable,
             needed: ing.quantity,
+            rows
           });
           if (totalAvailable < ing.quantity) {
             errors.push(
@@ -4565,14 +4571,20 @@ let mockProducts = [
 ];
 
 app.post('/api/receive', async (req, res) => {
+  console.log('POST /api/receive: Received request', req.body);
   const items = Array.isArray(req.body) ? req.body : [req.body];
   const validAccounts = ['Storage', 'Processing', 'Production'];
   const validateItem = (item) => {
     const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
-    if (!account || !validAccounts.includes(account) || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
-      return 'Missing or invalid required fields (account must be Storage, Processing, or Production)';
+    if (!identifier || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
+      return 'Missing required fields (identifier, type, quantity, unit, receivedDate, status, siteId, locationId)';
     }
-    if (type === 'Spirits' && (!identifier || !proof)) return 'Spirits require identifier and proof';
+    if (type === 'Spirits' && (!account || !validAccounts.includes(account) || !proof)) {
+      return 'Spirits require account (Storage, Processing, or Production) and proof';
+    }
+    if (type !== 'Spirits' && account && !validAccounts.includes(account)) {
+      return 'Invalid account for non-Spirits type';
+    }
     if (type === 'Other' && !description) return 'Description required for Other type';
     const parsedQuantity = parseFloat(quantity);
     const parsedProof = proof ? parseFloat(proof) : null;
@@ -4582,10 +4594,12 @@ app.post('/api/receive', async (req, res) => {
         (parsedCost && parsedCost < 0)) return 'Invalid quantity, proof, or cost';
     return null;
   };
-
-  const errors = items.map(validateItem).filter(e => e);
+  const errors = items.map(item => {
+    const error = validateItem(item);
+    if (error) console.log('POST /api/receive: Validation error', { item, error });
+    return error;
+  }).filter(e => e);
   if (errors.length) return res.status(400).json({ error: errors[0] });
-
   try {
     await new Promise((resolve, reject) => {
       db.run('BEGIN TRANSACTION', (err) => {
@@ -4593,24 +4607,41 @@ app.post('/api/receive', async (req, res) => {
         else resolve();
       });
     });
-
     for (const item of items) {
       const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
-
+      const finalAccount = type === 'Spirits' ? account : null;
+      const finalStatus = ['Grain', 'Hops'].includes(type) ? 'Stored' : status;
+      // Validate locationId
+      const location = await new Promise((resolve, reject) => {
+        db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, siteId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+      if (!location) {
+        throw new Error(`Invalid locationId: ${locationId} for siteId: ${siteId}`);
+      }
+      // Ensure item exists in items table
+      await new Promise((resolve, reject) => {
+        db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)', [identifier, type, 1], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
       const row = await new Promise((resolve, reject) => {
         db.get(
-          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?',
-          [identifier, type, account, siteId],
+          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND (account = ? OR account IS NULL) AND siteId = ? AND locationId = ?',
+          [identifier, type, finalAccount, siteId, locationId],
           (err, row) => {
             if (err) reject(err);
             else resolve(row);
           }
         );
       });
-
+      console.log('POST /api/receive: Processing item', { identifier, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
       if (row) {
         const existingQuantity = parseFloat(row.quantity);
         const existingTotalCost = parseFloat(row.totalCost || '0');
@@ -4619,9 +4650,8 @@ app.post('/api/receive', async (req, res) => {
         const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
         await new Promise((resolve, reject) => {
           db.run(
-            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, locationId = ?
-             WHERE identifier = ? AND type = ? AND account = ? AND siteId = ?`,
-            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, locationId, identifier, type, account, siteId],
+            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ? WHERE identifier = ? AND type = ? AND (account = ? OR account IS NULL) AND siteId = ? AND locationId = ?`,
+            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, identifier, type, finalAccount, siteId, locationId],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -4633,7 +4663,7 @@ app.post('/api/receive', async (req, res) => {
           db.run(
             `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, siteId, locationId, status, description)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [identifier || null, account, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', siteId, locationId, status, description || null],
+            [identifier, finalAccount, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -4642,17 +4672,16 @@ app.post('/api/receive', async (req, res) => {
         });
       }
     }
-
     await new Promise((resolve, reject) => {
       db.run('COMMIT', (err) => {
         if (err) reject(err);
         else resolve();
       });
     });
-
+    console.log('POST /api/receive: Success', { items });
     res.json({ message: 'Receive successful' });
   } catch (err) {
-    console.error('Error in /api/receive:', err);
+    console.error('POST /api/receive: Error:', err);
     await new Promise((resolve) => db.run('ROLLBACK', resolve));
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
@@ -5836,6 +5865,36 @@ app.get('/api/debug/inventory/hops', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     console.log('Debug inventory hops:', rows);
+    res.json(rows);
+  });
+});
+
+app.get('/api/debug/inventory/new', (req, res) => {
+  const { date, identifier, siteId } = req.query;
+  let query = 'SELECT * FROM inventory';
+  let params = [];
+  let conditions = [];
+  if (date) {
+    conditions.push('receivedDate = ?');
+    params.push(date);
+  }
+  if (identifier) {
+    conditions.push('identifier = ?');
+    params.push(identifier);
+  }
+  if (siteId) {
+    conditions.push('siteId = ?');
+    params.push(siteId);
+  }
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('GET /api/debug/inventory/new: Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/debug/inventory/new:', rows);
     res.json(rows);
   });
 });
