@@ -1,17 +1,11 @@
-// client/src/components/ProductDetails.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Product, Recipe, PackageType } from '../types/interfaces';
+import { Product, Recipe, PackageType, Ingredient } from '../types/interfaces';
+import RecipeModal from './RecipeModal';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
-
-interface Ingredient {
-  itemName: string;
-  quantity: number;
-  unit: string;
-}
 
 const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,19 +16,6 @@ const ProductDetails: React.FC = () => {
   const [packageTypes, setPackageTypes] = useState<PackageType[]>([]);
   const [availablePackageTypes, setAvailablePackageTypes] = useState<{ name: string; volume: number; enabled: number }[]>([]);
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
-  const [newRecipe, setNewRecipe] = useState<{
-    name: string;
-    productId: number;
-    ingredients: Ingredient[];
-    quantity: number;
-    unit: string;
-  }>({
-    name: '',
-    productId: parseInt(id || '0', 10),
-    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
-    quantity: 0,
-    unit: 'gallons',
-  });
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -147,22 +128,12 @@ const ProductDetails: React.FC = () => {
     }
   };
 
-  const handleAddRecipe = async () => {
-    if (
-      !newRecipe.name ||
-      !newRecipe.productId ||
-      newRecipe.quantity <= 0 ||
-      !newRecipe.unit ||
-      newRecipe.ingredients.some((ing) => !ing.itemName || ing.quantity <= 0 || !ing.unit)
-    ) {
-      setError('Recipe name, product, quantity, unit, and valid ingredients are required');
-      return;
-    }
+  const handleAddRecipe = async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(newRecipe),
+        body: JSON.stringify(recipe),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -172,32 +143,11 @@ const ProductDetails: React.FC = () => {
       console.log('[ProductDetails] Added recipe:', addedRecipe);
       setRecipes([...recipes, addedRecipe]);
       setShowAddRecipeModal(false);
-      setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'gallons' });
       setError(null);
     } catch (err: any) {
       setError('Failed to add recipe: ' + err.message);
       console.error('[ProductDetails] Add recipe error:', err);
     }
-  };
-
-  const addIngredient = () => {
-    setNewRecipe({
-      ...newRecipe,
-      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0, unit: 'lbs' }],
-    });
-  };
-
-  const removeIngredient = (index: number) => {
-    setNewRecipe({
-      ...newRecipe,
-      ingredients: newRecipe.ingredients.filter((_, i) => i !== index),
-    });
-  };
-
-  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) => {
-    const updatedIngredients = [...newRecipe.ingredients];
-    updatedIngredients[index] = { ...updatedIngredients[index], [field]: value };
-    setNewRecipe({ ...newRecipe, ingredients: updatedIngredients });
   };
 
   const addPackageType = () => {
@@ -417,142 +367,17 @@ const ProductDetails: React.FC = () => {
       ) : (
         <div className="alert alert-info text-center">Loading...</div>
       )}
-      {showAddRecipeModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}>
-          <div className="modal-dialog modal-content" style={{ maxWidth: '500px', margin: '0 auto' }}>
-            <div className="modal-header">
-              <h5 className="modal-title" style={{ color: '#555555' }}>Create New Recipe</h5>
-            </div>
-            <div className="modal-body">
-              {error && <div className="alert alert-danger">{error}</div>}
-              <div className="mb-3">
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Recipe Name (required):
-                </label>
-                <input
-                  type="text"
-                  value={newRecipe.name}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, name: e.target.value })}
-                  placeholder="Enter recipe name"
-                  className="form-control"
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Product (required):
-                </label>
-                <select
-                  value={newRecipe.productId || ''}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, productId: parseInt(e.target.value, 10) })}
-                  className="form-control"
-                  disabled
-                >
-                  <option value="">Select Product</option>
-                  {product && (
-                    <option value={product.id}>{product.name}</option>
-                  )}
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Quantity (required):
-                </label>
-                <input
-                  type="number"
-                  value={newRecipe.quantity || ''}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, quantity: parseFloat(e.target.value) || 0 })}
-                  placeholder="Enter quantity"
-                  step="0.01"
-                  min="0"
-                  className="form-control"
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Unit (required):
-                </label>
-                <select
-                  value={newRecipe.unit}
-                  onChange={(e) => setNewRecipe({ ...newRecipe, unit: e.target.value })}
-                  className="form-control"
-                >
-                  <option value="gallons">Gallons</option>
-                  <option value="liters">Liters</option>
-                  <option value="barrels">Barrels</option>
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Ingredients (required):
-                </label>
-                {newRecipe.ingredients.map((ingredient, index) => (
-                  <div key={index} className="package-type-row">
-                    <select
-                      value={ingredient.itemName}
-                      onChange={(e) => updateIngredient(index, 'itemName', e.target.value)}
-                      className="form-control"
-                    >
-                      <option value="">Select Item</option>
-                      {items.filter((item) => item.enabled).map((item) => (
-                        <option key={item.name} value={item.name}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      value={ingredient.quantity || ''}
-                      onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
-                      placeholder="Quantity"
-                      step="0.01"
-                      min="0"
-                      className="form-control"
-                    />
-                    <select
-                      value={ingredient.unit}
-                      onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
-                      className="form-control"
-                    >
-                      <option value="lbs">lbs</option>
-                      <option value="kg">kg</option>
-                      <option value="oz">oz</option>
-                      <option value="gal">gal</option>
-                      <option value="l">l</option>
-                    </select>
-                    <button
-                      onClick={() => removeIngredient(index)}
-                      className="btn btn-danger"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={addIngredient}
-                  className="btn btn-primary mt-2"
-                >
-                  Add Ingredient
-                </button>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button onClick={handleAddRecipe} className="btn btn-primary">
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddRecipeModal(false);
-                  setNewRecipe({ name: '', productId: parseInt(id || '0', 10), ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }], quantity: 0, unit: 'gallons' });
-                  setError(null);
-                }}
-                className="btn btn-danger"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RecipeModal
+        show={showAddRecipeModal}
+        onClose={() => {
+          setShowAddRecipeModal(false);
+          setError(null);
+        }}
+        onSave={handleAddRecipe}
+        products={product ? [product] : []}
+        items={items}
+        defaultProductId={parseInt(id || '0', 10)}
+      />
     </div>
   );
 };

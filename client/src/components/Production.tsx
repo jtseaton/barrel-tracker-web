@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
+import RecipeModal from './RecipeModal';
 import '../App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
@@ -27,19 +28,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     recipeId: 0,
     siteId: '',
     fermenterId: null,
-  });
-  const [newRecipe, setNewRecipe] = useState<{
-    name: string;
-    productId: number;
-    ingredients: Ingredient[];
-    quantity: number;
-    unit: string;
-  }>({
-    name: '',
-    productId: 0,
-    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
-    quantity: 0,
-    unit: 'barrels',
   });
   const [error, setError] = useState<string | null>(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
@@ -220,7 +208,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const invalidIngredients = recipe.ingredients.filter(ing => {
         const inventoryItem = inventory.find(i => 
           i.identifier === ing.itemName && 
-          (i.status as string) === 'Stored' && // Temporary cast until Status enum is shared
+          (i.status as string) === 'Stored' && // Temporary cast
           i.siteId === newBatch.siteId &&
           (i.type === 'Spirits' ? i.account === 'Storage' : true) &&
           parseFloat(i.quantity) >= ing.quantity
@@ -299,35 +287,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     }
   };
 
-  const handleAddRecipe = async () => {
-    if (
-      !newRecipe.name ||
-      !newRecipe.productId ||
-      newRecipe.quantity <= 0 ||
-      !newRecipe.unit ||
-      newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
-    ) {
-      setError('Recipe name, product, valid quantity, unit, and ingredients are required');
-      setShowErrorPopup(true);
-      return;
-    }
-    const product = products.find(p => p.id === newRecipe.productId);
-    if (!product) {
-      setError('Selected product is invalid or not found.');
-      setShowErrorPopup(true);
-      return;
-    }
+  const handleAddRecipe = async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
     try {
-      console.log('[Production] Creating recipe:', newRecipe);
+      console.log('[Production] Creating recipe:', recipe);
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          name: newRecipe.name,
-          productId: newRecipe.productId,
-          quantity: newRecipe.quantity,
-          unit: newRecipe.unit,
-          ingredients: newRecipe.ingredients.map(ing => ({
+          name: recipe.name,
+          productId: recipe.productId,
+          quantity: recipe.quantity,
+          unit: recipe.unit,
+          ingredients: recipe.ingredients.map(ing => ({
             itemName: ing.itemName,
             quantity: ing.quantity,
             unit: ing.unit,
@@ -348,15 +319,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const addedRecipe = await res.json();
       console.log('[Production] Added recipe:', addedRecipe);
       setRecipes([...recipes, addedRecipe]);
-      await fetchRecipes(newRecipe.productId);
+      await fetchRecipes(recipe.productId);
       setShowAddRecipeModal(false);
-      setNewRecipe({
-        name: '',
-        productId: 0,
-        ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
-        quantity: 0,
-        unit: 'barrels',
-      });
       setError(null);
       setShowErrorPopup(false);
     } catch (err: unknown) {
@@ -365,26 +329,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setError('Failed to save recipe: ' + errorMessage);
       setShowErrorPopup(true);
     }
-  };
-
-  const addIngredient = () => {
-    setNewRecipe({
-      ...newRecipe,
-      ingredients: [...newRecipe.ingredients, { itemName: '', quantity: 0, unit: 'lbs' }],
-    });
-  };
-
-  const removeIngredient = (index: number) => {
-    setNewRecipe({
-      ...newRecipe,
-      ingredients: newRecipe.ingredients.filter((_, i) => i !== index),
-    });
-  };
-
-  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) => {
-    const updatedIngredients = [...newRecipe.ingredients];
-    updatedIngredients[index] = { ...updatedIngredients[index], [field]: value };
-    setNewRecipe({ ...newRecipe, ingredients: updatedIngredients });
   };
 
   const handleBatchSelection = (batchId: string) => {
@@ -579,115 +523,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           Next
         </button>
       </div>
-      {showAddBatchModal && (
-        <div className="modal fade show d-block">
-          <div className="modal-dialog modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Add New Batch</h5>
-            </div>
-            <div className="modal-body">
-              <div className="recipe-form">
-                <label className="form-label">
-                  Batch ID (required):
-                  <input
-                    type="text"
-                    value={newBatch.batchId || ''}
-                    onChange={e => setNewBatch({ ...newBatch, batchId: e.target.value })}
-                    placeholder="Enter Batch ID"
-                    className="form-control"
-                  />
-                </label>
-                <label className="form-label">
-                  Product (required):
-                  <select
-                    value={newBatch.productId || ''}
-                    onChange={e => {
-                      const productId = parseInt(e.target.value, 10);
-                      setNewBatch({ ...newBatch, productId, recipeId: 0 });
-                      fetchRecipes(productId);
-                    }}
-                    className="form-control"
-                  >
-                    <option value="">Select Product</option>
-                    {products.map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="form-label">
-                  Recipe (required):
-                  <select
-                    value={newBatch.recipeId || ''}
-                    onChange={e => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
-                    disabled={!newBatch.productId}
-                    className="form-control"
-                  >
-                    <option value="">Select Recipe</option>
-                    {recipes.map(recipe => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="form-label">
-                  Site (required):
-                  <select
-                    value={newBatch.siteId || ''}
-                    onChange={e => setNewBatch({ ...newBatch, siteId: e.target.value })}
-                    className="form-control"
-                  >
-                    <option value="">Select Site</option>
-                    {sites.map(site => (
-                      <option key={site.siteId} value={site.siteId}>
-                        {site.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="form-label">
-                  Fermenter (optional):
-                  <select
-                    value={newBatch.fermenterId || ''}
-                    onChange={e => {
-                      const value = e.target.value;
-                      setNewBatch({ ...newBatch, fermenterId: value ? parseInt(value, 10) : null });
-                    }}
-                    disabled={!newBatch.siteId || equipment.length === 0}
-                    className="form-control"
-                  >
-                    <option value="">Select Fermenter (optional)</option>
-                    {equipment.map(item => (
-                      <option key={item.equipmentId} value={item.equipmentId}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button onClick={handleAddBatch} className="btn btn-primary">
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddBatchModal(false);
-                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
-                  setError(null);
-                }}
-                className="btn btn-danger"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RecipeModal
+        show={showAddRecipeModal}
+        onClose={() => {
+          setShowAddRecipeModal(false);
+          setError(null);
+        }}
+        onSave={handleAddRecipe}
+        products={products}
+        items={items}
+      />
       {showErrorPopup && (
-        <div className="modal fade show d-block error-modal">
+        <div className="modal fade show d-block error-modal" style={{ zIndex: 2100 }}>
           <div className="modal-dialog modal-content">
             <div className="modal-header">
               <h5 className="modal-title text-danger">Error</h5>
@@ -711,137 +558,8 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           </div>
         </div>
       )}
-      {showAddRecipeModal && (
-        <div className="modal fade show d-block">
-          <div className="modal-dialog modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Create New Recipe</h5>
-            </div>
-            <div className="modal-body">
-              <div className="recipe-form">
-                <label className="form-label">
-                  Recipe Name (required):
-                  <input
-                    type="text"
-                    value={newRecipe.name}
-                    onChange={e => setNewRecipe({ ...newRecipe, name: e.target.value })}
-                    placeholder="Enter recipe name"
-                    className="form-control"
-                  />
-                </label>
-                <label className="form-label">
-                  Product (required):
-                  <select
-                    value={newRecipe.productId || ''}
-                    onChange={e => setNewRecipe({ ...newRecipe, productId: parseInt(e.target.value, 10) })}
-                    className="form-control"
-                  >
-                    <option value="">Select Product</option>
-                    {products.map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="form-label">
-                  Recipe Quantity (required):
-                  <input
-                    type="number"
-                    value={newRecipe.quantity || ''}
-                    onChange={e => setNewRecipe({ ...newRecipe, quantity: parseFloat(e.target.value) || 0 })}
-                    placeholder="Enter quantity (e.g., 10)"
-                    step="0.01"
-                    min="0"
-                    className="form-control"
-                  />
-                </label>
-                <label className="form-label">
-                  Unit (required):
-                  <select
-                    value={newRecipe.unit}
-                    onChange={e => setNewRecipe({ ...newRecipe, unit: e.target.value })}
-                    className="form-control"
-                  >
-                    <option value="barrels">Barrels</option>
-                    <option value="gallons">Gallons</option>
-                    <option value="liters">Liters</option>
-                  </select>
-                </label>
-                <label className="form-label">
-                  Ingredients (required):
-                  {newRecipe.ingredients.map((ingredient, index) => (
-                    <div key={index} className="d-flex gap-2 mb-2 align-items-center">
-                      <input
-                        type="text"
-                        value={ingredient.itemName}
-                        onChange={e => updateIngredient(index, 'itemName', e.target.value)}
-                        placeholder="Enter ingredient name"
-                        className="form-control"
-                      />
-                      <input
-                        type="number"
-                        value={ingredient.quantity || ''}
-                        onChange={e => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
-                        placeholder="Quantity"
-                        step="0.01"
-                        min="0"
-                        className="form-control"
-                        style={{ width: '100px' }}
-                      />
-                      <select
-                        value={ingredient.unit}
-                        onChange={e => updateIngredient(index, 'unit', e.target.value)}
-                        className="form-control"
-                        style={{ width: '100px' }}
-                      >
-                        <option value="lbs">lbs</option>
-                        <option value="kg">kg</option>
-                        <option value="oz">oz</option>
-                        <option value="gal">gal</option>
-                        <option value="l">l</option>
-                      </select>
-                      <button
-                        onClick={() => removeIngredient(index)}
-                        className="btn btn-danger"
-                        style={{ padding: '8px 12px' }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  <button onClick={addIngredient} className="btn btn-primary mt-2">
-                    Add Ingredient
-                  </button>
-                </label>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button onClick={handleAddRecipe} className="btn btn-primary">
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddRecipeModal(false);
-                  setNewRecipe({
-                    name: '',
-                    productId: 0,
-                    ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
-                    quantity: 0,
-                    unit: 'barrels',
-                  });
-                  setError(null);
-                }}
-                className="btn btn-danger"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {showBatchActionsModal && (
-        <div className="modal fade show d-block">
+        <div className="modal fade show d-block" style={{ zIndex: 2100 }}>
           <div className="modal-dialog modal-content">
             <div className="modal-header">
               <h5 className="modal-title">Batch Actions</h5>
