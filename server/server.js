@@ -4385,56 +4385,31 @@ app.post('/api/purchase-orders/email', (req, res) => {
 });
 
 app.get('/api/inventory', (req, res) => {
-  const { source, identifier, locationId, siteId, page = 1, limit = 10 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
-  let countQuery = 'SELECT COUNT(*) as total FROM inventory';
-  let query = 'SELECT identifier, account, type, quantity, unit, price, isKegDepositItem, proof, proofGallons, receivedDate, source, dspNumber, siteId, locationId, status, description, cost, totalCost FROM inventory';
-  let params = [];
-  let countParams = [];
-  let conditions = [];
-  if (source) {
-    conditions.push('source = ?');
-    params.push(source);
-    countParams.push(source);
-  }
-  if (identifier) {
-    conditions.push('identifier = ?');
-    params.push(identifier);
-    countParams.push(identifier);
-  }
-  if (locationId) {
-    conditions.push('locationId = ?');
-    params.push(parseInt(locationId));
-    countParams.push(parseInt(locationId));
-  }
-  if (siteId) {
-    conditions.push('siteId = ?');
-    params.push(siteId);
-    countParams.push(siteId);
-  }
-  if (conditions.length > 0) {
-    query += ' WHERE ' + conditions.join(' AND ');
-    countQuery += ' WHERE ' + conditions.join(' AND ');
-  }
-  query += ' LIMIT ? OFFSET ?';
-  params.push(parseInt(limit), offset);
-
-  console.log('GET /api/inventory: Executing', { countQuery, query, countParams, params });
-
-  db.get(countQuery, countParams, (err, countResult) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = (page - 1) * limit;
+  const countQuery = 'SELECT COUNT(*) as total FROM inventory';
+  const query = 'SELECT identifier, account, type, quantity, unit, price, isKegDepositItem, proof, proofGallons, receivedDate, source, dspNumber, siteId, locationId, status, description, cost, totalCost FROM inventory LIMIT ? OFFSET ?';
+  console.log('GET /api/inventory: Executing', { countQuery, query, countParams: [], params: [limit, offset] });
+  db.get(countQuery, [], (err, countResult) => {
     if (err) {
       console.error('GET /api/inventory: Count error:', err);
       return res.status(500).json({ error: err.message });
     }
-    const totalItems = countResult.total;
-    const totalPages = Math.ceil(totalItems / parseInt(limit));
-    db.all(query, params, (err, rows) => {
+    db.all(query, [limit, offset], (err, rows) => {
       if (err) {
-        console.error('GET /api/inventory: Fetch error:', err);
+        console.error('GET /api/inventory: Query error:', err);
         return res.status(500).json({ error: err.message });
       }
-      console.log('GET /api/inventory: Success', { count: rows.length, page, limit, totalPages });
-      res.json({ items: rows, totalPages });
+      console.log('GET /api/inventory: Success', { count: countResult.total, page, limit, totalPages: Math.ceil(countResult.total / limit) });
+      res.set('Cache-Control', 'no-store'); // Prevent caching
+      res.json({
+        count: countResult.total,
+        page,
+        limit,
+        totalPages: Math.ceil(countResult.total / limit),
+        items: rows
+      });
     });
   });
 });
