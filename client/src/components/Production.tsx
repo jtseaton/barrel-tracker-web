@@ -187,16 +187,22 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   const handleAddBatch = async () => {
   if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
     setError('All fields are required');
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false); // Close modal on error
     return;
   }
   const product = products.find(p => p.id === newBatch.productId);
   if (!product) {
     setError('Invalid product selected');
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
     return;
   }
   const recipe = recipes.find(r => r.id === newBatch.recipeId);
   if (!recipe) {
     setError('Invalid recipe selected');
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
     return;
   }
   const batchData = {
@@ -221,8 +227,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         const errorData = JSON.parse(text);
         errorMessage = errorData.error || errorMessage;
       } catch {
-        console.error('[Production] Failed to parse error response:', text);
+        console.error('[Production] Failed to parse batch error:', text);
       }
+      console.log('[Production] Batch creation error:', errorMessage);
       setErrorMessage(errorMessage);
       setShowErrorPopup(true);
       setShowAddBatchModal(false); // Close modal on error
@@ -239,10 +246,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     setError(null);
     setErrorMessage(null);
     setShowErrorPopup(false);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[Production] Add batch error:', err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
     if (!showErrorPopup) {
-      setError('Failed to add batch: ' + err.message);
+      setError('Failed to add batch: ' + errorMessage);
+      setShowErrorPopup(true);
+      setShowAddBatchModal(false); // Close modal on error
     }
   }
 };
@@ -256,17 +266,19 @@ const handleAddRecipe = async () => {
     newRecipe.ingredients.some(ing => !ing.itemName || ing.quantity <= 0 || !ing.unit)
   ) {
     setError('Recipe name, product, valid quantity, unit, and ingredients are required');
+    setShowErrorPopup(true);
     return;
   }
   const product = products.find(p => p.id === newRecipe.productId);
   if (!product) {
     setError('Selected product is invalid or not found.');
+    setShowErrorPopup(true);
     return;
   }
   const invalidIngredients = newRecipe.ingredients.filter(ing => {
     const inventoryItem = inventory.find(i => 
       i.identifier === ing.itemName && 
-      (i.status as string) === 'Stored' && // Cast to string to bypass TS2367
+      (i.status as string) === 'Stored' && 
       i.siteId === newBatch.siteId &&
       (i.type === 'Spirits' ? i.account === 'Storage' : true)
     );
@@ -283,17 +295,23 @@ const handleAddRecipe = async () => {
         unit: inventoryItem.unit 
       } : null
     });
-    if (!inventoryItem) return true;
-    if (['pounds', 'lbs'].includes(inventoryItem.unit.toLowerCase())) {
-      ing.unit = 'lbs';
-    }
-    return false;
+    return !inventoryItem;
   });
   if (invalidIngredients.length > 0) {
-    setError(`Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory (Stored, correct site)`);
+    const errorMessage = `Invalid ingredients: ${invalidIngredients.map(i => i.itemName).join(', ')} not found in inventory (Stored, correct site)`;
+    console.log('[Production] Recipe validation error:', errorMessage);
+    setError(errorMessage);
+    setShowErrorPopup(true);
     return;
   }
   try {
+    console.log('[Production] Inventory state:', inventory.map(i => ({
+      identifier: i.identifier,
+      type: i.type,
+      status: i.status,
+      siteId: i.siteId,
+      account: i.account
+    })));
     const res = await fetch(`${API_BASE_URL}/api/recipes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -330,10 +348,12 @@ const handleAddRecipe = async () => {
       unit: 'barrels',
     });
     setError(null);
-  } catch (err: unknown) { // Fix TS1196
+    setShowErrorPopup(false);
+  } catch (err: unknown) {
     console.error('[Production] Add recipe error:', err);
     const errorMessage = err instanceof Error ? err.message : String(err);
     setError('Failed to save recipe: ' + errorMessage);
+    setShowErrorPopup(true);
   }
 };
 
