@@ -1,7 +1,10 @@
+// client/src/components/Products.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types/interfaces';
 import { ProductClass, ProductType } from '../types/enums';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import '../App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
@@ -13,7 +16,7 @@ const Products: React.FC = () => {
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: '',
     abbreviation: '',
-    enabled: 1, // Changed from true to 1
+    enabled: 1,
     priority: 1,
     class: '',
     type: '',
@@ -28,30 +31,29 @@ const Products: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/products`);
+        const res = await fetch(`${API_BASE_URL}/api/products`, { headers: { Accept: 'application/json' } });
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
+        console.log('[Products] Fetched products:', data);
         setProducts(data);
       } catch (err: any) {
         setError('Failed to fetch products: ' + err.message);
+        console.error('[Products] Fetch products error:', err);
       }
     };
 
     const fetchStyles = async () => {
       try {
-        console.log('Fetching /styles.xml...');
+        console.log('[Products] Fetching /styles.xml...');
         const res = await fetch('/styles.xml', { headers: { Accept: 'application/xml' } });
-        console.log('Fetch response:', res.status, res.statusText);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const text = await res.text();
         if (!text.trim()) throw new Error('Empty XML response');
-        console.log('Raw XML:', text.slice(0, 200));
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, 'text/xml');
         const parseError = xmlDoc.querySelector('parsererror');
         if (parseError) throw new Error('Invalid XML format: ' + parseError.textContent);
 
-        // Group styles by comments
         const stylesByType: { type: string; styles: string[] }[] = [];
         let currentType = '';
         Array.from(xmlDoc.documentElement.childNodes).forEach(node => {
@@ -77,10 +79,10 @@ const Products: React.FC = () => {
         });
 
         if (stylesByType.length === 0) throw new Error('No styles found in XML');
-        console.log('Parsed styles:', stylesByType);
+        console.log('[Products] Parsed styles:', stylesByType);
         setStyles(stylesByType);
       } catch (err: any) {
-        console.error('Fetch styles error:', err.message);
+        console.error('[Products] Fetch styles error:', err);
         setError('Failed to load styles: ' + err.message);
         const mockStyles = [
           { type: 'Malt', styles: ['IPA', 'Stout', 'Porter', 'American Amber Ale'] },
@@ -91,7 +93,7 @@ const Products: React.FC = () => {
           { type: 'Merchandise', styles: ['Other'] },
         ];
         setStyles(mockStyles);
-        console.log('Set mock styles:', mockStyles);
+        console.log('[Products] Set mock styles:', mockStyles);
       }
     };
 
@@ -113,17 +115,21 @@ const Products: React.FC = () => {
       };
       const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to add product: HTTP ${res.status}, ${text.slice(0, 50)}`);
+      }
       const addedProduct = await res.json();
+      console.log('[Products] Added product:', addedProduct);
       setProducts([...products, addedProduct]);
       setShowAddModal(false);
       setNewProduct({
         name: '',
         abbreviation: '',
-        enabled: 1, // Changed from true to 1
+        enabled: 1,
         priority: 1,
         class: '',
         type: '',
@@ -134,15 +140,17 @@ const Products: React.FC = () => {
       setError(null);
     } catch (err: any) {
       setError('Failed to add product: ' + err.message);
+      console.error('[Products] Add product error:', err);
     }
   };
 
   const handleCancelAdd = () => {
+    console.log('[Products] Cancel add product');
     setShowAddModal(false);
     setNewProduct({
       name: '',
       abbreviation: '',
-      enabled: 1, // Changed from true to 1
+      enabled: 1,
       priority: 1,
       class: '',
       type: '',
@@ -153,86 +161,138 @@ const Products: React.FC = () => {
     setError(null);
   };
 
+  const handleDeleteSelected = async () => {
+    try {
+      const promises = selectedProducts.map(id =>
+        fetch(`${API_BASE_URL}/api/products/${id}`, {
+          method: 'DELETE',
+          headers: { Accept: 'application/json' },
+        }).then(res => {
+          if (!res.ok) throw new Error(`Failed to delete product ${id}: HTTP ${res.status}`);
+        })
+      );
+      await Promise.all(promises);
+      console.log('[Products] Deleted products:', selectedProducts);
+      setProducts(products.filter(p => !selectedProducts.includes(p.id)));
+      setSelectedProducts([]);
+    } catch (err: any) {
+      setError('Failed to delete products: ' + err.message);
+      console.error('[Products] Delete products error:', err);
+    }
+  };
+
+  console.log('[Products] Render:', {
+    productsLength: products.length,
+    isMobile: window.innerWidth <= 768 ? 'cards' : 'table',
+    showAddModal,
+    error,
+  });
+
   return (
-    <div className="page-container">
-      <h2>Products</h2>
-      {error && <div className="error">{error}</div>}
-      <div className="inventory-actions">
-        <button onClick={() => setShowAddModal(true)}>Add Product</button>
+    <div className="page-container container">
+      <h2 className="app-header mb-4">Products</h2>
+      {error && <div className="alert alert-danger">{error}</div>}
+      <div className="inventory-actions mb-4">
+        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+          Add Product
+        </button>
         <button
+          className="btn btn-danger"
+          onClick={handleDeleteSelected}
           disabled={selectedProducts.length === 0}
-          style={selectedProducts.length === 0 ? { backgroundColor: '#CCCCCC', cursor: 'not-allowed' } : {}}
         >
           Delete Selected
         </button>
       </div>
       <div className="inventory-table-container">
-        <table className="inventory-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Name</th>
-              <th>Abbreviation</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((product) => (
-              <tr key={product.id}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedProducts.includes(product.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedProducts([...selectedProducts, product.id]);
-                      } else {
-                        setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+        {products.length > 0 ? (
+          <>
+            <table className="inventory-table table table-striped">
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={selectedProducts.length === products.length && products.length > 0}
+                      onChange={() =>
+                        setSelectedProducts(
+                          selectedProducts.length === products.length ? [] : products.map(p => p.id)
+                        )
                       }
-                    }}
-                  />
-                </td>
-                <td>
-                  <Link to={`/products/${product.id}`}>{product.name}</Link>
-                </td>
-                <td>{product.abbreviation}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    />
+                  </th>
+                  <th>Name</th>
+                  <th>Abbreviation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((product) => (
+                  <tr key={product.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedProducts.includes(product.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedProducts([...selectedProducts, product.id]);
+                          } else {
+                            setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+                          }
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <Link to={`/products/${product.id}`} className="text-primary text-decoration-underline">
+                        {product.name}
+                      </Link>
+                    </td>
+                    <td>{product.abbreviation}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="products-card-list">
+              {products.map((product) => (
+                <div key={product.id} className="products-card-item card mb-2">
+                  <div className="card-body">
+                    <input
+                      type="checkbox"
+                      checked={selectedProducts.includes(product.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedProducts([...selectedProducts, product.id]);
+                        } else {
+                          setSelectedProducts(selectedProducts.filter(id => id !== product.id));
+                        }
+                      }}
+                      className="me-2"
+                    />
+                    <p className="card-text">
+                      <strong>Name:</strong>{' '}
+                      <Link to={`/products/${product.id}`} className="text-primary text-decoration-underline">
+                        {product.name}
+                      </Link>
+                    </p>
+                    <p className="card-text"><strong>Abbreviation:</strong> {product.abbreviation}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="alert alert-info text-center">No products found.</div>
+        )}
       </div>
       {showAddModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              width: '400px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}
-          >
-            <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>
-              Add New Product
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title" style={{ color: '#555555' }}>Add New Product</h5>
+            </div>
+            <div className="modal-body">
               {/* Name */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Name (required):
                 </label>
                 <input
@@ -240,22 +300,12 @@ const Products: React.FC = () => {
                   value={newProduct.name}
                   onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
                   placeholder="Enter product name"
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
               </div>
               {/* Abbreviation */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Abbreviation:
                 </label>
                 <input
@@ -263,38 +313,18 @@ const Products: React.FC = () => {
                   value={newProduct.abbreviation}
                   onChange={(e) => setNewProduct({ ...newProduct, abbreviation: e.target.value })}
                   placeholder="Enter abbreviation"
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
               </div>
               {/* Class */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Class (required):
                 </label>
                 <select
                   value={newProduct.class || ''}
                   onChange={(e) => setNewProduct({ ...newProduct, class: e.target.value })}
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Class</option>
                   {Object.values(ProductClass).map((cls) => (
@@ -303,8 +333,8 @@ const Products: React.FC = () => {
                 </select>
               </div>
               {/* Type */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Type (required):
                 </label>
                 <select
@@ -318,20 +348,10 @@ const Products: React.FC = () => {
                     });
                     const selectedStyles = styles.find(s => s.type.toLowerCase() === type.toLowerCase())?.styles || [];
                     setFilteredStyles(selectedStyles);
-                    console.log('Type selected:', type, 'Filtered styles:', selectedStyles);
+                    console.log('[Products] Type selected:', type, 'Filtered styles:', selectedStyles);
                     setShowStyleSuggestions(true);
                   }}
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 >
                   <option value="">Select Type</option>
                   {Object.values(ProductType).map((type) => (
@@ -340,8 +360,8 @@ const Products: React.FC = () => {
                 </select>
               </div>
               {/* Style */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3" style={{ position: 'relative' }}>
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Style:
                 </label>
                 <input
@@ -370,17 +390,7 @@ const Products: React.FC = () => {
                   onFocus={() => setShowStyleSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowStyleSuggestions(false), 300)}
                   disabled={newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise}
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    backgroundColor: (newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise) ? '#f0f0f0' : '#FFFFFF',
-                    color: '#000000',
-                  }}
+                  className="form-control"
                 />
                 {showStyleSuggestions && newProduct.type !== ProductType.Seltzer && newProduct.type !== ProductType.Merchandise && (
                   <ul className="typeahead">
@@ -407,8 +417,8 @@ const Products: React.FC = () => {
                 )}
               </div>
               {/* ABV */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   ABV %:
                 </label>
                 <input
@@ -418,22 +428,12 @@ const Products: React.FC = () => {
                   step="0.1"
                   min="0"
                   placeholder="Enter ABV %"
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
               </div>
               {/* IBU */}
-              <div>
-                <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+              <div className="mb-3">
+                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   IBU:
                 </label>
                 <input
@@ -443,53 +443,15 @@ const Products: React.FC = () => {
                   step="1"
                   min="0"
                   placeholder="Enter IBU"
-                  style={{
-                    width: '100%',
-                    maxWidth: '350px',
-                    padding: '10px',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#FFFFFF',
-                  }}
+                  className="form-control"
                 />
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-              <button
-                onClick={handleAddProduct}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-              >
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleAddProduct}>
                 Add
               </button>
-              <button
-                onClick={handleCancelAdd}
-                style={{
-                  backgroundColor: '#F86752',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-              >
+              <button className="btn btn-danger" onClick={handleCancelAdd}>
                 Cancel
               </button>
             </div>
