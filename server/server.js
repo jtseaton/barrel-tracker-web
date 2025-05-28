@@ -535,6 +535,9 @@ const insertTestData = () => {
     db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ['Hops Cascade', 'Storage', 'Hops', '50', 'Pounds', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
 
+    db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['Hops Country Malt', 'Storage', 'Hops', '100', 'Pounds', '2025-04-21', 'Country Malt', 'BR-AL-20019', 9, 'Stored']);
+
     // Recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
       [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }]), '100', 'gallons']);
@@ -4410,7 +4413,7 @@ app.post('/api/purchase-orders/email', (req, res) => {
 app.get('/api/inventory', (req, res) => {
   const { source, identifier, locationId, siteId, page = 1, limit = 10 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
-  let countQuery = 'SELECT COUNT(*) as total FROM inventory WHERE 1=1';
+  let countQuery = 'SELECT COUNT(*) as total FROM inventory';
   let query = 'SELECT identifier, account, type, quantity, unit, price, isKegDepositItem, proof, proofGallons, receivedDate, source, dspNumber, siteId, locationId, status, description, cost, totalCost FROM inventory';
   let params = [];
   let countParams = [];
@@ -4441,6 +4444,8 @@ app.get('/api/inventory', (req, res) => {
   }
   query += ' LIMIT ? OFFSET ?';
   params.push(parseInt(limit), offset);
+
+  console.log('GET /api/inventory: Executing', { countQuery, query, countParams, params });
 
   db.get(countQuery, countParams, (err, countResult) => {
     if (err) {
