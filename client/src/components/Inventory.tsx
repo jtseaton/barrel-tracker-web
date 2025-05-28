@@ -11,7 +11,7 @@ const OUR_DSP = 'DSP-AL-20010';
 interface InventoryProps {
   vendors: Vendor[];
   refreshVendors: () => Promise<void>;
-  inventory: InventoryItem[];
+  inventory: InventoryItem[] | undefined; // Allow undefined
   refreshInventory: () => Promise<void>;
 }
 
@@ -39,13 +39,14 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
   // Log inventory prop
   useEffect(() => {
     console.log('[Inventory] Inventory prop:', {
-      inventory,
       isArray: Array.isArray(inventory),
       length: Array.isArray(inventory) ? inventory.length : 'N/A',
       type: typeof inventory,
+      value: inventory,
+      note: 'If not an array, check App.tsx refreshInventory or GET /api/inventory response.',
     });
     if (!Array.isArray(inventory)) {
-      setProductionError('Invalid inventory data: Expected an array.');
+      setProductionError('Invalid inventory data: Expected an array. Check App.tsx or GET /api/inventory.');
     }
   }, [inventory]);
 
@@ -231,9 +232,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory }) =>
       <h2 className="text-warning mb-4">Inventory Management</h2>
       {productionError && (
         <div className="alert alert-danger mb-3">{productionError}</div>
-      )}
-      {!Array.isArray(inventory) && !productionError && (
-        <div className="alert alert-danger mb-3">Invalid inventory data: Expected an array.</div>
       )}
       {Array.isArray(inventory) && !inventory.length && !productionError && (
         <div className="alert alert-warning mb-3">No inventory data available.</div>
