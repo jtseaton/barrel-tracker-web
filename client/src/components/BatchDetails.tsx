@@ -91,7 +91,10 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
             throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
           }
           const data = await res.json();
-          setter(single ? data : data);
+if (name === 'batch') {
+  console.log(`[BatchDetails] Fetched batch ${batchId}:`, { ingredients: data.ingredients, recipeId: data.recipeId });
+}
+setter(single ? data : data);
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
