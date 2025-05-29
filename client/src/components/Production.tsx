@@ -239,19 +239,26 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         return;
       }
       const batchData = {
-        batchId: newBatch.batchId,
-        productId: newBatch.productId,
-        recipeId: newBatch.recipeId,
-        siteId: newBatch.siteId,
-        fermenterId: newBatch.fermenterId || null,
-        status: 'In Progress',
-        date: new Date().toISOString().split('T')[0],
-      };
-      const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(batchData),
-      });
+  batchId: newBatch.batchId,
+  productId: newBatch.productId,
+  recipeId: newBatch.recipeId,
+  siteId: newBatch.siteId,
+  fermenterId: newBatch.fermenterId || null,
+  status: 'In Progress',
+  date: new Date().toISOString().split('T')[0],
+  ingredients: recipe.ingredients.map(ing => ({
+    itemName: ing.itemName,
+    quantity: ing.quantity,
+    unit: ing.unit,
+    isRecipe: true
+  })),
+};
+console.log('[Production] Sending batch data:', batchData);
+const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  body: JSON.stringify(batchData),
+});
       if (!resBatch.ok) {
         const text = await resBatch.text();
         let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
