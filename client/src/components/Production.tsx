@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
+import { Status, Unit, MaterialType, Account } from '../types/enums'; // Add at top of file
 import RecipeModal from './RecipeModal';
 import '../App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -192,128 +193,145 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setShowAddBatchModal(false);
       return;
     }
-    try {
-      console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
-      await refreshInventory();
-      console.log('[Production] Inventory state:', inventory.map(i => ({
-        identifier: i.identifier,
-        type: i.type,
-        status: i.status,
-        siteId: i.siteId,
-        account: i.account,
-        quantity: i.quantity,
-        unit: i.unit
-      })));
-      // Validate recipe ingredients availability
-      const invalidIngredients = recipe.ingredients.filter(ing => {
-        const inventoryItem = inventory.find(i => 
-          i.identifier === ing.itemName && 
-          (i.status as string) === 'Stored' && // Temporary cast
-          i.siteId === newBatch.siteId &&
-          (i.type === 'Spirits' ? i.account === 'Storage' : true) &&
-          parseFloat(i.quantity) >= ing.quantity
-        );
-        console.log('[Production] Checking batch ingredient:', {
-          itemName: ing.itemName,
-          siteId: newBatch.siteId,
-          requiredQuantity: ing.quantity,
-          unit: ing.unit,
-          inventoryItem: inventoryItem ? { 
-            identifier: inventoryItem.identifier, 
-            type: inventoryItem.type,
-            account: inventoryItem.account,
-            status: inventoryItem.status,
-            siteId: inventoryItem.siteId,
-            quantity: inventoryItem.quantity,
-            unit: inventoryItem.unit 
-          } : null
-        });
-        return !inventoryItem;
-      });
-      if (invalidIngredients.length > 0) {
-        const errorMessage = `Insufficient ingredients: ${invalidIngredients.map(i => `${i.itemName} (${i.quantity} ${i.unit})`).join(', ')} not available at site ${newBatch.siteId}`;
-        console.log('[Production] Batch validation error:', errorMessage);
-        setError(errorMessage);
-        setShowErrorPopup(true);
-        setShowAddBatchModal(false);
-        return;
-      }
-      const batchData = {
-  batchId: newBatch.batchId,
-  productId: newBatch.productId,
-  recipeId: newBatch.recipeId,
-  siteId: newBatch.siteId,
-  fermenterId: newBatch.fermenterId || null,
-  status: 'In Progress',
-  date: new Date().toISOString().split('T')[0],
-  ingredients: recipe.ingredients.map(ing => ({
-    itemName: ing.itemName,
-    quantity: ing.quantity,
-    unit: ing.unit,
-    isRecipe: true
-  })),
-};
-console.log('[Production] Sending batch data:', batchData);
-const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-  body: JSON.stringify(batchData),
-});
-      if (!resBatch.ok) {
-        const text = await resBatch.text();
-        let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          console.error('[Production] Failed to parse batch error:', text);
-        }
-        console.log('[Production] Batch creation error:', errorMessage);
-        setErrorMessage(errorMessage);
-        setShowErrorPopup(true);
-        setShowAddBatchModal(false);
-        throw new Error(errorMessage);
-      }
-      await resBatch.json();
-      console.log('[Production] Added batch:', batchData);
-      for (const ing of recipe.ingredients) {
-  const ingredientData = {
-    itemName: ing.itemName,
-    quantity: ing.quantity,
-    unit: ing.unit,
-    isRecipe: true
+try {
+  console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
+  await refreshInventory();
+  console.log('[Production] Inventory state:', inventory.map(i => ({
+    identifier: i.identifier,
+    type: i.type,
+    status: i.status,
+    siteId: i.siteId,
+    account: i.account,
+    quantity: i.quantity,
+    unit: i.unit
+  })));
+  // Validate recipe ingredients availability
+  const invalidIngredients = recipe.ingredients.filter(ing => {
+    const inventoryItem = inventory.find(i => 
+      i.identifier === ing.itemName && 
+      (i.status as string) === 'Stored' && // Match db status
+      i.siteId === newBatch.siteId &&
+      (i.type === MaterialType.Spirits ? i.account === Account.Storage : true) &&
+      parseFloat(i.quantity) >= ing.quantity
+    );
+    console.log('[Production] Checking batch ingredient:', {
+      itemName: ing.itemName,
+      siteId: newBatch.siteId,
+      requiredQuantity: ing.quantity,
+      unit: ing.unit,
+      inventoryItem: inventoryItem ? { 
+        identifier: inventoryItem.identifier, 
+        type: inventoryItem.type,
+        account: inventoryItem.account,
+        status: inventoryItem.status,
+        siteId: inventoryItem.siteId,
+        quantity: inventoryItem.quantity,
+        unit: inventoryItem.unit 
+      } : null
+    });
+    return !inventoryItem;
+  });
+  if (invalidIngredients.length > 0) {
+    const errorMessage = `Insufficient ingredients: ${invalidIngredients.map(i => `${i.itemName} (${i.quantity} ${i.unit})`).join(', ')} not available at site ${newBatch.siteId}`;
+    console.log('[Production] Batch validation error:', errorMessage);
+    setError(errorMessage);
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
+    return;
+  }
+  console.log('[Production] Recipe data:', {
+    recipeId: newBatch.recipeId,
+    recipeUnit: recipe.unit,
+    recipeQuantity: recipe.quantity,
+    recipeIngredients: recipe.ingredients,
+    fullRecipe: recipe
+  });
+  const batchData = {
+    batchId: newBatch.batchId,
+    productId: newBatch.productId,
+    recipeId: newBatch.recipeId,
+    siteId: newBatch.siteId,
+    fermenterId: newBatch.fermenterId || null,
+    status: 'In Progress',
+    date: new Date().toISOString().split('T')[0],
+    ingredients: recipe.ingredients.map(ing => ({
+      itemName: ing.itemName,
+      quantity: ing.quantity,
+      unit: ing.unit,
+      isRecipe: true
+    })),
+    volume: newBatch.recipeId === 3 ? recipe.quantity : (recipe.unit === 'barrels' ? recipe.quantity : (recipe.quantity || 0)) // Force for recipeId: 3
   };
-  console.log('[Production] Adding ingredient to batch:', ingredientData);
-  const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatch.batchId}/ingredients`, {
+  console.log('[Production] Sending batch data:', {
+    batchId: batchData.batchId,
+    volume: batchData.volume,
+    ingredients: batchData.ingredients,
+    recipeId: batchData.recipeId
+  });
+  const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(ingredientData),
+    body: JSON.stringify(batchData),
   });
-  if (!resIngredient.ok) {
-    const text = await resIngredient.text();
-    let errorMessage = `Failed to add ingredient ${ing.itemName}: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
+  if (!resBatch.ok) {
+    const text = await resBatch.text();
+    let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
     try {
       const errorData = JSON.parse(text);
       errorMessage = errorData.error || errorMessage;
     } catch {
-      console.error('[Production] Failed to parse ingredient error:', text);
+      console.error('[Production] Failed to parse batch error:', text);
     }
-    console.log('[Production] Ingredient addition error:', errorMessage);
+    console.log('[Production] Batch creation error:', errorMessage);
     setErrorMessage(errorMessage);
     setShowErrorPopup(true);
     setShowAddBatchModal(false);
     throw new Error(errorMessage);
-  }}
+  }
+  await resBatch.json();
+  console.log('[Production] Added batch:', batchData);
+  for (const ing of recipe.ingredients) {
+    const ingredientData = {
+      itemName: ing.itemName,
+      quantity: ing.quantity,
+      unit: ing.unit,
+      isRecipe: true
+    };
+    console.log('[Production] Adding ingredient to batch:', {
+      batchId: newBatch.batchId,
+      ingredientData
+    });
+    const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatch.batchId}/ingredients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(ingredientData),
+    });
+    if (!resIngredient.ok) {
+      const text = await resIngredient.text();
+      let errorMessage = `Failed to add ingredient ${ing.itemName}: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
+      try {
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        console.error('[Production] Failed to parse ingredient error:', text);
+      }
+      console.log('[Production] Ingredient addition error:', errorMessage);
+      setErrorMessage(errorMessage);
+      setShowErrorPopup(true);
       setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
-      setRecipes([]);
-      setEquipment([]);
-      await refreshInventory();
-      await fetchBatches();
-      setError(null);
-      setErrorMessage(null);
-      setShowErrorPopup(false);
-    } catch (err: unknown) {
+      throw new Error(errorMessage);
+    }
+  }
+  setShowAddBatchModal(false);
+  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+  setRecipes([]);
+  setEquipment([]);
+  await refreshInventory();
+  await fetchBatches();
+  setError(null);
+  setErrorMessage(null);
+  setShowErrorPopup(false);
+} catch (err: unknown) {
       console.error('[Production] Add batch error:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError('Failed to add batch: ' + errorMessage);

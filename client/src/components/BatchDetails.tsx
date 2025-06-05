@@ -904,54 +904,6 @@ setter(single ? data : data);
           <p>No actions recorded.</p>
         )}
       </div>
-      {batch.status !== 'Completed' && (
-        <div className="mb-4">
-          <h3 className="text-warning mb-3">Ingredients</h3>
-          <div className="row g-2 mb-3">
-            <div className="col-md-3">
-              <label className="form-label text-warning">Item:</label>
-              <select
-                value={newIngredient.itemName}
-                onChange={(e) => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
-                className="form-control"
-              >
-                <option value="">Select Item</option>
-                {items.filter(item => item.enabled).map(item => (
-                  <option key={item.name} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-3">
-              <label className="form-label text-warning">Quantity:</label>
-              <input
-                type="number"
-                value={newIngredient.quantity || ''}
-                onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) || 0 })}
-                placeholder="Quantity"
-                min="0"
-                className="form-control"
-              />
-            </div>
-            <div className="col-md-3">
-              <label className="form-label text-warning">Unit:</label>
-              <select
-                value={newIngredient.unit}
-                onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-                className="form-control"
-              >
-                <option value="lbs">lbs</option>
-                <option value="gallons">gallons</option>
-                <option value="liters">liters</option>
-              </select>
-            </div>
-            <div className="col-md-3 d-flex align-items-end">
-              <button className="btn btn-primary w-100" onClick={handleAddIngredient}>
-                Add Ingredient
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div className="mb-4">
         <h3 className="text-warning mb-3">Ingredients</h3>
         {batch.ingredients && batch.ingredients.length > 0 ? (
@@ -1119,6 +1071,54 @@ setter(single ? data : data);
           <p>No ingredients recorded.</p>
         )}
       </div>
+      {batch.status !== 'Completed' && (
+        <div className="mb-4">
+          <h3 className="text-warning mb-3">Add Ingredients</h3>
+          <div className="row g-2 mb-3">
+            <div className="col-md-3">
+              <label className="form-label text-warning">Item:</label>
+              <select
+                value={newIngredient.itemName}
+                onChange={(e) => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
+                className="form-control"
+              >
+                <option value="">Select Item</option>
+                {items.filter(item => item.enabled).map(item => (
+                  <option key={item.name} value={item.name}>{item.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
+              <label className="form-label text-warning">Quantity:</label>
+              <input
+                type="number"
+                value={newIngredient.quantity || ''}
+                onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) || 0 })}
+                placeholder="Quantity"
+                min="0"
+                className="form-control"
+              />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label text-warning">Unit:</label>
+              <select
+                value={newIngredient.unit}
+                onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
+                className="form-control"
+              >
+                <option value="lbs">lbs</option>
+                <option value="gallons">gallons</option>
+                <option value="liters">liters</option>
+              </select>
+            </div>
+            <div className="col-md-3 d-flex align-items-end">
+              <button className="btn btn-primary w-100" onClick={handleAddIngredient}>
+                Add Ingredient
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {batch.stage === 'Packaging' && batch.status !== 'Completed' && (
         <div className="mb-4">
           <h3 className="text-warning mb-3">Package Batch</h3>
