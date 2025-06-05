@@ -276,6 +276,34 @@ const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
       }
       await resBatch.json();
       console.log('[Production] Added batch:', batchData);
+      for (const ing of recipe.ingredients) {
+  const ingredientData = {
+    itemName: ing.itemName,
+    quantity: ing.quantity,
+    unit: ing.unit,
+    isRecipe: true
+  };
+  console.log('[Production] Adding ingredient to batch:', ingredientData);
+  const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatch.batchId}/ingredients`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(ingredientData),
+  });
+  if (!resIngredient.ok) {
+    const text = await resIngredient.text();
+    let errorMessage = `Failed to add ingredient ${ing.itemName}: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
+    try {
+      const errorData = JSON.parse(text);
+      errorMessage = errorData.error || errorMessage;
+    } catch {
+      console.error('[Production] Failed to parse ingredient error:', text);
+    }
+    console.log('[Production] Ingredient addition error:', errorMessage);
+    setErrorMessage(errorMessage);
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
+    throw new Error(errorMessage);
+  }}
       setShowAddBatchModal(false);
       setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
       setRecipes([]);
