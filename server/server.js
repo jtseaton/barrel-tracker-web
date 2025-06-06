@@ -3446,7 +3446,7 @@ app.get('/api/batches/:batchId/package', (req, res) => {
 // POST /api/batches/:batchId/ingredients
 app.post('/api/batches/:batchId/ingredients', (req, res) => {
   const { batchId } = req.params;
-  const { itemName, quantity, unit } = req.body;
+  const { itemName, quantity, unit, isRecipe } = req.body;
   if (!itemName || !quantity || quantity <= 0 || !unit) {
     return res.status(400).json({ error: 'Valid itemName, quantity, and unit required' });
   }
@@ -3489,11 +3489,10 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
             }
             let additionalIngredients = batchRow.additionalIngredients ? JSON.parse(batchRow.additionalIngredients) : [];
             console.log(`Current additionalIngredients before adding:`, additionalIngredients);
-            // Clean up stale overrides (e.g., zero-quantity or invalid entries)
             additionalIngredients = additionalIngredients.filter(
               ing => !ing.excluded || (ing.excluded && ing.itemName !== itemName) || (ing.quantity && ing.quantity > 0)
             );
-            additionalIngredients.push({ itemName, quantity, unit: normalizedUnit });
+            additionalIngredients.push({ itemName, quantity, unit: normalizedUnit, isRecipe: !!isRecipe });
             console.log(`New additionalIngredients after adding:`, additionalIngredients);
             db.run(
               'UPDATE batches SET additionalIngredients = ? WHERE batchId = ?',
@@ -3514,7 +3513,7 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
                     console.log(`Inventory updated: deducted ${quantity}${normalizedUnit} for ${itemName} at site ${siteId}`);
                     db.get(`
                       SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName, 
-                             b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients
+                             b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId, b.volume
                       FROM batches b
                       JOIN products p ON b.productId = p.id
                       JOIN recipes r ON b.recipeId = r.id
@@ -3537,10 +3536,10 @@ app.post('/api/batches/:batchId/ingredients', (req, res) => {
                       );
                       updatedBatch.ingredients = [
                         ...activeRecipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
-                        ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: false }))
+                        ...additionalIngredients.filter(ing => !ing.excluded && (!ing.quantity || ing.quantity > 0)).map(ing => ({ ...ing, isRecipe: ing.isRecipe || false }))
                       ];
                       updatedBatch.additionalIngredients = additionalIngredients;
-                      console.log(`POST /api/batches/${batchId}/ingredients, added:`, { itemName, quantity, unit: normalizedUnit });
+                      console.log(`POST /api/batches/${batchId}/ingredients, added:`, { itemName, quantity, unit: normalizedUnit, isRecipe });
                       console.log(`Returning updated batch:`, updatedBatch);
                       res.json(updatedBatch);
                     });

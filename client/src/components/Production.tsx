@@ -260,7 +260,7 @@ try {
       unit: ing.unit,
       isRecipe: true
     })),
-    volume: newBatch.recipeId === 3 ? recipe.quantity : (recipe.unit === 'barrels' ? recipe.quantity : (recipe.quantity || 0)) // Force for recipeId: 3
+    volume: 20 // Hardcode volume for all batches
   };
   console.log('[Production] Sending batch data:', {
     batchId: batchData.batchId,
