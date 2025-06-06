@@ -260,8 +260,8 @@ try {
       unit: ing.unit,
       isRecipe: true
     })),
-    volume: 20 // Hardcode volume for all batches
-  };
+    volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20
+};
   console.log('[Production] Sending batch data:', {
     batchId: batchData.batchId,
     volume: batchData.volume,

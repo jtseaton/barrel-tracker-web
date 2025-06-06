@@ -2456,11 +2456,16 @@ app.get('/api/batches', (req, res) => {
 });
 
 app.post('/api/batches', (req, res) => {
-  const { batchId, productId, recipeId, siteId, fermenterId, status, date } = req.body;
+  const { batchId, productId, recipeId, siteId, fermenterId, status, date, volume } = req.body;
   if (!batchId || !productId || !recipeId || !siteId) {
+    console.error('POST /api/batches: Missing required fields', { batchId, productId, recipeId, siteId });
     return res.status(400).json({ error: 'Missing required fields' });
   }
-  console.log('POST /api/batches:', { batchId, recipeId, siteId });
+  if (volume !== undefined && (isNaN(parseFloat(volume)) || parseFloat(volume) <= 0)) {
+    console.error('POST /api/batches: Invalid volume', { volume });
+    return res.status(400).json({ error: 'Volume must be a positive number if provided' });
+  }
+  console.log('POST /api/batches:', { batchId, recipeId, siteId, volume });
   db.all('SELECT itemName, quantity, unit FROM recipe_ingredients WHERE recipeId = ?', [parseInt(recipeId)], (err, ingredients) => {
     if (err) {
       console.error('POST /api/batches: Fetch ingredients error:', err);
@@ -2519,14 +2524,14 @@ app.post('/api/batches', (req, res) => {
     }
     function insertBatch() {
       db.run(
-        'INSERT INTO batches (batchId, productId, recipeId, siteId, fermenterId, status, date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [batchId, productId, parseInt(recipeId), siteId, fermenterId, status, date],
+        'INSERT INTO batches (batchId, productId, recipeId, siteId, fermenterId, status, date, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [batchId, productId, parseInt(recipeId), siteId, fermenterId || null, status || 'In Progress', date || new Date().toISOString().split('T')[0], volume || null],
         (err) => {
           if (err) {
             console.error('POST /api/batches: Insert error:', err);
             return res.status(500).json({ error: err.message });
           }
-          console.log('POST /api/batches: Success', { batchId });
+          console.log('POST /api/batches: Success', { batchId, volume });
           res.json({ batchId });
         }
       );
