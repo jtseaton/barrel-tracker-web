@@ -91,7 +91,7 @@ const Products: React.FC = () => {
       const payload = {
         ...newProduct,
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
-        ibu: newProduct.class === ProductClass.Beer ? (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null) : null,
+        ibu: null, // Always set ibu to null since IBU field is removed
       };
       console.log('[Products] Adding product:', payload);
       const res = await fetch(`${API_BASE_URL}/api/products`, {
@@ -310,7 +310,7 @@ const Products: React.FC = () => {
                       class: classValue,
                       type: undefined,
                       style: undefined,
-                      ibu: classValue === ProductClass.Beer ? newProduct.ibu : null,
+                      ibu: null, // Always null since IBU field is removed
                     });
                   }}
                   className="form-control"
@@ -406,22 +406,6 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {newProduct.class === ProductClass.Beer && newProduct.class !== undefined && (
-                <div className="mb-3">
-                  <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                    IBU:
-                  </label>
-                  <input
-                    type="number"
-                    value={newProduct.ibu ?? ''}
-                    onChange={(e) => setNewProduct({ ...newProduct, ibu: parseInt(e.target.value, 10) || null })}
-                    step="1"
-                    min="0"
-                    placeholder="Enter IBU"
-                    className="form-control"
-                  />
-                </div>
-              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={handleAddProduct}>
