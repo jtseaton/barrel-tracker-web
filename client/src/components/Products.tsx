@@ -84,7 +84,7 @@ const Products: React.FC = () => {
       const payload = {
         ...newProduct,
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
-        ibu: newProduct.class === ProductClass.Spirits ? null : (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null),
+        ibu: newProduct.class === ProductClass.Beer ? (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null) : null,
       };
       console.log('[Products] Adding product:', payload);
       const res = await fetch(`${API_BASE_URL}/api/products`, {
@@ -160,7 +160,7 @@ const Products: React.FC = () => {
     isMobile: window.innerWidth <= 768 ? 'cards' : 'table',
     showAddModal,
     error,
-    newProductClass: newProduct.class, // Debug class state
+    newProductClass: newProduct.class,
   });
 
   return (
@@ -297,13 +297,13 @@ const Products: React.FC = () => {
                   value={newProduct.class || ''}
                   onChange={(e) => {
                     const classValue = e.target.value as ProductClass;
-                    console.log('[Products] Class changed:', classValue); // Debug
+                    console.log('[Products] Class changed:', classValue);
                     setNewProduct({
                       ...newProduct,
                       class: classValue,
                       type: undefined,
                       style: undefined,
-                      ibu: classValue === ProductClass.Spirits ? null : newProduct.ibu,
+                      ibu: classValue === ProductClass.Beer ? newProduct.ibu : null,
                     });
                   }}
                   className="form-control"
@@ -322,7 +322,7 @@ const Products: React.FC = () => {
                   value={newProduct.type || ''}
                   onChange={(e) => {
                     const typeValue = e.target.value as ProductType;
-                    console.log('[Products] Type changed:', typeValue); // Debug
+                    console.log('[Products] Type changed:', typeValue);
                     setNewProduct({
                       ...newProduct,
                       type: typeValue,
@@ -399,7 +399,7 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {newProduct.class !== ProductClass.Spirits && newProduct.class && (
+              {newProduct.class === ProductClass.Beer && (
                 <div className="mb-3">
                   <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                     IBU:
