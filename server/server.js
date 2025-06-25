@@ -3933,27 +3933,103 @@ app.patch('/api/batches/:batchId', (req, res) => {
 // Replace DELETE /api/batches/:batchId (~line 600)
 app.delete('/api/batches/:batchId', (req, res) => {
   const { batchId } = req.params;
-  db.get('SELECT status FROM batches WHERE batchId = ?', [batchId], (err, batch) => {
-    if (err) {
-      console.error('Fetch batch error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!batch) {
-      return res.status(404).json({ error: 'Batch not found' });
-    }
-    if (batch.status === 'Completed') {
-      console.log(`DELETE /api/batches/${batchId}: Cannot delete completed batch`);
-      return res.status(403).json({ error: 'Cannot delete a completed batch' });
-    }
-    db.run('DELETE FROM batches WHERE batchId = ?', [batchId], (err) => {
+  db.get(
+    `SELECT b.status, b.siteId, b.additionalIngredients, r.ingredients AS recipeIngredients 
+     FROM batches b 
+     JOIN recipes r ON b.recipeId = r.id 
+     WHERE b.batchId = ?`,
+    [batchId],
+    (err, batch) => {
       if (err) {
-        console.error('Delete batch error:', err);
+        console.error('DELETE /api/batches/:batchId: Fetch batch error:', err);
         return res.status(500).json({ error: err.message });
       }
-      console.log(`DELETE /api/batches/${batchId}: Batch deleted`);
-      res.json({ message: 'Batch deleted' });
-    });
-  });
+      if (!batch) {
+        console.error(`DELETE /api/batches/${batchId}: Batch not found`);
+        return res.status(404).json({ error: 'Batch not found' });
+      }
+      if (batch.status === 'Completed') {
+        console.error(`DELETE /api/batches/${batchId}: Cannot delete completed batch`);
+        return res.status(403).json({ error: 'Cannot delete a completed batch' });
+      }
+      const additionalIngredients = batch.additionalIngredients ? JSON.parse(batch.additionalIngredients) : [];
+      const recipeIngredients = batch.recipeIngredients ? JSON.parse(batch.recipeIngredients) : [];
+      const allIngredients = [
+        ...recipeIngredients.map(ing => ({ ...ing, isRecipe: true })),
+        ...additionalIngredients.filter(ing => !ing.excluded).map(ing => ({ ...ing, isRecipe: false }))
+      ];
+      console.log(`DELETE /api/batches/${batchId}: Restoring ingredients`, allIngredients);
+      if (allIngredients.length === 0) {
+        deleteBatch();
+        return;
+      }
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (err) => {
+          if (err) {
+            console.error('DELETE /api/batches/:batchId: Begin transaction error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          let pending = allIngredients.length;
+          const errors = [];
+          allIngredients.forEach(ing => {
+            const normalizedUnit = (ing.unit || 'lbs').toLowerCase() === 'pounds' ? 'lbs' : (ing.unit || 'lbs').toLowerCase();
+            db.get(
+              'SELECT quantity FROM inventory WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+              [ing.itemName, normalizedUnit, 'pounds', batch.siteId],
+              (err, row) => {
+                if (err) {
+                  console.error('DELETE /api/batches/:batchId: Fetch inventory error:', err);
+                  errors.push(err.message);
+                  if (--pending === 0) finish();
+                  return;
+                }
+                const currentQuantity = row ? parseFloat(row.quantity) : 0;
+                const newQuantity = currentQuantity + ing.quantity;
+                db.run(
+                  'UPDATE inventory SET quantity = ? WHERE identifier = ? AND LOWER(unit) IN (?, ?) AND siteId = ?',
+                  [newQuantity, ing.itemName, normalizedUnit, 'pounds', batch.siteId],
+                  (err) => {
+                    if (err) {
+                      console.error('DELETE /api/batches/:batchId: Update inventory error:', err);
+                      errors.push(err.message);
+                    } else {
+                      console.log(`DELETE /api/batches/${batchId}: Restored ${ing.quantity}${normalizedUnit} of ${ing.itemName}`);
+                    }
+                    if (--pending === 0) finish();
+                  }
+                );
+              }
+            );
+          });
+          function finish() {
+            if (errors.length > 0) {
+              db.run('ROLLBACK');
+              console.error('DELETE /api/batches/:batchId: Errors restoring inventory', errors);
+              return res.status(500).json({ error: errors.join('; ') });
+            }
+            deleteBatch();
+          }
+        });
+      });
+      function deleteBatch() {
+        db.run('DELETE FROM batches WHERE batchId = ?', [batchId], (err) => {
+          if (err) {
+            db.run('ROLLBACK');
+            console.error('DELETE /api/batches/:batchId: Delete batch error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          db.run('COMMIT', (err) => {
+            if (err) {
+              console.error('DELETE /api/batches/:batchId: Commit error:', err);
+              return res.status(500).json({ error: err.message });
+            }
+            console.log(`DELETE /api/batches/${batchId}: Batch deleted, inventory restored`);
+            res.json({ message: 'Batch deleted and inventory restored' });
+          });
+        });
+      }
+    }
+  );
 });
 
 // POST /api/batches/:batchId/actions
