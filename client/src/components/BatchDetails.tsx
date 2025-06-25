@@ -1,7 +1,7 @@
-// src/components/BatchDetails.tsx (Part 1)
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site, Equipment, Ingredient, Location, InventoryItem, PackagingAction, BatchDetailsProps } from '../types/interfaces';
+import { Status } from '../types/enums'; // Added import
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
@@ -91,20 +91,18 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
             throw new Error(`Invalid response for ${name}: Expected JSON, got ${contentType}`);
           }
           const data = await res.json();
-if (name === 'batch') {
-  console.log(`[BatchDetails] Fetched batch ${batchId}:`, { ingredients: data.ingredients, recipeId: data.recipeId });
-}
-setter(single ? data : data);
+          if (name === 'batch') {
+            console.log(`[BatchDetails] Fetched batch ${batchId}:`, { ingredients: data.ingredients, recipeId: data.recipeId });
+          }
+          setter(single ? data : data);
         }
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        setError('Failed to load batch details: ' + errorMessage);
+      } catch (err: any) {
+        setError('Failed to load batch details: ' + err.message);
       }
     };
     fetchData();
   }, [batchId]);
 
-  // src/components/BatchDetails.tsx (Part 2)
   useEffect(() => {
     if (batch && products.length > 0) {
       const product = products.find((p: Product) => p.id === batch.productId);
@@ -140,9 +138,8 @@ setter(single ? data : data);
           const data = await res.json();
           setter(data);
         }
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        setError('Failed to load site data: ' + errorMessage);
+      } catch (err: any) {
+        setError('Failed to load site data: ' + err.message);
       }
     };
     fetchSiteData();
@@ -171,9 +168,8 @@ setter(single ? data : data);
       setKegCodes([...kegCodes, currentKegCode]);
       setCurrentKegCode('');
       setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to add keg: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to add keg: ' + err.message);
     }
   };
 
@@ -229,13 +225,11 @@ setter(single ? data : data);
       setSuccessMessage(data.message || 'Packaged successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to package: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to package: ' + err.message);
     }
   };
 
-// src/components/BatchDetails.tsx (Part 3)
   const handleVolumeAdjustment = async (confirm: boolean) => {
     if (!showVolumePrompt) return;
     if (!confirm) {
@@ -285,9 +279,8 @@ setter(single ? data : data);
       setSuccessMessage(data.message || 'Packaged successfully after volume adjustment');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to adjust volume or package: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to adjust volume or package: ' + err.message);
     }
   };
 
@@ -312,9 +305,8 @@ setter(single ? data : data);
       setError(null);
       setSuccessMessage('Action added successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to add action: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to add action: ' + err.message);
     }
   };
 
@@ -328,19 +320,18 @@ setter(single ? data : data);
       const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Completed', stage: 'Completed', equipmentId: null }),
+        body: JSON.stringify({ status: Status.Completed, stage: 'Completed', equipmentId: null }),
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null } : null);
+      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); // Fixed TS2345
       setError(null);
       setSuccessMessage('Batch completed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to complete batch: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to complete batch: ' + err.message);
     }
   };
 
@@ -352,19 +343,18 @@ setter(single ? data : data);
         const res = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ status: 'Completed', stage: 'Completed', equipmentId: null }),
+          body: JSON.stringify({ status: Status.Completed, stage: 'Completed', equipmentId: null }),
         });
         if (!res.ok) {
           const text = await res.text();
           throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-        setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null } : null);
+        setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); // Fixed TS2345
         setSuccessMessage('Batch completed without recording loss');
         setTimeout(() => setSuccessMessage(null), 2000);
         setError(null);
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        setError('Failed to complete batch: ' + errorMessage);
+      } catch (err: any) {
+        setError('Failed to complete batch: ' + err.message);
       }
       return;
     }
@@ -372,7 +362,7 @@ setter(single ? data : data);
       const lossPayload = {
         identifier: batch.batchId,
         quantityLost: showLossPrompt.volume,
-        proofGallonsLost: 0,
+        proofGallonsLost: 0, // Non-spirits batch, no proof gallons
         reason: 'Fermentation loss due to trub/spillage',
         date: new Date().toISOString().split('T')[0],
         dspNumber: 'DSP-AL-20010',
@@ -398,20 +388,19 @@ setter(single ? data : data);
       const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status: 'Completed', stage: 'Completed', equipmentId: null }),
+        body: JSON.stringify({ status: Status.Completed, stage: 'Completed', equipmentId: null }),
       });
       if (!completeRes.ok) {
         const text = await completeRes.text();
         throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: 'Completed', stage: 'Completed', equipmentId: null, volume: 0 } : null);
+      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null, volume: 0 } : null); // Fixed TS2345
       setShowLossPrompt(null);
       setSuccessMessage('Loss recorded and batch completed');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to record loss or complete batch: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to record loss or complete batch: ' + err.message);
     }
   };
 
@@ -438,9 +427,8 @@ setter(single ? data : data);
         setSuccessMessage(null);
         navigate(`/production/${newBatchId}`);
       }, 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to update batch ID: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to update batch ID: ' + err.message);
     }
   };
 
@@ -461,9 +449,8 @@ setter(single ? data : data);
         setSuccessMessage(null);
         navigate('/production');
       }, 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to delete batch: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to delete batch: ' + err.message);
     }
   };
 
@@ -488,9 +475,8 @@ setter(single ? data : data);
       setError(null);
       setSuccessMessage('Ingredient added successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to add ingredient: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to add ingredient: ' + err.message);
     }
   };
 
@@ -518,9 +504,8 @@ setter(single ? data : data);
       setError(null);
       setSuccessMessage('Ingredient updated successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to update ingredient: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to update ingredient: ' + err.message);
     }
   };
 
@@ -547,9 +532,8 @@ setter(single ? data : data);
       setError(null);
       setSuccessMessage('Ingredient deleted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to delete ingredient: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to delete ingredient: ' + err.message);
     }
   };
 
@@ -575,9 +559,8 @@ setter(single ? data : data);
       setError(null);
       setSuccessMessage('Equipment and stage updated successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to update equipment: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to update equipment: ' + err.message);
     }
   };
 
@@ -616,9 +599,8 @@ setter(single ? data : data);
       setSuccessMessage('Packaging updated successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to update packaging: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to update packaging: ' + err.message);
     }
   };
 
@@ -652,9 +634,8 @@ setter(single ? data : data);
       setSuccessMessage('Packaging deleted successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
       setError(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to delete packaging: ' + errorMessage);
+    } catch (err: any) {
+      setError('Failed to delete packaging: ' + err.message);
     } finally {
       setPendingDeletions(prev => {
         const newSet = new Set(prev);
@@ -663,7 +644,7 @@ setter(single ? data : data);
       });
     }
   };
-  // src/components/BatchDetails.tsx (Part 4)
+
   const handlePrintBatchSheet = () => {
     if (!batch) return;
     const doc = new jsPDF();
@@ -781,7 +762,7 @@ setter(single ? data : data);
           <p><strong>Volume:</strong> {batch.volume ? batch.volume.toFixed(3) : 'N/A'} barrels</p>
           <p><strong>Stage:</strong> {batch.stage || 'N/A'}</p>
           <p><strong>Equipment:</strong> {equipment.find(e => e.equipmentId === batch.equipmentId)?.name || 'N/A'}</p>
-          {batch.status !== 'Completed' && (
+          {batch.status !== Status.Completed && ( // Fixed TS2367
             <div className="mt-3">
               <h4 className="text-warning mb-2">Update Batch ID</h4>
               <div className="d-flex gap-2 align-items-center">
@@ -806,7 +787,7 @@ setter(single ? data : data);
             <button className="btn btn-primary" onClick={handlePrintBatchSheet}>
               Print Batch Sheet
             </button>
-            {batch.status !== 'Completed' && (
+            {batch.status !== Status.Completed && ( // Fixed TS2367
               <>
                 <button className="btn btn-success" onClick={handleCompleteBatch}>
                   Complete Batch
@@ -817,7 +798,7 @@ setter(single ? data : data);
               </>
             )}
           </div>
-          {batch.status !== 'Completed' && (
+          {batch.status !== Status.Completed && ( // Fixed TS2367
             <div className="mb-3">
               <h4 className="text-warning mb-2">Update Equipment & Stage</h4>
               <div className="d-flex gap-2 align-items-center flex-wrap">
@@ -851,7 +832,7 @@ setter(single ? data : data);
           )}
         </div>
       </div>
-      {batch.status !== 'Completed' && (
+      {batch.status !== Status.Completed && ( // Fixed TS2367
         <div className="mb-4">
           <h3 className="text-warning mb-3">Add Action</h3>
           <div className="d-flex gap-2 align-items-center">
@@ -915,7 +896,7 @@ setter(single ? data : data);
                   <th>Quantity</th>
                   <th>Unit</th>
                   <th>Source</th>
-                  {batch.status !== 'Completed' && <th>Actions</th>}
+                  {batch.status !== Status.Completed && <th>Actions</th>} // Fixed TS2367
                 </tr>
               </thead>
               <tbody>
@@ -993,7 +974,7 @@ setter(single ? data : data);
                       )}
                     </td>
                     <td>{ing.isRecipe ? 'Recipe' : 'Additional'}</td>
-                    {batch.status !== 'Completed' && (
+                    {batch.status !== Status.Completed && ( // Fixed TS2367
                       <td>
                         {newIngredients.some(n => 
                           n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
@@ -1046,7 +1027,7 @@ setter(single ? data : data);
                     <p className="card-text"><strong>Quantity:</strong> {ing.quantity}</p>
                     <p className="card-text"><strong>Unit:</strong> {ing.unit}</p>
                     <p className="card-text"><strong>Source:</strong> {ing.isRecipe ? 'Recipe' : 'Additional'}</p>
-                    {batch.status !== 'Completed' && (
+                    {batch.status !== Status.Completed && ( // Fixed TS2367
                       <div className="d-flex gap-2">
                         <button
                           className="btn btn-primary btn-sm"
@@ -1071,7 +1052,7 @@ setter(single ? data : data);
           <p>No ingredients recorded.</p>
         )}
       </div>
-      {batch.status !== 'Completed' && (
+      {batch.status !== Status.Completed && ( // Fixed TS2367
         <div className="mb-4">
           <h3 className="text-warning mb-3">Add Ingredients</h3>
           <div className="row g-2 mb-3">
@@ -1119,7 +1100,7 @@ setter(single ? data : data);
           </div>
         </div>
       )}
-      {batch.stage === 'Packaging' && batch.status !== 'Completed' && (
+      {batch.stage === 'Packaging' && batch.status !== Status.Completed && ( // Fixed TS2367
         <div className="mb-4">
           <h3 className="text-warning mb-3">Package Batch</h3>
           <div className="row g-2 mb-3">
@@ -1217,7 +1198,7 @@ setter(single ? data : data);
                   <th>Volume (barrels)</th>
                   <th>Location</th>
                   <th>Keg Codes</th>
-                  {batch.status !== 'Completed' && <th>Actions</th>}
+                  {batch.status !== Status.Completed && <th>Actions</th>} // Fixed TS2367
                 </tr>
               </thead>
               <tbody>
@@ -1241,7 +1222,7 @@ setter(single ? data : data);
                     <td>{pkg.volume.toFixed(3)}</td>
                     <td>{locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</td>
                     <td>{pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</td>
-                    {batch.status !== 'Completed' && (
+                    {batch.status !== Status.Completed && ( // Fixed TS2367
                       <td>
                         {editPackaging && editPackaging.id === pkg.id ? (
                           <div className="d-flex gap-2">
@@ -1282,7 +1263,7 @@ setter(single ? data : data);
                     <p className="card-text"><strong>Volume:</strong> {pkg.volume.toFixed(3)} barrels</p>
                     <p className="card-text"><strong>Location:</strong> {locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</p>
                     <p className="card-text"><strong>Keg Codes:</strong> {pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</p>
-                    {batch.status !== 'Completed' && (
+                    {batch.status !== Status.Completed && ( // Fixed TS2367
                       <div className="d-flex gap-2">
                         <button className="btn btn-primary btn-sm" onClick={() => setEditPackaging(pkg)}>
                           Edit
