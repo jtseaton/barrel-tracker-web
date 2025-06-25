@@ -70,53 +70,60 @@ const Products: React.FC = () => {
     fetchProducts();
   }, []);
 
-  const handleAddProduct = async () => {
-  if (!newProduct.name || !newProduct.class || !newProduct.type) {
-    setError('Name, Class, and Type are required');
-    return;
-  }
-  if (newProduct.class !== ProductClass.Spirits && !newProduct.style) {
-    setError('Style is required for Beer and Wine');
-    return;
-  }
-
-  try {
-    const payload = {
-      ...newProduct,
-      abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
-      ibu: newProduct.class === ProductClass.Beer ? (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null) : null,
-    };
-    console.log('[Products] Adding product:', payload);
-    const res = await fetch(`${API_BASE_URL}/api/products`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Failed to add product: HTTP ${res.status}, ${text.slice(0, 50)}`);
+  // Debug log for modal state
+  useEffect(() => {
+    if (showAddModal) {
+      console.log('[Modal] newProduct state:', { class: newProduct.class, ibu: newProduct.ibu });
     }
-    const addedProduct = await res.json();
-    console.log('[Products] Added product:', addedProduct);
-    setProducts([...products, addedProduct]);
-    setShowAddModal(false);
-    setNewProduct({
-      name: '',
-      abbreviation: '',
-      enabled: 1,
-      priority: 1,
-      class: undefined,
-      type: undefined,
-      style: undefined,
-      abv: 0,
-      ibu: null,
-    });
-    setError(null);
-  } catch (err: any) {
-    setError('Failed to add product: ' + err.message);
-    console.error('[Products] Add product error:', err);
-  }
-};
+  }, [showAddModal, newProduct.class, newProduct.ibu]);
+
+  const handleAddProduct = async () => {
+    if (!newProduct.name || !newProduct.class || !newProduct.type) {
+      setError('Name, Class, and Type are required');
+      return;
+    }
+    if (newProduct.class !== ProductClass.Spirits && !newProduct.style) {
+      setError('Style is required for Beer and Wine');
+      return;
+    }
+
+    try {
+      const payload = {
+        ...newProduct,
+        abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
+        ibu: newProduct.class === ProductClass.Beer ? (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null) : null,
+      };
+      console.log('[Products] Adding product:', payload);
+      const res = await fetch(`${API_BASE_URL}/api/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to add product: HTTP ${res.status}, ${text.slice(0, 50)}`);
+      }
+      const addedProduct = await res.json();
+      console.log('[Products] Added product:', addedProduct);
+      setProducts([...products, addedProduct]);
+      setShowAddModal(false);
+      setNewProduct({
+        name: '',
+        abbreviation: '',
+        enabled: 1,
+        priority: 1,
+        class: undefined,
+        type: undefined,
+        style: undefined,
+        abv: 0,
+        ibu: null,
+      });
+      setError(null);
+    } catch (err: any) {
+      setError('Failed to add product: ' + err.message);
+      console.error('[Products] Add product error:', err);
+    }
+  };
 
   const handleCancelAdd = () => {
     console.log('[Products] Cancel add product');
@@ -303,7 +310,7 @@ const Products: React.FC = () => {
                       class: classValue,
                       type: undefined,
                       style: undefined,
-                      ibu: classValue === ProductClass.Beer ? newProduct.ibu : null, // Reset ibu for non-Beer
+                      ibu: classValue === ProductClass.Beer ? newProduct.ibu : null,
                     });
                   }}
                   className="form-control"
@@ -399,7 +406,7 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {newProduct.class === ProductClass.Beer && (
+              {newProduct.class === ProductClass.Beer && newProduct.class !== undefined && (
                 <div className="mb-3">
                   <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                     IBU:
