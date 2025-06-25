@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
-import { Status, Unit, MaterialType, Account } from '../types/enums'; // Add at top of file
+import { Status, Unit, MaterialType, Account, ProductClass } from '../types/enums';
 import RecipeModal from './RecipeModal';
 import '../App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -30,6 +30,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     siteId: '',
     fermenterId: null,
   });
+  const [desiredVolume, setDesiredVolume] = useState<number>(0);
+  const [desiredAbv, setDesiredAbv] = useState<number>(0);
+  const [productClass, setProductClass] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -172,168 +175,289 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     }
   };
 
-  const handleAddBatch = async () => {
-    if (!newBatch.batchId || !newBatch.productId || !newBatch.recipeId || !newBatch.siteId) {
-      setError('All fields are required');
-      setShowErrorPopup(true);
-      setShowAddBatchModal(false);
-      return;
-    }
-    const product = products.find(p => p.id === newBatch.productId);
-    if (!product) {
-      setError('Invalid product selected');
-      setShowErrorPopup(true);
-      setShowAddBatchModal(false);
-      return;
-    }
-    const recipe = recipes.find(r => r.id === newBatch.recipeId);
-    if (!recipe) {
-      setError('Invalid recipe selected');
-      setShowErrorPopup(true);
-      setShowAddBatchModal(false);
-      return;
-    }
-try {
-  console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
-  await refreshInventory();
-  console.log('[Production] Inventory state:', inventory.map(i => ({
-    identifier: i.identifier,
-    type: i.type,
-    status: i.status,
-    siteId: i.siteId,
-    account: i.account,
-    quantity: i.quantity,
-    unit: i.unit
-  })));
-  // Validate recipe ingredients availability
-  const invalidIngredients = recipe.ingredients.filter(ing => {
-    const inventoryItem = inventory.find(i => 
-      i.identifier === ing.itemName && 
-      (i.status as string) === 'Stored' && // Match db status
-      i.siteId === newBatch.siteId &&
-      (i.type === MaterialType.Spirits ? i.account === Account.Storage : true) &&
-      parseFloat(i.quantity) >= ing.quantity
-    );
-    console.log('[Production] Checking batch ingredient:', {
-      itemName: ing.itemName,
-      siteId: newBatch.siteId,
-      requiredQuantity: ing.quantity,
-      unit: ing.unit,
-      inventoryItem: inventoryItem ? { 
-        identifier: inventoryItem.identifier, 
-        type: inventoryItem.type,
-        account: inventoryItem.account,
-        status: inventoryItem.status,
-        siteId: inventoryItem.siteId,
-        quantity: inventoryItem.quantity,
-        unit: inventoryItem.unit 
-      } : null
-    });
-    return !inventoryItem;
-  });
-  if (invalidIngredients.length > 0) {
-    const errorMessage = `Insufficient ingredients: ${invalidIngredients.map(i => `${i.itemName} (${i.quantity} ${i.unit})`).join(', ')} not available at site ${newBatch.siteId}`;
-    console.log('[Production] Batch validation error:', errorMessage);
-    setError(errorMessage);
-    setShowErrorPopup(true);
-    setShowAddBatchModal(false);
-    return;
-  }
-  console.log('[Production] Recipe data:', {
-    recipeId: newBatch.recipeId,
-    recipeUnit: recipe.unit,
-    recipeQuantity: recipe.quantity,
-    recipeIngredients: recipe.ingredients,
-    fullRecipe: recipe
-  });
-  const batchData = {
-    batchId: newBatch.batchId,
-    productId: newBatch.productId,
-    recipeId: newBatch.recipeId,
-    siteId: newBatch.siteId,
-    fermenterId: newBatch.fermenterId || null,
-    status: 'In Progress',
-    date: new Date().toISOString().split('T')[0],
-    ingredients: recipe.ingredients.map(ing => ({
-      itemName: ing.itemName,
-      quantity: ing.quantity,
-      unit: ing.unit,
-      isRecipe: true
-    })),
-    volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20
-};
-  console.log('[Production] Sending batch data:', {
-    batchId: batchData.batchId,
-    volume: batchData.volume,
-    ingredients: batchData.ingredients,
-    recipeId: batchData.recipeId
-  });
-  const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(batchData),
-  });
-  if (!resBatch.ok) {
-    const text = await resBatch.text();
-    let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
-    try {
-      const errorData = JSON.parse(text);
-      errorMessage = errorData.error || errorMessage;
-    } catch {
-      console.error('[Production] Failed to parse batch error:', text);
-    }
-    console.log('[Production] Batch creation error:', errorMessage);
-    setErrorMessage(errorMessage);
-    setShowErrorPopup(true);
-    setShowAddBatchModal(false);
-    throw new Error(errorMessage);
-  }
-  await resBatch.json();
-  console.log('[Production] Added batch:', batchData);
-  for (const ing of recipe.ingredients) {
-    const ingredientData = {
-      itemName: ing.itemName,
-      quantity: ing.quantity,
-      unit: ing.unit,
-      isRecipe: true
-    };
-    console.log('[Production] Adding ingredient to batch:', {
-      batchId: newBatch.batchId,
-      ingredientData
-    });
-    const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatch.batchId}/ingredients`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(ingredientData),
-    });
-    if (!resIngredient.ok) {
-      const text = await resIngredient.text();
-      let errorMessage = `Failed to add ingredient ${ing.itemName}: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
-      try {
-        const errorData = JSON.parse(text);
-        errorMessage = errorData.error || errorMessage;
-      } catch {
-        console.error('[Production] Failed to parse ingredient error:', text);
+  useEffect(() => {
+    const fetchProductClass = async () => {
+      if (newBatch.productId) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/products/${newBatch.productId}`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Failed to fetch product: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }
+          const product = await res.json();
+          setProductClass(product.class);
+          if (product.class !== ProductClass.Spirits) {
+            fetchRecipes(newBatch.productId);
+          } else {
+            setRecipes([]);
+            setNewBatch({ ...newBatch, recipeId: 0 });
+          }
+        } catch (err: any) {
+          console.error('Fetch product class error:', err);
+          setError('Failed to load product details: ' + err.message);
+        }
+      } else {
+        setProductClass(null);
+        setRecipes([]);
       }
-      console.log('[Production] Ingredient addition error:', errorMessage);
-      setErrorMessage(errorMessage);
+    };
+    fetchProductClass();
+  }, [newBatch.productId]);
+
+  const calculateSpiritsRequirements = () => {
+    if (!desiredVolume || !desiredAbv) return { spiritVolume: 0, waterVolume: 0 };
+    const spiritProof = 190; // From inventory: 190-proof Neutral Grain
+    const desiredProof = desiredAbv * 2;
+    const spiritVolume = (desiredVolume * desiredProof) / spiritProof;
+    const waterVolume = desiredVolume - spiritVolume;
+    return { spiritVolume: Number(spiritVolume.toFixed(2)), waterVolume: Number(waterVolume.toFixed(2)) };
+  };
+
+  const handleAddBatch = async () => {
+    if (!newBatch.batchId || !newBatch.productId || !newBatch.siteId) {
+      setError('Batch ID, Product, and Site are required');
       setShowErrorPopup(true);
       setShowAddBatchModal(false);
-      throw new Error(errorMessage);
+      return;
     }
-  }
-  setShowAddBatchModal(false);
-  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
-  setRecipes([]);
-  setEquipment([]);
-  await refreshInventory();
-  await fetchBatches();
-  setError(null);
-  setErrorMessage(null);
-  setShowErrorPopup(false);
-} catch (err: unknown) {
+
+    try {
+      console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
+      await refreshInventory();
+
+      const product = products.find(p => p.id === newBatch.productId);
+      if (!product) {
+        setError('Invalid product selected');
+        setShowErrorPopup(true);
+        setShowAddBatchModal(false);
+        return;
+      }
+
+      let batchData: any;
+
+      if (productClass === ProductClass.Spirits) {
+        if (!desiredVolume || !desiredAbv) {
+          setError('Desired Volume and ABV are required for spirits');
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
+        const spiritProof = 190;
+        const proofGallons = (spiritVolume * spiritProof) / 100;
+
+        const spiritItem = inventory.find(i =>
+          i.identifier === '321654987' &&
+          i.status === 'Stored' &&
+          i.siteId === newBatch.siteId &&
+          i.type === MaterialType.Spirits &&
+          i.account === Account.Storage &&
+          parseFloat(i.quantity) >= spiritVolume
+        );
+
+        if (!spiritItem) {
+          setError(`Insufficient Neutral Grain (Lot 321654987) at site ${newBatch.siteId}. Need ${spiritVolume} gallons.`);
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        batchData = {
+          batchId: newBatch.batchId,
+          productId: newBatch.productId,
+          siteId: newBatch.siteId,
+          fermenterId: newBatch.fermenterId || null,
+          status: Status.Processing,
+          date: new Date().toISOString().split('T')[0],
+          volume: desiredVolume,
+          ingredients: [
+            {
+              itemName: 'Neutral Grain',
+              quantity: spiritVolume,
+              unit: Unit.Gallons,
+              proof: spiritProof,
+              proofGallons: proofGallons,
+              isRecipe: false,
+            },
+            {
+              itemName: 'Water',
+              quantity: waterVolume,
+              unit: Unit.Gallons,
+              isRecipe: false,
+            },
+          ],
+        };
+
+        const moveData = {
+          identifier: '321654987',
+          toAccount: Account.Production,
+          proofGallons: proofGallons.toString(),
+          volume: spiritVolume,
+          proof: spiritProof,
+        };
+
+        const moveRes = await fetch(`${API_BASE_URL}/api/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(moveData),
+        });
+        if (!moveRes.ok) {
+          const text = await moveRes.text();
+          throw new Error(`Failed to move spirit: HTTP ${moveRes.status}, ${text.slice(0, 50)}`);
+        }
+      } else {
+        if (!newBatch.recipeId) {
+          setError('Recipe is required for non-spirits products');
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        const recipe = recipes.find(r => r.id === newBatch.recipeId);
+        if (!recipe) {
+          setError('Invalid recipe selected');
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        const invalidIngredients = recipe.ingredients.filter(ing => {
+          const inventoryItem = inventory.find(i =>
+            i.identifier === ing.itemName &&
+            i.status === 'Stored' &&
+            i.siteId === newBatch.siteId &&
+            (i.type === MaterialType.Spirits ? i.account === Account.Storage : true) &&
+            parseFloat(i.quantity) >= ing.quantity
+          );
+          console.log('[Production] Checking batch ingredient:', {
+            itemName: ing.itemName,
+            siteId: newBatch.siteId,
+            requiredQuantity: ing.quantity,
+            unit: ing.unit,
+            inventoryItem: inventoryItem ? {
+              identifier: inventoryItem.identifier,
+              type: inventoryItem.type,
+              account: inventoryItem.account,
+              status: inventoryItem.status,
+              siteId: inventoryItem.siteId,
+              quantity: inventoryItem.quantity,
+              unit: inventoryItem.unit,
+            } : null,
+          });
+          return !inventoryItem;
+        });
+
+        if (invalidIngredients.length > 0) {
+          const errorMessage = `Insufficient ingredients: ${invalidIngredients.map(i => `${i.itemName} (${i.quantity} ${i.unit})`).join(', ')} not available at site ${newBatch.siteId}`;
+          console.log('[Production] Batch validation error:', errorMessage);
+          setError(errorMessage);
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        batchData = {
+          batchId: newBatch.batchId,
+          productId: newBatch.productId,
+          recipeId: newBatch.recipeId,
+          siteId: newBatch.siteId,
+          fermenterId: newBatch.fermenterId || null,
+          status: Status.Processing,
+          date: new Date().toISOString().split('T')[0],
+          ingredients: recipe.ingredients.map(ing => ({
+            itemName: ing.itemName,
+            quantity: ing.quantity,
+            unit: ing.unit,
+            isRecipe: true,
+          })),
+          volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20,
+        };
+      }
+
+      console.log('[Production] Sending batch data:', {
+        batchId: batchData.batchId,
+        volume: batchData.volume,
+        ingredients: batchData.ingredients,
+        recipeId: batchData.recipeId,
+      });
+
+      const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(batchData),
+      });
+
+      if (!resBatch.ok) {
+        const text = await resBatch.text();
+        let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          console.error('[Production] Failed to parse batch error:', text);
+        }
+        console.log('[Production] Batch creation error:', errorMessage);
+        setErrorMessage(errorMessage);
+        setShowErrorPopup(true);
+        setShowAddBatchModal(false);
+        throw new Error(errorMessage);
+      }
+
+      await resBatch.json();
+      console.log('[Production] Added batch:', batchData);
+
+      for (const ing of batchData.ingredients) {
+        const ingredientData = {
+          itemName: ing.itemName,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          proof: ing.proof || null,
+          proofGallons: ing.proofGallons || null,
+          isRecipe: ing.isRecipe,
+        };
+        console.log('[Production] Adding ingredient to batch:', {
+          batchId: newBatch.batchId,
+          ingredientData,
+        });
+        const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatch.batchId}/ingredients`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(ingredientData),
+        });
+        if (!resIngredient.ok) {
+          const text = await resIngredient.text();
+          let errorMessage = `Failed to add ingredient ${ing.itemName}: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
+          try {
+            const errorData = JSON.parse(text);
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            console.error('[Production] Failed to parse ingredient error:', text);
+          }
+          console.log('[Production] Ingredient addition error:', errorMessage);
+          setErrorMessage(errorMessage);
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          throw new Error(errorMessage);
+        }
+      }
+
+      setShowAddBatchModal(false);
+      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+      setDesiredVolume(0);
+      setDesiredAbv(0);
+      setRecipes([]);
+      setEquipment([]);
+      await refreshInventory();
+      await fetchBatches();
+      setError(null);
+      setErrorMessage(null);
+      setShowErrorPopup(false);
+    } catch (err: any) {
       console.error('[Production] Add batch error:', err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = err.message || 'Unknown error';
       setError('Failed to add batch: ' + errorMessage);
       setShowErrorPopup(true);
       setShowAddBatchModal(false);
@@ -376,9 +500,9 @@ try {
       setShowAddRecipeModal(false);
       setError(null);
       setShowErrorPopup(false);
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error('[Production] Add recipe error:', err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = err.message || 'Unknown error';
       setError('Failed to save recipe: ' + errorMessage);
       setShowErrorPopup(true);
     }
@@ -402,7 +526,7 @@ try {
         fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ status: 'Completed' }),
+          body: JSON.stringify({ status: Status.Completed }),
         }).then(res => {
           if (!res.ok) {
             throw new Error(`Failed to complete batch ${batchId}: HTTP ${res.status}`);
@@ -448,6 +572,8 @@ try {
     batch.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (batch.productName && batch.productName.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
 
   return (
     <div className="page-container container">
@@ -639,7 +765,8 @@ try {
                     onChange={e => {
                       const productId = parseInt(e.target.value, 10);
                       setNewBatch({ ...newBatch, productId, recipeId: 0 });
-                      fetchRecipes(productId);
+                      setDesiredVolume(0);
+                      setDesiredAbv(0);
                     }}
                     className="form-control"
                   >
@@ -651,22 +778,58 @@ try {
                     ))}
                   </select>
                 </label>
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
-                  Recipe (required):
-                  <select
-                    value={newBatch.recipeId || ''}
-                    onChange={e => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
-                    disabled={!newBatch.productId}
-                    className="form-control"
-                  >
-                    <option value="">Select Recipe</option>
-                    {recipes.map(recipe => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {productClass === ProductClass.Spirits ? (
+                  <>
+                    <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                      Desired Batch Volume (gallons, required):
+                      <input
+                        type="number"
+                        value={desiredVolume || ''}
+                        onChange={e => setDesiredVolume(parseFloat(e.target.value) || 0)}
+                        placeholder="Enter volume (e.g., 150)"
+                        step="0.1"
+                        min="0"
+                        className="form-control"
+                      />
+                    </label>
+                    <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                      Desired ABV % (required):
+                      <input
+                        type="number"
+                        value={desiredAbv || ''}
+                        onChange={e => setDesiredAbv(parseFloat(e.target.value) || 0)}
+                        placeholder="Enter ABV (e.g., 40)"
+                        step="0.1"
+                        min="0"
+                        className="form-control"
+                      />
+                    </label>
+                    {desiredVolume > 0 && desiredAbv > 0 && (
+                      <div className="mt-3">
+                        <p><strong>Requirements:</strong></p>
+                        <p>Neutral Grain (190 proof): {spiritVolume} gallons</p>
+                        <p>Water: {waterVolume} gallons</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                    Recipe (required):
+                    <select
+                      value={newBatch.recipeId || ''}
+                      onChange={e => setNewBatch({ ...newBatch, recipeId: parseInt(e.target.value, 10) })}
+                      disabled={!newBatch.productId}
+                      className="form-control"
+                    >
+                      <option value="">Select Recipe</option>
+                      {recipes.map(recipe => (
+                        <option key={recipe.id} value={recipe.id}>
+                          {recipe.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
                   Site (required):
                   <select
@@ -712,6 +875,8 @@ try {
                   console.log('[Production] Batch modal Cancel clicked');
                   setShowAddBatchModal(false);
                   setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+                  setDesiredVolume(0);
+                  setDesiredAbv(0);
                   setError(null);
                 }}
                 className="btn btn-danger"
@@ -742,6 +907,34 @@ try {
                 className="btn btn-primary"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBatchActionsModal && (
+        <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100 }}>
+          <div className="modal-content" style={{ maxWidth: '400px', margin: '100px auto', backgroundColor: '#fff', borderRadius: '8px', padding: '20px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #ddd', marginBottom: '15px' }}>
+              <h5 style={{ color: '#555', margin: 0 }}>Batch Actions</h5>
+            </div>
+            <div className="modal-body">
+              <p>Selected Batches: {selectedBatchIds.join(', ')}</p>
+              <div className="d-flex gap-2">
+                <button className="btn btn-success" onClick={handleCompleteBatches}>
+                  Complete Selected
+                </button>
+                <button className="btn btn-danger" onClick={handleDeleteBatches}>
+                  Delete Selected
+                </button>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ borderTop: '1px solid #ddd', marginTop: '15px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowBatchActionsModal(false)}
+              >
+                Cancel
               </button>
             </div>
           </div>

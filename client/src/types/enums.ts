@@ -1,8 +1,9 @@
 export enum Status {
   Received = 'Received',
-  Stored = 'Storage', // Changed to match CFR, though we'll phase this into Account
+  Stored = 'Stored', // Matches backend inventory status; will transition to InStock for beer
   Processing = 'Processing',
   Packaged = 'Packaged',
+  Completed = 'Completed', // Added for Batch.status
 }
 
 export enum Unit {

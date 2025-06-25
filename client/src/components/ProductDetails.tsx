@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Product, Recipe, PackageType, Ingredient } from '../types/interfaces';
+import { ProductType } from '../types/enums'; // Added import
 import RecipeModal from './RecipeModal';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
@@ -231,13 +232,16 @@ const ProductDetails: React.FC = () => {
             </div>
             <div>
               <label className="form-label">Type:</label>
-              <input
-                type="text"
+              <select
                 value={product?.type || ''}
-                onChange={(e) => setProduct({ ...product!, type: e.target.value })}
-                placeholder="Enter type"
+                onChange={(e) => setProduct({ ...product!, type: e.target.value as ProductType })}
                 className="form-control"
-              />
+              >
+                <option value="">Select Type</option>
+                {Object.values(ProductType).map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="form-label">Style:</label>

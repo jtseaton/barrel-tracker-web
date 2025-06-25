@@ -1,6 +1,5 @@
-// src/types/interfaces.ts
-import { Status, Unit, MaterialType, ProductClass, Account } from './enums';
-export { Status, Unit, MaterialType, ProductClass, Account };
+import { Status, Unit, MaterialType, ProductClass, Account, ProductType } from './enums';
+export { Status, Unit, MaterialType, ProductClass, Account, ProductType };
 
 export interface Transaction {
   action: string;
@@ -26,7 +25,7 @@ export interface PackagingAction {
   locationId: number;
   date: string;
   siteId: string;
-  keg_codes?: string; // JSON array of keg codes
+  keg_codes?: string;
 }
 
 export interface ReportData {
@@ -109,11 +108,11 @@ export interface Product {
   abbreviation: string;
   enabled: number;
   priority: number;
-  class: string;
-  type: string;
+  class: string; // Reverted to string for compatibility
+  type: ProductType;
   style: string;
   abv: number;
-  ibu: number;
+  ibu: number | null;
   packageTypes?: { type: string; price: string; isKegDepositItem: boolean }[];
 }
 
@@ -139,6 +138,8 @@ export interface Ingredient {
   quantity: number;
   unit: string;
   isRecipe?: boolean;
+  proof?: number;
+  proofGallons?: number;
 }
 
 export interface Customer {
@@ -216,7 +217,7 @@ export interface Batch {
   recipeName?: string;
   siteId: string;
   siteName?: string;
-  status: string;
+  status: Status;
   date: string;
   ingredients?: Ingredient[];
   additionalIngredients?: Ingredient[];
@@ -289,7 +290,7 @@ export interface InventoryItem {
   receivedDate: string;
   source?: string;
   dspNumber?: string;
-  status: Status;
+  status: 'Received' | 'Stored' | 'Processing' | 'Packaged';
   description?: string;
   cost?: string;
   totalCost?: string;
@@ -360,11 +361,11 @@ export interface Keg {
   productId?: number;
   lastScanned: string;
   location?: string;
-  locationName?: string; // Added for location name
+  locationName?: string;
   customerId?: number;
   customerName?: string;
   productName?: string;
-  packagingType?: string; // Added for packaging type
+  packagingType?: string;
 }
 
 export interface KegTransaction {
@@ -377,10 +378,9 @@ export interface KegTransaction {
   customerId?: number;
   date: string;
   location?: string;
-  customerName?: string; // Added for transaction history
+  customerName?: string;
 }
 
-// Added KegTrackingProps to fix TS2305
 export interface KegTrackingProps {
   inventory: InventoryItem[];
   refreshInventory: () => Promise<void>;

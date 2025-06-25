@@ -1,4 +1,3 @@
-// client/src/components/Products.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types/interfaces';
@@ -19,10 +18,10 @@ const Products: React.FC = () => {
     enabled: 1,
     priority: 1,
     class: '',
-    type: '',
+    type: undefined,
     style: '',
     abv: 0,
-    ibu: 0,
+    ibu: null,
   });
   const [filteredStyles, setFilteredStyles] = useState<string[]>([]);
   const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
@@ -111,7 +110,7 @@ const Products: React.FC = () => {
       const payload = {
         ...newProduct,
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
-        ibu: newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : 0,
+        ibu: newProduct.class === ProductClass.Spirits ? null : (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : 0),
       };
       const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
@@ -132,10 +131,10 @@ const Products: React.FC = () => {
         enabled: 1,
         priority: 1,
         class: '',
-        type: '',
+        type: undefined,
         style: '',
         abv: 0,
-        ibu: 0,
+        ibu: null,
       });
       setError(null);
     } catch (err: any) {
@@ -153,10 +152,10 @@ const Products: React.FC = () => {
       enabled: 1,
       priority: 1,
       class: '',
-      type: '',
+      type: undefined,
       style: '',
       abv: 0,
-      ibu: 0,
+      ibu: null,
     });
     setError(null);
   };
@@ -290,7 +289,6 @@ const Products: React.FC = () => {
               <h5 className="modal-title" style={{ color: '#555555' }}>Add New Product</h5>
             </div>
             <div className="modal-body">
-              {/* Name */}
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Name (required):
@@ -303,7 +301,6 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {/* Abbreviation */}
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Abbreviation:
@@ -316,14 +313,13 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {/* Class */}
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Class (required):
                 </label>
                 <select
                   value={newProduct.class || ''}
-                  onChange={(e) => setNewProduct({ ...newProduct, class: e.target.value })}
+                  onChange={(e) => setNewProduct({ ...newProduct, class: e.target.value as ProductClass })}
                   className="form-control"
                 >
                   <option value="">Select Class</option>
@@ -332,7 +328,6 @@ const Products: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* Type */}
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Type (required):
@@ -359,7 +354,6 @@ const Products: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* Style */}
               <div className="mb-3" style={{ position: 'relative' }}>
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   Style:
@@ -416,7 +410,6 @@ const Products: React.FC = () => {
                   </ul>
                 )}
               </div>
-              {/* ABV */}
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   ABV %:
@@ -431,21 +424,22 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {/* IBU */}
-              <div className="mb-3">
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  IBU:
-                </label>
-                <input
-                  type="number"
-                  value={newProduct.ibu || ''}
-                  onChange={(e) => setNewProduct({ ...newProduct, ibu: parseInt(e.target.value, 10) || 0 })}
-                  step="1"
-                  min="0"
-                  placeholder="Enter IBU"
-                  className="form-control"
-                />
-              </div>
+              {newProduct.class !== ProductClass.Spirits && (
+                <div className="mb-3">
+                  <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
+                    IBU:
+                  </label>
+                  <input
+                    type="number"
+                    value={newProduct.ibu || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, ibu: parseInt(e.target.value, 10) || 0 })}
+                    step="1"
+                    min="0"
+                    placeholder="Enter IBU"
+                    className="form-control"
+                  />
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={handleAddProduct}>
