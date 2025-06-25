@@ -11,6 +11,12 @@ export interface Transaction {
   toAccount?: string;
 }
 
+export interface PackageType {
+  type: string;
+  price: string;
+  isKegDepositItem: boolean;
+}
+
 export interface PackagingAction {
   id: number;
   batchId: string;
@@ -349,17 +355,16 @@ export interface Equipment {
 
 export interface Keg {
   id: number;
-  code: string; // Matches backend 'code' field
+  code: string;
   status: string;
   productId?: number;
   lastScanned: string;
-  location?: string; // Changed from locationId to location
+  location?: string;
+  locationName?: string; // Added for location name
   customerId?: number;
-  customerName?: string; // Added for customer name
-  identifier?: string; // Added for keg identifier (e.g., KEG-001)
-  quantity?: number; // Added for quantity
-  depositStatus?: string; // Added for deposit status
-  siteId?: string; // Added for site ID
+  customerName?: string;
+  productName?: string;
+  packagingType?: string; // Added for packaging type
 }
 
 export interface KegTransaction {
@@ -372,6 +377,7 @@ export interface KegTransaction {
   customerId?: number;
   date: string;
   location?: string;
+  customerName?: string; // Added for transaction history
 }
 
 // Added KegTrackingProps to fix TS2305

@@ -1,9 +1,9 @@
+/* client/src/App.css */
 .App {
   display: flex;
-  flex-direction: row;
-  height: 100vh;
+  flex-direction: column;
+  min-height: 100vh;
   width: 100vw;
-  overflow: hidden;
   background-color: #2E4655;
 }
 
@@ -15,18 +15,19 @@
   background-color: #F86752;
   color: #FFFFFF;
   border: none;
-  padding: 10px;
+  padding: 8px 12px;
   font-size: 18px;
   cursor: pointer;
+  border-radius: 4px;
 }
 
 .menu {
-  width: 300px;
+  width: 250px;
   height: 100%;
   background-color: #000000;
   position: fixed;
   top: 0;
-  left: -300px;
+  left: -250px;
   transition: left 0.3s ease;
   z-index: 1000;
 }
@@ -37,29 +38,27 @@
 
 .menu ul {
   list-style: none;
-  padding: 50px 20px 20px;
+  padding: 50px 10px;
   margin: 0;
   color: #EEC930;
 }
 
 .menu li {
-  margin: 10px 0;
+  margin: 8px 0;
 }
 
 .menu button, .menu a {
   background: none;
   border: none;
   color: #EEC930;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   width: 100%;
   text-align: left;
-  padding: 10px 15px;
-  display: block;
+  padding: 8px 10px;
   text-decoration: none;
   box-sizing: border-box;
   white-space: nowrap;
-  margin: 0;
 }
 
 .menu button.active {
@@ -73,18 +72,63 @@
 
 .content {
   flex: 1;
-  padding: 20px;
+  padding: 15px;
   margin-left: 0;
   transition: margin-left 0.3s ease;
-  background-color: #2E4655;
+  background-color: #555555;
   color: #FFFFFF;
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
+  overflow-y: auto;
+  min-height: 100vh;
 }
 
-.menu.open + .content {
-  margin-left: 300px;
+.navbar-mobile {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background-color: #000000;
+  border-top: 1px solid #ccc;
+  padding: 10px 0;
+  z-index: 2000;
+}
+
+.navbar-mobile a {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  color: #EEC930;
+  text-decoration: none;
+  padding: 8px;
+}
+
+.navbar-mobile a:hover {
+  color: #F86752;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.loading-logo {
+  max-width: 80%;
+  max-height: 60vh;
+}
+
+.loading-title {
+  font-family: Arial, sans-serif;
+  color: #333;
+  font-size: 24px;
+}
+
+.loading-subtitle {
+  font-family: Arial, sans-serif;
+  color: #666;
+  font-size: 16px;
 }
 
 button {
@@ -111,18 +155,14 @@ table {
   border-radius: 8px !important;
 }
 
-th {
-  padding: 10px;
+th, td {
+  padding: 8px;
   text-align: left;
   border-bottom: 1px solid #DDDDDD !important;
-  background-color: #F5F5F5 !important;
-  color: #555555 !important;
 }
 
-td {
-  padding: 10px;
-  text-align: left;
-  border-bottom: 1px solid #DDDDDD !important;
+th {
+  background-color: #F5F5F5 !important;
   color: #555555 !important;
 }
 
@@ -136,88 +176,100 @@ a:hover {
 }
 
 .page-container, .inventory-container {
-  padding: 20px;
+  padding: 15px;
   width: 100%;
-  background-color: #2E4655 !important;
+  background-color: #FFFFFF !important;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
   box-sizing: border-box;
+  color: #000000 !important;
+  min-height: 80vh !important;
+  z-index: 10 !important;
 }
 
-.page-container h2, .inventory-container h2 {
-  color: #EEC930;
-  font-size: 24px;
-  margin-bottom: 20px;
+.app-header {
+  color: #FFFFFF !important;
+  font-size: 20px;
+  margin-bottom: 15px;
   text-align: center;
 }
 
 .error {
   color: #F86752;
   background-color: #ffe6e6;
-  padding: 10px;
+  padding: 8px;
   border-radius: 4px;
   margin-bottom: 10px;
   text-align: left;
+  font-size: 14px;
 }
 
 .inventory-actions {
   display: flex;
-  justify-content: flex-start;
-  gap: 10px;
-  margin-bottom: 20px;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
   flex-wrap: wrap;
 }
 
-.inventory-actions button {
-  background-color: #EEC930;
-  color: #000000;
-  padding: 10px 20px;
+.inventory-actions button, .btn-primary {
+  background-color: #2196F3 !important;
+  color: #FFFFFF !important;
+  padding: 8px 16px;
   border: none;
   border-radius: 4px;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
-  transition: none;
 }
 
-.inventory-actions button:disabled {
-  background-color: #CCCCCC;
-  cursor: not-allowed;
+.inventory-actions button:hover, .btn-primary:hover {
+  background-color: #1976D2 !important;
+}
+
+.btn-danger {
+  background-color: #F86752 !important;
+  color: #FFFFFF !important;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background-color: #D32F2F !important;
 }
 
 .inventory-table-container {
   overflow-x: auto;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
 .inventory-table {
   width: 100%;
-  min-width: 1000px;
   border-collapse: collapse;
   background-color: #FFFFFF !important;
   color: #555555 !important;
   border-radius: 8px !important;
 }
 
-.inventory-table th {
-  padding: 10px;
+.inventory-table th, .inventory-table td {
+  padding: 8px;
   text-align: left;
   border-bottom: 1px solid #DDDDDD !important;
+}
+
+.inventory-table th {
   background-color: #F5F5F5 !important;
   color: #555555 !important;
   font-weight: normal;
   cursor: default;
 }
 
-.inventory-table td {
-  padding: 10px;
-  text-align: left;
-  border-bottom: 1px solid #DDDDDD !important;
-  color: #555555 !important;
-}
-
 .inventory-table th input {
   width: 100%;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid #CCCCCC;
   border-radius: 4px;
   font-size: 14px;
@@ -229,8 +281,8 @@ select, select option {
   background-color: #FFFFFF !important;
   border: 1px solid #CCCCCC !important;
   border-radius: 4px !important;
-  padding: 10px !important;
-  font-size: 16px !important;
+  padding: 8px !important;
+  font-size: 14px !important;
   box-sizing: border-box !important;
 }
 
@@ -243,9 +295,10 @@ select:focus, select option:focus {
   border: 1px solid #DDDDDD !important;
   max-height: 150px;
   overflow-y: auto;
-  position: fixed !important; /* Changed to fixed to avoid clipping */
+  position: absolute !important;
   background-color: #FFFFFF !important;
-  width: 350px !important; /* Match modal input width */
+  width: 100% !important;
+  max-width: 350px !important;
   list-style: none;
   padding: 0;
   margin: 0;
@@ -255,11 +308,12 @@ select:focus, select option:focus {
 }
 
 .typeahead li {
-  padding: 8px 10px;
+  padding: 6px 8px;
   cursor: pointer;
   background-color: #FFFFFF !important;
   border-bottom: 1px solid #EEEEEE !important;
   color: #000000 !important;
+  font-size: 14px;
 }
 
 .typeahead li:hover, .typeahead li.selected {
@@ -273,12 +327,456 @@ select:focus, select option:focus {
 
 .modal-input {
   width: 100%;
-  max-width: 350px !important; /* Increased from 300px */
+  max-width: 300px !important;
+  padding: 8px;
+  border: 1px solid #CCCCCC;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box !important;
+  color: #000000;
+  background-color: #FFFFFF;
+}
+
+.batch-details, .batch-list {
+  background-color: #FFFFFF !important;
+  color: #555555 !important;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 15px;
+  margin-top: 15px;
+}
+
+.batch-details p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.packaging-section {
+  margin: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.packaging-section select,
+.packaging-section input {
+  padding: 6px;
+  font-size: 14px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.packaging-section button {
+  padding: 8px;
+  font-size: 14px;
+  background-color: #2196F3 !important;
+  color: #FFFFFF !important;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  max-width: 300px;
+}
+
+.packaging-section button:disabled {
+  background-color: #CCCCCC !important;
+  cursor: not-allowed;
+}
+
+.card-list, .batch-list, .products-card-list, .vendor-card-list, .vendor-receipts-list, .vendor-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #FFFFFF !important;
+  padding: 15px !important;
+  border-radius: 8px !important;
+  border: 1px solid #DDDDDD !important;
+}
+
+.card-item, .batch-card, .products-card-item, .vendor-card-item, .vendor-receipts-item, .vendor-orders-item {
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 4px;
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+.alert-info {
+  background-color: #e7f3fe;
+  color: #31708f;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 15px;
+  border: 1px solid #bce8f1;
+}
+
+.alert-warning {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 15px;
+  border: 1px solid #ffeeba;
+}
+
+.alert-danger {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 15px;
+  border: 1px solid #f5c6cb;
+}
+
+.alert-success {
+  background-color: #e6ffe6;
+  color: #28A745;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 15px;
+  border: 1px solid #b3ffb3;
+}
+
+.package-type-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.package-type-row select,
+.package-type-row input[type="text"],
+.package-type-row input[type="number"] {
+  width: 100%;
+  max-width: 200px;
   padding: 10px;
   border: 1px solid #CCCCCC;
   border-radius: 4px;
   font-size: 16px;
-  box-sizing: border-box !important;
-  color: #000000;
+  box-sizing: border-box;
+}
+
+.package-type-row label {
+  display: flex;
+  align-items: center;
+  color: #555555;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.package-type-row input[type="checkbox"] {
+  margin-right: 5px;
+}
+
+.inventory-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
   background-color: #FFFFFF;
+  color: #000000;
+  border-radius: 8px;
+}
+
+.inventory-item-details div {
+  font-size: 14px;
+}
+
+.adjust-form {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #F5F5F5;
+  border-radius: 4px;
+}
+
+.adjust-form label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+  color: #2E4655;
+}
+
+.adjust-form input,
+.adjust-form select {
+  width: 100%;
+  max-width: 200px;
+  padding: 5px;
+  border: 1px solid #CCCCCC;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+.vendor-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.vendor-tabs button {
+  background-color: #000000;
+  color: #EEC930;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.vendor-tabs button.active {
+  background-color: #F86752;
+  color: #FFFFFF;
+}
+
+.vendor-tabs select {
+  display: none;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #CCCCCC;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.vendor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.vendor-form label {
+  color: #EEC930;
+  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vendor-form input,
+.vendor-form select,
+.vendor-form textarea {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border-radius: 4px;
+  border: 1px solid #000000;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .App {
+    flex-direction: column;
+  }
+  .hamburger {
+    padding: 6px 10px;
+    font-size: 16px;
+  }
+  .menu {
+    width: 200px;
+    left: -200px;
+  }
+  .menu.open {
+    left: 0;
+  }
+  .menu ul {
+    padding: 40px 8px;
+  }
+  .menu button, .menu a {
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+  .content {
+    padding: 10px;
+    margin-bottom: 50px;
+  }
+  .menu.open + .content {
+    margin-left: 0;
+  }
+  .navbar-mobile {
+    display: flex;
+    justify-content: space-around;
+  }
+  .inventory-table {
+    display: none;
+  }
+  .inventory-table-container {
+    overflow-x: hidden;
+  }
+  .page-container, .inventory-container {
+    padding: 10px;
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    min-height: 80vh !important;
+    z-index: 10 !important;
+  }
+  .app-header {
+    font-size: 18px;
+  }
+  .modal-input {
+    max-width: 100% !important;
+  }
+  .typeahead {
+    width: 100% !important;
+    max-width: 90vw !important;
+  }
+  .packaging-section select,
+  .packaging-section input,
+  .packaging-section button {
+    max-width: 100%;
+  }
+  .card-list, .batch-list, .products-card-list, .vendor-card-list, .vendor-receipts-list, .vendor-orders-list {
+    display: block;
+  }
+  .modal-content {
+    width: min(90vw, 400px) !important;
+    margin: 0 auto;
+  }
+  .modal-body, .modal-header, .modal-footer {
+    padding: 15px;
+  }
+  .modal-title {
+    font-size: 18px;
+  }
+  .form-control {
+    font-size: 14px;
+    padding: 8px;
+    max-width: 100% !important;
+  }
+  .btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .inventory-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  .inventory-actions button, .btn-primary, .btn-danger {
+    width: 100%;
+    max-width: 100%;
+  }
+  .package-type-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .package-type-row select,
+  .package-type-row input[type="text"],
+  .package-type-row input[type="number"] {
+    max-width: 100%;
+  }
+  .package-type-row label,
+  .package-type-row button {
+    width: 100%;
+    max-width: 100%;
+  }
+  .inventory-item-details {
+    padding: 10px;
+  }
+  .inventory-item-details div {
+    font-size: 13px;
+  }
+  .adjust-form {
+    padding: 15px;
+  }
+  .adjust-form input,
+  .adjust-form select {
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .vendor-tabs {
+    flex-direction: column;
+  }
+  .vendor-tabs button {
+    display: none; /* Hide buttons on mobile */
+  }
+  .vendor-tabs select {
+    display: block; /* Show dropdown on mobile */
+  }
+  .vendor-form label {
+    font-size: 16px;
+  }
+  .vendor-form input,
+  .vendor-form select,
+  .vendor-form textarea {
+    font-size: 14px;
+  }
+  .customer-card-list {
+    display: block;
+  }
+  .inventory-table {
+    display: none;
+  }
+  .recipe-form {
+    max-width: 100%;
+  }
+  .modal-dialog {
+    width: 90%;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 769px) {
+  .App {
+    flex-direction: row;
+  }
+  .content {
+    margin-left: 0;
+  }
+  .card-list, .batch-list, .products-card-list, .vendor-card-list, .vendor-receipts-list, .vendor-orders-list, .ingredient-list {
+    display: none;
+  }
+}
+
+.customer-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #FFFFFF !important;
+  padding: 15px !important;
+  border-radius: 8px !important;
+  border: 1px solid #DDDDDD !important;
+}
+
+.customer-card-item {
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 4px;
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+.recipe-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.recipe-form label {
+  color: #000000;
+  font-size: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.recipe-form input,
+.recipe-form select,
+.recipe-form button {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border-radius: 4px;
+  border: 1px solid #CCCCCC;
+  box-sizing: border-box;
+}
+
+.modal.error-modal {
+  z-index: 2100;
 }

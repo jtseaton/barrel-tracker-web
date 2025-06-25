@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+// client/src/App.tsx
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Role } from './types/enums';
 import { InventoryItem, Vendor, User } from './types/interfaces';
 import Home from './components/Home';
 import Production from './components/Production';
+import BrewLog from './components/BrewLog';
 import Inventory from './components/Inventory';
 import Processing from './components/Processing';
-import Sales from './components/Sales';
+import SalesDashboard from './components/SalesDashboard';
 import Users from './components/Users';
 import Reporting from './components/Reporting';
 import ReceivePage from './components/ReceivePage';
@@ -25,33 +27,38 @@ import FacilityDesigner from './components/FacilityDesigner';
 import FacilityView from './components/FacilityView';
 import EquipmentPage from './components/Equipment';
 import Login from './components/Login';
-import { fetchInventory, fetchDailySummary } from './utils/fetchUtils';
+import { fetchInventory, fetchDailySummary, InventoryResponse } from './utils/fetchUtils';
 import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
 import './App.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import BatchDetails from './components/BatchDetails';
+import SalesOrderComponent from './components/SalesOrder';
+import InvoiceComponent from './components/Invoice';
+import SalesOrderList from './components/SalesOrderList';
+import InvoicesList from './components/InvoicesList';
+import Customers from './components/Customers';
+import CustomerDetails from './components/CustomerDetails';
+import Settings from './components/Settings';
+import KegTracking from './components/KegTracking';
 
 // Stub component
-const ProductionPage: React.FC = () => <div><h2>Production</h2><p>Production page coming soon</p></div>;
-
-interface InventoryProps {
-  vendors: Vendor[];
-  refreshVendors: () => Promise<void>;
-  inventory: InventoryItem[];
-  refreshInventory: () => Promise<void>;
-}
+const ProductionPage: React.FC = () => <div className="container"><h2>Production</h2><p>Production page coming soon</p></div>;
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
-  const [menuOpen, setMenuOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false); // Default closed on mobile
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [showProductionSubmenu, setShowProductionSubmenu] = useState(false);
   const [showManagementSubmenu, setShowManagementSubmenu] = useState(false);
+  const [showSalesSubmenu, setShowSalesSubmenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
+  const menuRef = useRef<HTMLDivElement>(null); // Ref for menu
 
   // Authentication state
   const [currentUser, setCurrentUser] = useState<User | null>(
@@ -60,7 +67,6 @@ const AppContent: React.FC = () => {
   const isAuthenticated = !!currentUser?.email;
   const isAdmin = currentUser && [Role.SuperAdmin, Role.Admin].includes(currentUser.role as Role);
 
-  // Force re-render on currentUser change
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || 'null');
     if (user !== currentUser) {
@@ -68,32 +74,40 @@ const AppContent: React.FC = () => {
     }
   }, [location.pathname]);
 
-  // Reset activeSection to Home on login
-  //useEffect(() => {
-    //if (isAuthenticated && location.pathname === '/') {
-      //setActiveSection('Home');
-    //}
-  //}, [isAuthenticated, location.pathname]);
-
   const refreshInventory = async () => {
     try {
-      const data = await fetchInventory();
-      console.log('Refresh inventory fetched:', data);
-      setInventory(data);
-      console.log('Inventory state updated:', data);
+      const data: InventoryResponse | null = await fetchInventory();
+      console.log('[App] fetchInventory response:', {
+        data,
+        isObject: data && typeof data === 'object',
+        hasItems: data && 'items' in data,
+        itemsIsArray: data && Array.isArray(data?.items),
+        itemsLength: data && Array.isArray(data?.items) ? data.items.length : 'N/A',
+        totalPages: data && 'totalPages' in data ? data.totalPages : 'N/A',
+      });
+      setInventory(data && typeof data === 'object' && Array.isArray(data.items) ? data.items : []);
     } catch (error) {
-      console.error('Error refreshing inventory:', error);
+      console.error('[App] refreshInventory error:', error);
+      setInventory([]);
     }
   };
 
   const refreshVendors = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/vendors`);
-      if (!res.ok) throw new Error('Failed to fetch vendors');
+      const res = await fetch(`${API_BASE_URL}/api/vendors`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`Vendors fetch failed: HTTP ${res.status}`);
       const data = await res.json();
-      setVendors(data);
+      console.log('[App] fetchVendors response:', {
+        data,
+        isArray: Array.isArray(data),
+        length: Array.isArray(data) ? data.length : 'N/A',
+      });
+      setVendors(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Fetch vendors error:', err);
+      console.error('[App] Fetch vendors error:', err);
+      setVendors([]);
     }
   };
 
@@ -105,7 +119,27 @@ const AppContent: React.FC = () => {
     loadData();
   }, []);
 
+  // Handle outside clicks to close menu
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        menuOpen &&
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        !(event.target as HTMLElement).closest('.hamburger')
+      ) {
+        console.log('[App] Closing menu due to outside click');
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [menuOpen]);
+
   const handleInventoryClick = () => {
+    console.log('[App] Inventory menu clicked');
     if (activeSection === 'Inventory' && showInventorySubmenu) {
       setShowInventorySubmenu(false);
       setActiveSection('Home');
@@ -115,9 +149,11 @@ const AppContent: React.FC = () => {
       setShowInventorySubmenu(true);
       navigate('/inventory');
     }
+    // Removed setMenuOpen(false)
   };
 
   const handleProductionClick = () => {
+    console.log('[App] Production menu clicked');
     if (activeSection === 'Production' && showProductionSubmenu) {
       setShowProductionSubmenu(false);
       setActiveSection('Home');
@@ -127,9 +163,11 @@ const AppContent: React.FC = () => {
       setShowProductionSubmenu(true);
       navigate('/production');
     }
+    // Removed setMenuOpen(false)
   };
 
   const handleManagementClick = () => {
+    console.log('[App] Management menu clicked');
     if (activeSection === 'Management' && showManagementSubmenu) {
       setShowManagementSubmenu(false);
       setActiveSection('Home');
@@ -139,22 +177,42 @@ const AppContent: React.FC = () => {
       setShowManagementSubmenu(true);
       navigate('/management');
     }
+    // Removed setMenuOpen(false)
+  };
+
+  const handleSalesClick = () => {
+    console.log('[App] Sales & Distribution menu clicked');
+    if (activeSection === 'Sales & Distribution' && showSalesSubmenu) {
+      setShowSalesSubmenu(false);
+      setActiveSection('Home');
+      navigate('/');
+    } else {
+      setActiveSection('Sales & Distribution');
+      setShowSalesSubmenu(true);
+      navigate('/sales-orders');
+    }
+    // Removed setMenuOpen(false)
   };
 
   const handleLogOff = () => {
+    console.log('[App] Log Off clicked');
     localStorage.removeItem('user');
     setCurrentUser(null);
     setActiveSection('Home');
     setShowManagementSubmenu(false);
     navigate('/login');
+    setMenuOpen(false); // Keep retraction for Log Off
   };
 
   const handleBackClick = () => {
+    console.log('[App] Back clicked');
     setShowInventorySubmenu(false);
     setShowProductionSubmenu(false);
     setShowManagementSubmenu(false);
+    setShowSalesSubmenu(false);
     setActiveSection('Home');
     navigate('/');
+    // Removed setMenuOpen(false)
   };
 
   if (!isAuthenticated) {
@@ -163,18 +221,21 @@ const AppContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f5f5f5' }}>
-        <img src="/tilly-logo.png" alt="Tilly Logo" style={{ maxWidth: '80%', maxHeight: '60vh' }} />
-        <h1 style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>Tilly</h1>
-        <p style={{ fontFamily: 'Arial, sans-serif', color: '#666' }}>Powered by Paws & Pours</p>
+      <div className="loading-container">
+        <img src="/tilly-logo.png" alt="Tilly Logo" className="loading-logo" />
+        <h1 className="loading-title">Tilly</h1>
+        <p className="loading-subtitle">Powered by Paws & Pours</p>
       </div>
     );
   }
 
   return (
     <div className="App">
-      <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>☰</button>
-      <nav className={`menu ${menuOpen ? 'open' : ''}`}>
+      <button className="hamburger" onClick={() => {
+        console.log('[App] Hamburger clicked, menuOpen:', !menuOpen);
+        setMenuOpen(!menuOpen);
+      }}>☰</button>
+      <nav className={`menu ${menuOpen ? 'open' : ''}`} ref={menuRef}>
         <ul>
           {showInventorySubmenu ? (
             [
@@ -187,7 +248,14 @@ const AppContent: React.FC = () => {
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
-                  <Link to={item.path} onClick={() => setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name)}>
+                  <Link
+                    to={item.path}
+                    onClick={() => {
+                      console.log('[App] Submenu item clicked:', item.name);
+                      setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name);
+                      // Removed setMenuOpen(false)
+                    }}
+                  >
                     {item.name}
                   </Link>
                 ) : (
@@ -206,9 +274,16 @@ const AppContent: React.FC = () => {
             ].map((item) => (
               <li key={item.name}>
                 {item.disabled ? (
-                  <span style={{ color: '#888' }}>{item.name}</span>
+                  <span className="disabled">{item.name}</span>
                 ) : item.path ? (
-                  <Link to={item.path} onClick={() => setActiveSection(item.name)}>
+                  <Link
+                    to={item.path}
+                    onClick={() => {
+                      console.log('[App] Submenu item clicked:', item.name);
+                      setActiveSection(item.name);
+                      // Removed setMenuOpen(false)
+                    }}
+                  >
                     {item.name}
                   </Link>
                 ) : (
@@ -222,11 +297,44 @@ const AppContent: React.FC = () => {
               { name: 'Locations', path: '/locations' },
               { name: 'Sites', path: '/sites' },
               { name: 'Facility Designer', path: '/facility-designer' },
+              { name: 'Settings', path: '/settings' },
               { name: 'Log Off', action: handleLogOff },
             ].map((item) => (
               <li key={item.name}>
                 {item.path ? (
-                  <Link to={item.path} onClick={() => setActiveSection(item.name)}>
+                  <Link
+                    to={item.path}
+                    onClick={() => {
+                      console.log('[App] Submenu item clicked:', item.name);
+                      setActiveSection(item.name);
+                      // Removed setMenuOpen(false)
+                    }}
+                  >
+                    {item.name}
+                  </Link>
+                ) : (
+                  <button onClick={item.action}>{item.name}</button>
+                )}
+              </li>
+            ))
+          ) : showSalesSubmenu ? (
+            [
+              { name: 'Back', action: handleBackClick },
+              { name: 'Sales Orders', path: '/sales-orders' },
+              { name: 'Invoices', path: '/invoices' },
+              { name: 'Customers', path: '/customers' },
+              { name: 'Keg Tracking and Management', path: '/keg-tracking' },
+            ].map((item) => (
+              <li key={item.name}>
+                {item.path ? (
+                  <Link
+                    to={item.path}
+                    onClick={() => {
+                      console.log('[App] Submenu item clicked:', item.name);
+                      setActiveSection('Sales & Distribution');
+                      // Removed setMenuOpen(false)
+                    }}
+                  >
                     {item.name}
                   </Link>
                 ) : (
@@ -240,7 +348,7 @@ const AppContent: React.FC = () => {
               { name: 'Production', subMenu: true },
               { name: 'Inventory', subMenu: true },
               { name: 'Processing', subMenu: null },
-              { name: 'Sales & Distribution', subMenu: null },
+              { name: 'Sales & Distribution', subMenu: true },
               { name: 'Users', subMenu: null },
               { name: 'Reporting', subMenu: null },
               ...(isAdmin ? [{ name: 'Management', subMenu: true }] : []),
@@ -248,18 +356,23 @@ const AppContent: React.FC = () => {
               <li key={section.name}>
                 <button
                   onClick={() => {
+                    console.log('[App] Main menu item clicked:', section.name);
                     if (section.name === 'Production') {
                       handleProductionClick();
                     } else if (section.name === 'Inventory') {
                       handleInventoryClick();
                     } else if (section.name === 'Management') {
                       handleManagementClick();
+                    } else if (section.name === 'Sales & Distribution') {
+                      handleSalesClick();
                     } else {
                       setActiveSection(section.name);
                       setShowInventorySubmenu(false);
                       setShowProductionSubmenu(false);
                       setShowManagementSubmenu(false);
+                      setShowSalesSubmenu(false);
                       navigate(section.name === 'Home' ? '/' : `/${section.name.toLowerCase().replace(' & ', '-')}`);
+                      // Removed setMenuOpen(false)
                     }
                   }}
                   className={activeSection === section.name ? 'active' : ''}
@@ -286,21 +399,23 @@ const AppContent: React.FC = () => {
                     refreshInventory={refreshInventory}
                   />
                 )}
-                {activeSection === 'Production' && location.pathname === '/production' && <Production />}
+                {activeSection === 'Production' && location.pathname === '/production' && (
+                  <Production inventory={inventory} refreshInventory={refreshInventory} />
+                )}
                 {activeSection === 'Products' && <Products />}
                 {activeSection === 'Production' && location.pathname === '/production-page' && <ProductionPage />}
                 {activeSection === 'Locations' && isAdmin && <Locations />}
                 {activeSection === 'Equipment' && <EquipmentPage />}
-                {activeSection === 'Planning' && <div><h2>Planning</h2><p>Coming soon</p></div>}
+                {activeSection === 'Planning' && <div className="container"><h2>Planning</h2><p>Coming soon</p></div>}
                 {activeSection === 'Facility Designer' && isAdmin && <FacilityDesigner />}
                 {activeSection === 'Facility View' && <FacilityView siteId="DSP-AL-20010" />}
                 {activeSection === 'Vendors' && <Vendors vendors={vendors} refreshVendors={refreshVendors} />}
-                {activeSection === 'Transfers' && <div><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
+                {activeSection === 'Transfers' && <div className="container"><h2>Transfers</h2><p>Transfers page coming soon</p></div>}
                 {activeSection === 'Processing' && <Processing inventory={inventory} refreshInventory={refreshInventory} />}
-                {activeSection === 'Sales & Distribution' && <Sales />}
+                {activeSection === 'Sales & Distribution' && <SalesDashboard />}
                 {activeSection === 'Users' && <Users />}
                 {activeSection === 'Reporting' && <Reporting exportToExcel={exportToExcel} />}
-                {activeSection === 'Management' && isAdmin && location.pathname === '/management' && <div><h2>Management</h2><p>Select an option from the menu</p></div>}
+                {activeSection === 'Management' && isAdmin && location.pathname === '/management' && <div className="container"><h2>Management</h2><p>Select an option from the menu</p></div>}
               </>
             }
           />
@@ -317,10 +432,10 @@ const AppContent: React.FC = () => {
             }
           />
           <Route path="/inventory/:identifier" element={<InventoryItemDetails inventory={inventory} refreshInventory={refreshInventory} />} />
-          <Route path="/transfers" element={<div><h2>Transfers</h2><p>Transers page coming soon</p></div>} />
+          <Route path="/transfers" element={<div className="container"><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
           <Route path="/items/:name" element={<ItemDetails />} />
-          <Route path="/sites" element={isAdmin ? <Sites /> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/sites" element={isAdmin ? <Sites /> : <div className="container"><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
           <Route path="/receive" element={<ReceivePage refreshInventory={refreshInventory} vendors={vendors} refreshVendors={refreshVendors} />} />
           <Route path="/vendors" element={<Vendors vendors={vendors} refreshVendors={refreshVendors} />} />
           <Route path="/vendors/:name" element={<VendorDetails vendors={vendors} refreshVendors={refreshVendors} refreshInventory={refreshInventory} />} />
@@ -330,17 +445,49 @@ const AppContent: React.FC = () => {
           <Route path="/processing" element={<Processing inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
-          <Route path="/production" element={<Production />} />
+          <Route path="/production" element={<Production inventory={inventory} refreshInventory={refreshInventory} />} />
+          <Route
+            path="/production/:batchId"
+            element={<BatchDetails inventory={inventory} refreshInventory={refreshInventory} />}
+          />
+          <Route path="/production/:batchId/brewlog" element={<BrewLog />} />
           <Route path="/production-page" element={<ProductionPage />} />
-          <Route path="/locations" element={isAdmin ? <Locations /> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/locations" element={isAdmin ? <Locations /> : <div className="container"><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
           <Route path="/equipment" element={<EquipmentPage />} />
-          <Route path="/planning" element={<div><h2>Planning</h2><p>Coming soon</p></div>} />
-          <Route path="/facility-designer" element={isAdmin ? <FacilityDesigner /> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/planning" element={<div className="container"><h2>Planning</h2><p>Coming soon</p></div>} />
+          <Route path="/facility-designer" element={isAdmin ? <FacilityDesigner /> : <div className="container"><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
           <Route path="/facility-view" element={<FacilityView siteId="DSP-AL-20010" />} />
-          <Route path="/management" element={isAdmin ? <div><h2>Management</h2><p>Select an option from the menu</p></div> : <div><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
+          <Route path="/management" element={isAdmin ? <div className="container"><h2>Management</h2><p>Select an option from the menu</p></div> : <div className="container"><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
           <Route path="/users" element={<Users />} />
+          <Route path="/sales-orders" element={<SalesOrderList />} />
+          <Route path="/sales-orders/new" element={<SalesOrderComponent inventory={inventory} />} />
+          <Route path="/sales-orders/:orderId" element={<SalesOrderComponent inventory={inventory} />} />
+          <Route path="/invoices" element={<InvoicesList />} />
+          <Route path="/invoices/:invoiceId" element={<InvoiceComponent inventory={inventory} refreshInventory={refreshInventory} />} />
+          <Route path="/customers" element={<Customers />} />
+          <Route path="/customers/:customerId" element={<CustomerDetails />} />
+          <Route path="/keg-tracking" element={<KegTracking inventory={inventory} refreshInventory={refreshInventory} />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>
+      <nav className="navbar-mobile">
+        <Link to="/keg-tracking" onClick={() => {
+          console.log('[App] Navbar-mobile Kegs clicked');
+          setMenuOpen(false); // Keep for mobile bottom nav
+        }}>Kegs</Link>
+        <Link to="/sales-orders" onClick={() => {
+          console.log('[App] Navbar-mobile Sales Orders clicked');
+          setMenuOpen(false); // Keep for mobile bottom nav
+        }}>Sales Orders</Link>
+        <Link to="/invoices" onClick={() => {
+          console.log('[App] Navbar-mobile Invoices clicked');
+          setMenuOpen(false); // Keep for mobile bottom nav
+        }}>Invoices</Link>
+        <Link to="/production" onClick={() => {
+          console.log('[App] Navbar-mobile Batches clicked');
+          setMenuOpen(false); // Keep for mobile bottom nav
+        }}>Batches</Link>
+      </nav>
     </div>
   );
 };
