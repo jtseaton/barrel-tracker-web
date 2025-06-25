@@ -1,5 +1,5 @@
-import { Status, Unit, MaterialType, ProductClass, Account, ProductType } from './enums';
-export { Status, Unit, MaterialType, ProductClass, Account, ProductType };
+import { Status, Style, Unit, MaterialType, ProductClass, Account, ProductType } from './enums';
+export { Status, Style, Unit, MaterialType, ProductClass, Account, ProductType };
 
 export interface Transaction {
   action: string;
@@ -110,7 +110,7 @@ export interface Product {
   priority: number;
   class: string; // Reverted to string for compatibility
   type: ProductType;
-  style: string;
+  style: Style | undefined;
   abv: number;
   ibu: number | null;
   packageTypes?: { type: string; price: string; isKegDepositItem: boolean }[];

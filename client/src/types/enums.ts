@@ -1,9 +1,9 @@
 export enum Status {
   Received = 'Received',
-  Stored = 'Stored', // Matches backend inventory status; will transition to InStock for beer
+  Stored = 'Stored',
   Processing = 'Processing',
   Packaged = 'Packaged',
-  Completed = 'Completed', // Added for Batch.status
+  Completed = 'Completed',
 }
 
 export enum Unit {
@@ -36,7 +36,7 @@ export enum MaterialType {
   Packaging = 'Packaging',
   Other = 'Other',
   FinishedGoods = 'Finished Goods',
-  Marketing = 'Marketing',
+  Marketing = 'Marketing'
 }
 
 export enum ProductClass {
@@ -46,12 +46,53 @@ export enum ProductClass {
 }
 
 export enum ProductType {
-  Malt = 'Malt',
-  Spirits = 'Spirits',
-  Wine = 'Wine',
-  Merchandise = 'Merchandise',
-  Cider = 'Cider',
+  MaltBeverage = 'MaltBeverage',
   Seltzer = 'Seltzer',
+  GrapeWine = 'GrapeWine',
+  SparklingWine = 'SparklingWine',
+  CarbonatedWine = 'CarbonatedWine',
+  FruitWine = 'FruitWine',
+  Cider = 'Cider',
+  OtherAgriculturalWine = 'OtherAgriculturalWine',
+  NeutralSpirits = 'NeutralSpirits',
+  Whisky = 'Whisky',
+  Gin = 'Gin',
+  Vodka = 'Vodka',
+  Rum = 'Rum',
+  Tequila = 'Tequila',
+  CordialsLiqueurs = 'CordialsLiqueurs',
+  FlavoredSpirits = 'FlavoredSpirits',
+  DistilledSpiritsSpecialty = 'DistilledSpiritsSpecialty',
+}
+
+export enum Style {
+  Ale = 'Ale',
+  Lager = 'Lager',
+  IPA = 'IPA',
+  Stout = 'Stout',
+  Porter = 'Porter',
+  Pilsner = 'Pilsner',
+  Wheat = 'Wheat',
+  Red = 'Red',
+  White = 'White',
+  Rosé = 'Rosé',
+  Champagne = 'Champagne',
+  Sherry = 'Sherry',
+  Port = 'Port',
+  Madeira = 'Madeira',
+  Bourbon = 'Bourbon',
+  Scotch = 'Scotch',
+  Rye = 'Rye',
+  LondonDry = 'LondonDry',
+  Genever = 'Genever',
+  OldTom = 'OldTom',
+  Blanco = 'Blanco',
+  Reposado = 'Reposado',
+  Añejo = 'Añejo',
+  SpicedRum = 'SpicedRum',
+  WhiteRum = 'WhiteRum',
+  Cocktail = 'Cocktail',
+  Other = 'Other',
 }
 
 export enum Account {
