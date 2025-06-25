@@ -45,8 +45,8 @@ const Products: React.FC = () => {
     [ProductType.OtherAgriculturalWine]: [Style.Other],
     [ProductType.Whisky]: [Style.Bourbon, Style.Scotch, Style.Rye, Style.Other],
     [ProductType.Gin]: [Style.LondonDry, Style.Genever, Style.OldTom, Style.Other],
-    [ProductType.Vodka]: [Style.Other], // Optional
-    [ProductType.NeutralSpirits]: [Style.Other], // Optional
+    [ProductType.Vodka]: [Style.Other],
+    [ProductType.NeutralSpirits]: [Style.Other],
     [ProductType.Rum]: [Style.SpicedRum, Style.WhiteRum, Style.Other],
     [ProductType.Tequila]: [Style.Blanco, Style.Reposado, Style.Añejo, Style.Other],
     [ProductType.CordialsLiqueurs]: [Style.Other],
@@ -86,6 +86,7 @@ const Products: React.FC = () => {
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
         ibu: newProduct.class === ProductClass.Spirits ? null : (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null),
       };
+      console.log('[Products] Adding product:', payload);
       const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -159,6 +160,7 @@ const Products: React.FC = () => {
     isMobile: window.innerWidth <= 768 ? 'cards' : 'table',
     showAddModal,
     error,
+    newProductClass: newProduct.class, // Debug class state
   });
 
   return (
@@ -295,6 +297,7 @@ const Products: React.FC = () => {
                   value={newProduct.class || ''}
                   onChange={(e) => {
                     const classValue = e.target.value as ProductClass;
+                    console.log('[Products] Class changed:', classValue); // Debug
                     setNewProduct({
                       ...newProduct,
                       class: classValue,
@@ -319,6 +322,7 @@ const Products: React.FC = () => {
                   value={newProduct.type || ''}
                   onChange={(e) => {
                     const typeValue = e.target.value as ProductType;
+                    console.log('[Products] Type changed:', typeValue); // Debug
                     setNewProduct({
                       ...newProduct,
                       type: typeValue,
@@ -395,14 +399,14 @@ const Products: React.FC = () => {
                   className="form-control"
                 />
               </div>
-              {newProduct.class !== ProductClass.Spirits && (
+              {newProduct.class !== ProductClass.Spirits && newProduct.class && (
                 <div className="mb-3">
                   <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                     IBU:
                   </label>
                   <input
                     type="number"
-                    value={newProduct.ibu || ''}
+                    value={newProduct.ibu ?? ''}
                     onChange={(e) => setNewProduct({ ...newProduct, ibu: parseInt(e.target.value, 10) || null })}
                     step="1"
                     min="0"
