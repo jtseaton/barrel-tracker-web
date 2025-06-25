@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types/interfaces';
-import { ProductClass, ProductType } from '../types/enums';
+import { ProductClass, ProductType, Style } from '../types/enums';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
 
@@ -17,15 +17,42 @@ const Products: React.FC = () => {
     abbreviation: '',
     enabled: 1,
     priority: 1,
-    class: '',
+    class: undefined,
     type: undefined,
-    style: '',
+    style: undefined,
     abv: 0,
     ibu: null,
   });
-  const [filteredStyles, setFilteredStyles] = useState<string[]>([]);
-  const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
-  const [styles, setStyles] = useState<{ type: string; styles: string[] }[]>([]);
+
+  // Map ProductType to valid Styles (optional for Vodka, NeutralSpirits)
+  const styleOptions: { [key in ProductType]?: Style[] } = {
+    [ProductType.MaltBeverage]: [
+      Style.Ale,
+      Style.Lager,
+      Style.IPA,
+      Style.Stout,
+      Style.Porter,
+      Style.Pilsner,
+      Style.Wheat,
+      Style.Other,
+    ],
+    [ProductType.Seltzer]: [Style.Other],
+    [ProductType.GrapeWine]: [Style.Red, Style.White, Style.Rosé, Style.Champagne, Style.Sherry, Style.Port, Style.Madeira],
+    [ProductType.SparklingWine]: [Style.Champagne, Style.Other],
+    [ProductType.CarbonatedWine]: [Style.Other],
+    [ProductType.FruitWine]: [Style.Other],
+    [ProductType.Cider]: [Style.Other],
+    [ProductType.OtherAgriculturalWine]: [Style.Other],
+    [ProductType.Whisky]: [Style.Bourbon, Style.Scotch, Style.Rye, Style.Other],
+    [ProductType.Gin]: [Style.LondonDry, Style.Genever, Style.OldTom, Style.Other],
+    [ProductType.Vodka]: [Style.Other], // Optional
+    [ProductType.NeutralSpirits]: [Style.Other], // Optional
+    [ProductType.Rum]: [Style.SpicedRum, Style.WhiteRum, Style.Other],
+    [ProductType.Tequila]: [Style.Blanco, Style.Reposado, Style.Añejo, Style.Other],
+    [ProductType.CordialsLiqueurs]: [Style.Other],
+    [ProductType.FlavoredSpirits]: [Style.Cocktail, Style.Other],
+    [ProductType.DistilledSpiritsSpecialty]: [Style.Cocktail, Style.Other],
+  };
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -40,64 +67,7 @@ const Products: React.FC = () => {
         console.error('[Products] Fetch products error:', err);
       }
     };
-
-    const fetchStyles = async () => {
-      try {
-        console.log('[Products] Fetching /styles.xml...');
-        const res = await fetch('/styles.xml', { headers: { Accept: 'application/xml' } });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const text = await res.text();
-        if (!text.trim()) throw new Error('Empty XML response');
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(text, 'text/xml');
-        const parseError = xmlDoc.querySelector('parsererror');
-        if (parseError) throw new Error('Invalid XML format: ' + parseError.textContent);
-
-        const stylesByType: { type: string; styles: string[] }[] = [];
-        let currentType = '';
-        Array.from(xmlDoc.documentElement.childNodes).forEach(node => {
-          if (node.nodeType === Node.COMMENT_NODE) {
-            const comment = node.textContent?.trim().toLowerCase() || '';
-            if (comment.includes('beer')) currentType = 'Malt';
-            else if (comment.includes('wine')) currentType = 'Wine';
-            else if (comment.includes('spirit')) currentType = 'Spirits';
-            else if (comment.includes('cider')) currentType = 'Cider';
-            else if (comment.includes('seltzer')) currentType = 'Seltzer';
-            else if (comment.includes('merchandise')) currentType = 'Merchandise';
-          } else if (node.nodeName === 'style' && currentType) {
-            const styleText = node.textContent?.trim();
-            if (styleText) {
-              const typeEntry = stylesByType.find(entry => entry.type === currentType);
-              if (typeEntry) {
-                typeEntry.styles.push(styleText);
-              } else {
-                stylesByType.push({ type: currentType, styles: [styleText] });
-              }
-            }
-          }
-        });
-
-        if (stylesByType.length === 0) throw new Error('No styles found in XML');
-        console.log('[Products] Parsed styles:', stylesByType);
-        setStyles(stylesByType);
-      } catch (err: any) {
-        console.error('[Products] Fetch styles error:', err);
-        setError('Failed to load styles: ' + err.message);
-        const mockStyles = [
-          { type: 'Malt', styles: ['IPA', 'Stout', 'Porter', 'American Amber Ale'] },
-          { type: 'Spirits', styles: ['Bourbon', 'Whiskey', 'Vodka', 'Gin'] },
-          { type: 'Wine', styles: ['Red', 'White', 'Rosé'] },
-          { type: 'Cider', styles: ['Dry', 'Sweet'] },
-          { type: 'Seltzer', styles: ['Other'] },
-          { type: 'Merchandise', styles: ['Other'] },
-        ];
-        setStyles(mockStyles);
-        console.log('[Products] Set mock styles:', mockStyles);
-      }
-    };
-
     fetchProducts();
-    fetchStyles();
   }, []);
 
   const handleAddProduct = async () => {
@@ -105,12 +75,16 @@ const Products: React.FC = () => {
       setError('Name, Class, and Type are required');
       return;
     }
+    if (newProduct.class !== ProductClass.Spirits && !newProduct.style) {
+      setError('Style is required for Beer and Wine');
+      return;
+    }
 
     try {
       const payload = {
         ...newProduct,
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
-        ibu: newProduct.class === ProductClass.Spirits ? null : (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : 0),
+        ibu: newProduct.class === ProductClass.Spirits ? null : (newProduct.ibu ? parseInt(newProduct.ibu.toString(), 10) : null),
       };
       const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
@@ -130,9 +104,9 @@ const Products: React.FC = () => {
         abbreviation: '',
         enabled: 1,
         priority: 1,
-        class: '',
+        class: undefined,
         type: undefined,
-        style: '',
+        style: undefined,
         abv: 0,
         ibu: null,
       });
@@ -151,9 +125,9 @@ const Products: React.FC = () => {
       abbreviation: '',
       enabled: 1,
       priority: 1,
-      class: '',
+      class: undefined,
       type: undefined,
-      style: '',
+      style: undefined,
       abv: 0,
       ibu: null,
     });
@@ -319,7 +293,16 @@ const Products: React.FC = () => {
                 </label>
                 <select
                   value={newProduct.class || ''}
-                  onChange={(e) => setNewProduct({ ...newProduct, class: e.target.value as ProductClass })}
+                  onChange={(e) => {
+                    const classValue = e.target.value as ProductClass;
+                    setNewProduct({
+                      ...newProduct,
+                      class: classValue,
+                      type: undefined,
+                      style: undefined,
+                      ibu: classValue === ProductClass.Spirits ? null : newProduct.ibu,
+                    });
+                  }}
                   className="form-control"
                 >
                   <option value="">Select Class</option>
@@ -335,81 +318,69 @@ const Products: React.FC = () => {
                 <select
                   value={newProduct.type || ''}
                   onChange={(e) => {
-                    const type = e.target.value as ProductType;
+                    const typeValue = e.target.value as ProductType;
                     setNewProduct({
                       ...newProduct,
-                      type,
-                      style: type === ProductType.Seltzer || type === ProductType.Merchandise ? 'Other' : '',
+                      type: typeValue,
+                      style: undefined,
                     });
-                    const selectedStyles = styles.find(s => s.type.toLowerCase() === type.toLowerCase())?.styles || [];
-                    setFilteredStyles(selectedStyles);
-                    console.log('[Products] Type selected:', type, 'Filtered styles:', selectedStyles);
-                    setShowStyleSuggestions(true);
                   }}
                   className="form-control"
+                  disabled={!newProduct.class}
                 >
                   <option value="">Select Type</option>
-                  {Object.values(ProductType).map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
+                  {newProduct.class &&
+                    Object.values(ProductType)
+                      .filter(type => {
+                        if (newProduct.class === ProductClass.Beer) {
+                          return [ProductType.MaltBeverage, ProductType.Seltzer].includes(type);
+                        } else if (newProduct.class === ProductClass.Wine) {
+                          return [
+                            ProductType.GrapeWine,
+                            ProductType.SparklingWine,
+                            ProductType.CarbonatedWine,
+                            ProductType.FruitWine,
+                            ProductType.Cider,
+                            ProductType.OtherAgriculturalWine,
+                          ].includes(type);
+                        } else if (newProduct.class === ProductClass.Spirits) {
+                          return [
+                            ProductType.NeutralSpirits,
+                            ProductType.Whisky,
+                            ProductType.Gin,
+                            ProductType.Vodka,
+                            ProductType.Rum,
+                            ProductType.Tequila,
+                            ProductType.CordialsLiqueurs,
+                            ProductType.FlavoredSpirits,
+                            ProductType.DistilledSpiritsSpecialty,
+                          ].includes(type);
+                        }
+                        return false;
+                      })
+                      .map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
                 </select>
               </div>
-              <div className="mb-3" style={{ position: 'relative' }}>
-                <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Style:
-                </label>
-                <input
-                  type="text"
-                  value={newProduct.style || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setNewProduct({ ...newProduct, style: value });
-                    setShowStyleSuggestions(true);
-                    if (value.trim() === '') {
-                      setFilteredStyles(styles.find(s => s.type.toLowerCase() === newProduct.type?.toLowerCase())?.styles || []);
-                    } else {
-                      const filtered = (styles.find(s => s.type.toLowerCase() === newProduct.type?.toLowerCase())?.styles || [])
-                        .filter(s => s.toLowerCase().includes(value.toLowerCase()));
-                      setFilteredStyles(filtered);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && filteredStyles.length > 0) {
-                      e.preventDefault();
-                      setNewProduct({ ...newProduct, style: filteredStyles[0] });
-                      setShowStyleSuggestions(false);
-                    }
-                  }}
-                  placeholder="Type to search styles"
-                  onFocus={() => setShowStyleSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowStyleSuggestions(false), 300)}
-                  disabled={newProduct.type === ProductType.Seltzer || newProduct.type === ProductType.Merchandise}
-                  className="form-control"
-                />
-                {showStyleSuggestions && newProduct.type !== ProductType.Seltzer && newProduct.type !== ProductType.Merchandise && (
-                  <ul className="typeahead">
-                    {filteredStyles.length > 0 ? (
-                      filteredStyles.map((style) => (
-                        <li
-                          key={style}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setNewProduct({ ...newProduct, style });
-                            setShowStyleSuggestions(false);
-                          }}
-                          className={newProduct.style === style ? 'selected' : ''}
-                        >
-                          {style}
-                        </li>
-                      ))
-                    ) : (
-                      <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                        No matches found
-                      </li>
-                    )}
-                  </ul>
-                )}
-              </div>
+              {newProduct.type && newProduct.type !== ProductType.Vodka && newProduct.type !== ProductType.NeutralSpirits && (
+                <div className="mb-3">
+                  <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
+                    Style (required):
+                  </label>
+                  <select
+                    value={newProduct.style || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, style: e.target.value as Style })}
+                    className="form-control"
+                    disabled={!newProduct.type}
+                  >
+                    <option value="">Select Style</option>
+                    {styleOptions[newProduct.type]?.map(style => (
+                      <option key={style} value={style}>{style}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                   ABV %:
@@ -432,7 +403,7 @@ const Products: React.FC = () => {
                   <input
                     type="number"
                     value={newProduct.ibu || ''}
-                    onChange={(e) => setNewProduct({ ...newProduct, ibu: parseInt(e.target.value, 10) || 0 })}
+                    onChange={(e) => setNewProduct({ ...newProduct, ibu: parseInt(e.target.value, 10) || null })}
                     step="1"
                     min="0"
                     placeholder="Enter IBU"

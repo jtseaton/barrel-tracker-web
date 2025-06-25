@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Product, Recipe, PackageType, Ingredient } from '../types/interfaces';
-import { ProductType } from '../types/enums'; // Added import
+import { ProductClass, ProductType, Style } from '../types/enums';
 import RecipeModal from './RecipeModal';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
@@ -19,6 +19,35 @@ const ProductDetails: React.FC = () => {
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const styleOptions: { [key in ProductType]?: Style[] } = {
+    [ProductType.MaltBeverage]: [
+      Style.Ale,
+      Style.Lager,
+      Style.IPA,
+      Style.Stout,
+      Style.Porter,
+      Style.Pilsner,
+      Style.Wheat,
+      Style.Other,
+    ],
+    [ProductType.Seltzer]: [Style.Other],
+    [ProductType.GrapeWine]: [Style.Red, Style.White, Style.Rosé, Style.Champagne, Style.Sherry, Style.Port, Style.Madeira],
+    [ProductType.SparklingWine]: [Style.Champagne, Style.Other],
+    [ProductType.CarbonatedWine]: [Style.Other],
+    [ProductType.FruitWine]: [Style.Other],
+    [ProductType.Cider]: [Style.Other],
+    [ProductType.OtherAgriculturalWine]: [Style.Other],
+    [ProductType.Whisky]: [Style.Bourbon, Style.Scotch, Style.Rye, Style.Other],
+    [ProductType.Gin]: [Style.LondonDry, Style.Genever, Style.OldTom, Style.Other],
+    [ProductType.Vodka]: [Style.Other],
+    [ProductType.NeutralSpirits]: [Style.Other],
+    [ProductType.Rum]: [Style.SpicedRum, Style.WhiteRum, Style.Other],
+    [ProductType.Tequila]: [Style.Blanco, Style.Reposado, Style.Añejo, Style.Other],
+    [ProductType.CordialsLiqueurs]: [Style.Other],
+    [ProductType.FlavoredSpirits]: [Style.Cocktail, Style.Other],
+    [ProductType.DistilledSpiritsSpecialty]: [Style.Cocktail, Style.Other],
+  };
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -83,8 +112,12 @@ const ProductDetails: React.FC = () => {
   }, [id]);
 
   const handleSave = async () => {
-    if (!product?.name) {
-      setError('Product name is required');
+    if (!product?.name || !product.class || !product.type) {
+      setError('Name, Class, and Type are required');
+      return;
+    }
+    if (product.class !== ProductClass.Spirits && !product.style) {
+      setError('Style is required for Beer and Wine');
       return;
     }
     const validPackageTypes = packageTypes.filter(pt => pt.type && !isNaN(parseFloat(pt.price)) && parseFloat(pt.price) >= 0);
@@ -222,37 +255,88 @@ const ProductDetails: React.FC = () => {
             </div>
             <div>
               <label className="form-label">Class:</label>
-              <input
-                type="text"
+              <select
                 value={product?.class || ''}
-                onChange={(e) => setProduct({ ...product!, class: e.target.value })}
-                placeholder="Enter class"
+                onChange={(e) => {
+                  const classValue = e.target.value as ProductClass;
+                  setProduct({
+                    ...product!,
+                    class: classValue,
+                    type: product?.type || ProductType.MaltBeverage, // Default to valid type
+                    style: undefined,
+                    ibu: classValue === ProductClass.Spirits ? null : (product?.ibu ?? null),
+                  });
+                }}
                 className="form-control"
-              />
+              >
+                <option value="">Select Class</option>
+                {Object.values(ProductClass).map((cls) => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="form-label">Type:</label>
               <select
                 value={product?.type || ''}
-                onChange={(e) => setProduct({ ...product!, type: e.target.value as ProductType })}
+                onChange={(e) => {
+                  const typeValue = e.target.value as ProductType;
+                  setProduct({ ...product!, type: typeValue, style: undefined });
+                }}
                 className="form-control"
+                disabled={!product?.class}
               >
                 <option value="">Select Type</option>
-                {Object.values(ProductType).map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
+                {product?.class &&
+                  Object.values(ProductType)
+                    .filter(type => {
+                      if (product.class === ProductClass.Beer) {
+                        return [ProductType.MaltBeverage, ProductType.Seltzer].includes(type);
+                      } else if (product.class === ProductClass.Wine) {
+                        return [
+                          ProductType.GrapeWine,
+                          ProductType.SparklingWine,
+                          ProductType.CarbonatedWine,
+                          ProductType.FruitWine,
+                          ProductType.Cider,
+                          ProductType.OtherAgriculturalWine,
+                        ].includes(type);
+                      } else if (product.class === ProductClass.Spirits) {
+                        return [
+                          ProductType.NeutralSpirits,
+                          ProductType.Whisky,
+                          ProductType.Gin,
+                          ProductType.Vodka,
+                          ProductType.Rum,
+                          ProductType.Tequila,
+                          ProductType.CordialsLiqueurs,
+                          ProductType.FlavoredSpirits,
+                          ProductType.DistilledSpiritsSpecialty,
+                        ].includes(type);
+                      }
+                      return false;
+                    })
+                    .map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
               </select>
             </div>
-            <div>
-              <label className="form-label">Style:</label>
-              <input
-                type="text"
-                value={product?.style || ''}
-                onChange={(e) => setProduct({ ...product!, style: e.target.value })}
-                placeholder="Enter style"
-                className="form-control"
-              />
-            </div>
+            {product?.type && product.type !== ProductType.Vodka && product.type !== ProductType.NeutralSpirits && (
+              <div>
+                <label className="form-label">Style:</label>
+                <select
+                  value={product?.style || ''}
+                  onChange={(e) => setProduct({ ...product!, style: e.target.value as Style })}
+                  className="form-control"
+                  disabled={!product?.type}
+                >
+                  <option value="">Select Style</option>
+                  {styleOptions[product.type]?.map(style => (
+                    <option key={style} value={style}>{style}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="form-label">ABV:</label>
               <input
@@ -264,16 +348,18 @@ const ProductDetails: React.FC = () => {
                 className="form-control"
               />
             </div>
-            <div>
-              <label className="form-label">IBU:</label>
-              <input
-                type="number"
-                value={product?.ibu || 0}
-                onChange={(e) => setProduct({ ...product!, ibu: parseInt(e.target.value) || 0 })}
-                placeholder="Enter IBU"
-                className="form-control"
-              />
-            </div>
+            {product?.class !== ProductClass.Spirits && (
+              <div>
+                <label className="form-label">IBU:</label>
+                <input
+                  type="number"
+                  value={product?.ibu ?? ''}
+                  onChange={(e) => setProduct({ ...product!, ibu: parseInt(e.target.value) || null })}
+                  placeholder="Enter IBU"
+                  className="form-control"
+                />
+              </div>
+            )}
           </div>
           <h3 className="app-header mb-3">Package Types</h3>
           {packageTypes.map((pt, index) => (
