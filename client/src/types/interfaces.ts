@@ -1,5 +1,5 @@
-import { Status, Style, Unit, MaterialType, ProductClass, Account, ProductType } from './enums';
-export { Status, Style, Unit, MaterialType, ProductClass, Account, ProductType };
+import { Status, Style, Unit, MaterialType, ProductClass, Account, ProductType, BatchType } from './enums';
+export { Status, Style, Unit, MaterialType, ProductClass, Account, ProductType, BatchType };
 
 export interface Transaction {
   action: string;
@@ -225,6 +225,8 @@ export interface Batch {
   fermenterId: number | null;
   stage?: 'Brewing' | 'Fermentation' | 'Filtering/Carbonating' | 'Packaging' | 'Completed';
   volume?: number;
+  productClass?: ProductClass;
+  batchType: BatchType | undefined;
 }
 
 export interface ReceiveForm {
