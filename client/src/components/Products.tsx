@@ -78,12 +78,8 @@ const Products: React.FC = () => {
   }, [showAddModal, newProduct.class, newProduct.ibu]);
 
   const handleAddProduct = async () => {
-    if (!newProduct.name || !newProduct.class || !newProduct.type) {
-      setError('Name, Class, and Type are required');
-      return;
-    }
-    if (newProduct.class !== ProductClass.Spirits && !newProduct.style) {
-      setError('Style is required for Beer and Wine');
+    if (!newProduct.name || !newProduct.abbreviation || !newProduct.class || !newProduct.type || !newProduct.style) {
+      setError('Name, Abbreviation, Class, Type, and Style are required');
       return;
     }
 
@@ -286,7 +282,7 @@ const Products: React.FC = () => {
               </div>
               <div className="mb-3">
                 <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-                  Abbreviation:
+                  Abbreviation (required):
                 </label>
                 <input
                   type="text"
@@ -374,7 +370,7 @@ const Products: React.FC = () => {
                       ))}
                 </select>
               </div>
-              {newProduct.type && newProduct.type !== ProductType.Vodka && newProduct.type !== ProductType.NeutralSpirits && (
+              {newProduct.type && (
                 <div className="mb-3">
                   <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
                     Style (required):
