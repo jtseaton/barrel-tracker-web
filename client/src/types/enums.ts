@@ -100,3 +100,8 @@ export enum Account {
   Processing = 'Processing',
   Production = 'Production',
 }
+
+export enum BatchType {
+  Fermentation = 'Fermentation',
+  Proofing = 'Proofing',
+}

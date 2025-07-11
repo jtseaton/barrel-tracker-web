@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
-import { Status, Unit, MaterialType, Account, ProductClass } from '../types/enums';
+import { Status, Unit, MaterialType, Account, ProductClass, BatchType } from '../types/enums';
 import RecipeModal from './RecipeModal';
 import '../App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -29,6 +29,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     recipeId: 0,
     siteId: '',
     fermenterId: null,
+    batchType: undefined,
   });
   const [desiredVolume, setDesiredVolume] = useState<number>(0);
   const [desiredAbv, setDesiredAbv] = useState<number>(0);
@@ -188,7 +189,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           }
           const product = await res.json();
           setProductClass(product.class);
-          if (product.class !== ProductClass.Spirits) {
+          if (product.class !== ProductClass.Spirits || newBatch.batchType === BatchType.Fermentation) {
             fetchRecipes(newBatch.productId);
           } else {
             setRecipes([]);
@@ -204,7 +205,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       }
     };
     fetchProductClass();
-  }, [newBatch.productId]);
+  }, [newBatch.productId, newBatch.batchType]);
 
   const calculateSpiritsRequirements = () => {
     if (!desiredVolume || !desiredAbv) return { spiritVolume: 0, waterVolume: 0 };
@@ -218,6 +219,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   const handleAddBatch = async () => {
     if (!newBatch.batchId || !newBatch.productId || !newBatch.siteId) {
       setError('Batch ID, Product, and Site are required');
+      setShowErrorPopup(true);
+      setShowAddBatchModal(false);
+      return;
+    }
+
+    if (productClass === ProductClass.Spirits && !newBatch.batchType) {
+      setError('Batch Type is required for spirits');
       setShowErrorPopup(true);
       setShowAddBatchModal(false);
       return;
@@ -237,80 +245,11 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
       let batchData: any;
 
-      if (productClass === ProductClass.Spirits) {
-        if (!desiredVolume || !desiredAbv) {
-          setError('Desired Volume and ABV are required for spirits');
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
+      const isFermentationBatch = productClass !== ProductClass.Spirits || newBatch.batchType === BatchType.Fermentation;
 
-        const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
-        const spiritProof = 190;
-        const proofGallons = (spiritVolume * spiritProof) / 100;
-
-        const spiritItem = inventory.find(i =>
-          i.identifier === '321654987' &&
-          i.status === 'Stored' &&
-          i.siteId === newBatch.siteId &&
-          i.type === MaterialType.Spirits &&
-          i.account === Account.Storage &&
-          parseFloat(i.quantity) >= spiritVolume
-        );
-
-        if (!spiritItem) {
-          setError(`Insufficient Neutral Grain (Lot 321654987) at site ${newBatch.siteId}. Need ${spiritVolume} gallons.`);
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        batchData = {
-          batchId: newBatch.batchId,
-          productId: newBatch.productId,
-          siteId: newBatch.siteId,
-          fermenterId: newBatch.fermenterId || null,
-          status: Status.Processing,
-          date: new Date().toISOString().split('T')[0],
-          volume: desiredVolume,
-          ingredients: [
-            {
-              itemName: 'Neutral Grain',
-              quantity: spiritVolume,
-              unit: Unit.Gallons,
-              proof: spiritProof,
-              proofGallons: proofGallons,
-              isRecipe: false,
-            },
-            {
-              itemName: 'Water',
-              quantity: waterVolume,
-              unit: Unit.Gallons,
-              isRecipe: false,
-            },
-          ],
-        };
-
-        const moveData = {
-          identifier: '321654987',
-          toAccount: Account.Production,
-          proofGallons: proofGallons.toString(),
-          volume: spiritVolume,
-          proof: spiritProof,
-        };
-
-        const moveRes = await fetch(`${API_BASE_URL}/api/move`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(moveData),
-        });
-        if (!moveRes.ok) {
-          const text = await moveRes.text();
-          throw new Error(`Failed to move spirit: HTTP ${moveRes.status}, ${text.slice(0, 50)}`);
-        }
-      } else {
+      if (isFermentationBatch) {
         if (!newBatch.recipeId) {
-          setError('Recipe is required for non-spirits products');
+          setError('Recipe is required for fermentation batches');
           setShowErrorPopup(true);
           setShowAddBatchModal(false);
           return;
@@ -374,7 +313,80 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
             isRecipe: true,
           })),
           volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20,
+          batchType: newBatch.batchType,
         };
+      } else {
+        if (!desiredVolume || !desiredAbv) {
+          setError('Desired Volume and ABV are required for proofing batches');
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
+        const spiritProof = 190;
+        const proofGallons = (spiritVolume * spiritProof) / 100;
+
+        const spiritItem = inventory.find(i =>
+          i.identifier === '321654987' &&
+          i.status === 'Stored' &&
+          i.siteId === newBatch.siteId &&
+          i.type === MaterialType.Spirits &&
+          i.account === Account.Storage &&
+          parseFloat(i.quantity) >= spiritVolume
+        );
+
+        if (!spiritItem) {
+          setError(`Insufficient Neutral Grain (Lot 321654987) at site ${newBatch.siteId}. Need ${spiritVolume} gallons.`);
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          return;
+        }
+
+        batchData = {
+          batchId: newBatch.batchId,
+          productId: newBatch.productId,
+          siteId: newBatch.siteId,
+          fermenterId: newBatch.fermenterId || null,
+          status: Status.Processing,
+          date: new Date().toISOString().split('T')[0],
+          volume: desiredVolume,
+          ingredients: [
+            {
+              itemName: 'Neutral Grain',
+              quantity: spiritVolume,
+              unit: Unit.Gallons,
+              proof: spiritProof,
+              proofGallons: proofGallons,
+              isRecipe: false,
+            },
+            {
+              itemName: 'Water',
+              quantity: waterVolume,
+              unit: Unit.Gallons,
+              isRecipe: false,
+            },
+          ],
+          batchType: newBatch.batchType,
+        };
+
+        const moveData = {
+          identifier: '321654987',
+          toAccount: Account.Production,
+          proofGallons: proofGallons.toString(),
+          volume: spiritVolume,
+          proof: spiritProof,
+        };
+
+        const moveRes = await fetch(`${API_BASE_URL}/api/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(moveData),
+        });
+        if (!moveRes.ok) {
+          const text = await moveRes.text();
+          throw new Error(`Failed to move spirit: HTTP ${moveRes.status}, ${text.slice(0, 50)}`);
+        }
       }
 
       console.log('[Production] Sending batch data:', {
@@ -382,6 +394,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         volume: batchData.volume,
         ingredients: batchData.ingredients,
         recipeId: batchData.recipeId,
+        batchType: batchData.batchType,
       });
 
       const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
@@ -445,7 +458,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       }
 
       setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null, batchType: undefined });
       setDesiredVolume(0);
       setDesiredAbv(0);
       setRecipes([]);
@@ -764,7 +777,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     value={newBatch.productId || ''}
                     onChange={e => {
                       const productId = parseInt(e.target.value, 10);
-                      setNewBatch({ ...newBatch, productId, recipeId: 0 });
+                      setNewBatch({ ...newBatch, productId, recipeId: 0, batchType: undefined });
                       setDesiredVolume(0);
                       setDesiredAbv(0);
                     }}
@@ -778,7 +791,21 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                     ))}
                   </select>
                 </label>
-                {productClass === ProductClass.Spirits ? (
+                {productClass === ProductClass.Spirits && (
+                  <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
+                    Batch Type (required):
+                    <select
+                      value={newBatch.batchType || ''}
+                      onChange={e => setNewBatch({ ...newBatch, batchType: e.target.value as BatchType })}
+                      className="form-control"
+                    >
+                      <option value="">Select Batch Type</option>
+                      <option value={BatchType.Fermentation}>Fermentation</option>
+                      <option value={BatchType.Proofing}>Proofing</option>
+                    </select>
+                  </label>
+                )}
+                {productClass === ProductClass.Spirits && newBatch.batchType === BatchType.Proofing ? (
                   <>
                     <label className="form-label" style={{ fontWeight: 'bold', color: '#555' }}>
                       Desired Batch Volume (gallons, required):
@@ -874,7 +901,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
                 onClick={() => {
                   console.log('[Production] Batch modal Cancel clicked');
                   setShowAddBatchModal(false);
-                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null });
+                  setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null, batchType: undefined });
                   setDesiredVolume(0);
                   setDesiredAbv(0);
                   setError(null);

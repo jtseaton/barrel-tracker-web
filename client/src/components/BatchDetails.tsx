@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Batch, Product, Site, Equipment, Ingredient, Location, InventoryItem, PackagingAction, BatchDetailsProps } from '../types/interfaces';
-import { Status } from '../types/enums'; // Added import
+import { Status, ProductClass, BatchType, MaterialType, Account, Unit } from '../types/enums'; // Added BatchType, MaterialType, Account, Unit
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../App.css';
@@ -54,6 +54,9 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
   const [kegCodes, setKegCodes] = useState<string[]>([]);
   const [currentKegCode, setCurrentKegCode] = useState('');
   const [manualKegEntry, setManualKegEntry] = useState(false);
+  const [showProductionPrompt, setShowProductionPrompt] = useState<boolean>(false);
+  const [producedVolume, setProducedVolume] = useState<number>(0);
+  const [producedProof, setProducedProof] = useState<number>(0);
   const packageVolumes: { [key: string]: number } = {
     '1/2 BBL Keg': 0.5,
     '1/6 BBL Keg': 0.167,
@@ -312,6 +315,12 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
 
   const handleCompleteBatch = async () => {
     if (!batch) return;
+
+    if (batch.productClass === ProductClass.Spirits && batch.batchType === BatchType.Fermentation) {
+      setShowProductionPrompt(true);
+      return;
+    }
+
     if (batch.volume !== undefined && batch.volume > 0) {
       setShowLossPrompt({ volume: batch.volume });
       return;
@@ -326,12 +335,67 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         const text = await res.text();
         throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); // Fixed TS2345
+      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); 
       setError(null);
       setSuccessMessage('Batch completed successfully');
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: any) {
       setError('Failed to complete batch: ' + err.message);
+    }
+  };
+
+  const handleProductionConfirmation = async () => {
+    if (!producedVolume || !producedProof) {
+      setError('Produced volume and proof are required');
+      return;
+    }
+    try {
+      const proofGallons = (producedVolume * producedProof) / 100;
+      const receiveData = {
+        identifier: batchId, // Use batchId as lot number
+        item: 'Distilled Spirits', // Or specific item name
+        lotNumber: batchId,
+        materialType: MaterialType.Spirits,
+        quantity: producedVolume.toString(),
+        unit: Unit.Gallons,
+        proof: producedProof.toString(),
+        source: 'Produced from fermentation',
+        dspNumber: 'DSP-AL-20010', // Example
+        receivedDate: new Date().toISOString().split('T')[0],
+        description: `Produced from batch ${batchId}`,
+        cost: '0', // Or calculate
+        poNumber: '',
+        siteId: batch?.siteId || '',
+        locationId: '', // Default or prompt
+        account: Account.Storage,
+      };
+      const res = await fetch(`${API_BASE_URL}/api/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(receiveData),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to add produced spirits to inventory: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+
+      const completeRes = await fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ status: Status.Completed, stage: 'Completed', equipmentId: null }),
+      });
+      if (!completeRes.ok) {
+        const text = await completeRes.text();
+        throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
+      }
+      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); 
+      setShowProductionPrompt(false);
+      await refreshInventory();
+      setSuccessMessage('Produced spirits recorded and batch completed');
+      setTimeout(() => setSuccessMessage(null), 2000);
+      setError(null);
+    } catch (err: any) {
+      setError('Failed to record production or complete batch: ' + err.message);
     }
   };
 
@@ -349,7 +413,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           const text = await res.text();
           throw new Error(`Failed to complete batch: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-        setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); // Fixed TS2345
+        setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null } : null); 
         setSuccessMessage('Batch completed without recording loss');
         setTimeout(() => setSuccessMessage(null), 2000);
         setError(null);
@@ -394,7 +458,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
         const text = await completeRes.text();
         throw new Error(`Failed to complete batch: HTTP ${completeRes.status}, Response: ${text.slice(0, 50)}`);
       }
-      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null, volume: 0 } : null); // Fixed TS2345
+      setBatch((prev) => prev ? { ...prev, status: Status.Completed, stage: 'Completed', equipmentId: null, volume: 0 } : null); 
       setShowLossPrompt(null);
       setSuccessMessage('Loss recorded and batch completed');
       setTimeout(() => setSuccessMessage(null), 2000);
@@ -645,7 +709,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
     }
   };
 
-  const handlePrintBatchSheet = () => {
+  const handlePrintBatchSheet = async () => {
     if (!batch) return;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
@@ -762,7 +826,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           <p><strong>Volume:</strong> {batch.volume ? batch.volume.toFixed(3) : 'N/A'} barrels</p>
           <p><strong>Stage:</strong> {batch.stage || 'N/A'}</p>
           <p><strong>Equipment:</strong> {equipment.find(e => e.equipmentId === batch.equipmentId)?.name || 'N/A'}</p>
-          {batch.status !== Status.Completed && ( // Fixed TS2367
+          {batch.status !== Status.Completed && ( 
             <div className="mt-3">
               <h4 className="text-warning mb-2">Update Batch ID</h4>
               <div className="d-flex gap-2 align-items-center">
@@ -787,7 +851,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
             <button className="btn btn-primary" onClick={handlePrintBatchSheet}>
               Print Batch Sheet
             </button>
-            {batch.status !== Status.Completed && ( // Fixed TS2367
+            {batch.status !== Status.Completed && (
               <>
                 <button className="btn btn-success" onClick={handleCompleteBatch}>
                   Complete Batch
@@ -798,7 +862,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
               </>
             )}
           </div>
-          {batch.status !== Status.Completed && ( // Fixed TS2367
+          {batch.status !== Status.Completed && (
             <div className="mb-3">
               <h4 className="text-warning mb-2">Update Equipment & Stage</h4>
               <div className="d-flex gap-2 align-items-center flex-wrap">
@@ -832,7 +896,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           )}
         </div>
       </div>
-      {batch.status !== Status.Completed && ( // Fixed TS2367
+      {batch.status !== Status.Completed && (
         <div className="mb-4">
           <h3 className="text-warning mb-3">Add Action</h3>
           <div className="d-flex gap-2 align-items-center">
@@ -896,7 +960,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                   <th>Quantity</th>
                   <th>Unit</th>
                   <th>Source</th>
-                  {batch.status !== Status.Completed && <th>Actions</th>} // Fixed TS2367
+                  {batch.status !== Status.Completed && <th>Actions</th>} 
                 </tr>
               </thead>
               <tbody>
@@ -974,7 +1038,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                       )}
                     </td>
                     <td>{ing.isRecipe ? 'Recipe' : 'Additional'}</td>
-                    {batch.status !== Status.Completed && ( // Fixed TS2367
+                    {batch.status !== Status.Completed && (
                       <td>
                         {newIngredients.some(n => 
                           n.itemName === ing.itemName && n.quantity === ing.quantity && n.unit === ing.unit
@@ -1027,7 +1091,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                     <p className="card-text"><strong>Quantity:</strong> {ing.quantity}</p>
                     <p className="card-text"><strong>Unit:</strong> {ing.unit}</p>
                     <p className="card-text"><strong>Source:</strong> {ing.isRecipe ? 'Recipe' : 'Additional'}</p>
-                    {batch.status !== Status.Completed && ( // Fixed TS2367
+                    {batch.status !== Status.Completed && (
                       <div className="d-flex gap-2">
                         <button
                           className="btn btn-primary btn-sm"
@@ -1052,7 +1116,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           <p>No ingredients recorded.</p>
         )}
       </div>
-      {batch.status !== Status.Completed && ( // Fixed TS2367
+      {batch.status !== Status.Completed && (
         <div className="mb-4">
           <h3 className="text-warning mb-3">Add Ingredients</h3>
           <div className="row g-2 mb-3">
@@ -1100,7 +1164,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
           </div>
         </div>
       )}
-      {batch.stage === 'Packaging' && batch.status !== Status.Completed && ( // Fixed TS2367
+      {batch.stage === 'Packaging' && batch.status !== Status.Completed && (
         <div className="mb-4">
           <h3 className="text-warning mb-3">Package Batch</h3>
           <div className="row g-2 mb-3">
@@ -1198,7 +1262,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                   <th>Volume (barrels)</th>
                   <th>Location</th>
                   <th>Keg Codes</th>
-                  {batch.status !== Status.Completed && <th>Actions</th>} // Fixed TS2367
+                  {batch.status !== Status.Completed && <th>Actions</th>} 
                 </tr>
               </thead>
               <tbody>
@@ -1222,7 +1286,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                     <td>{pkg.volume.toFixed(3)}</td>
                     <td>{locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</td>
                     <td>{pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</td>
-                    {batch.status !== Status.Completed && ( // Fixed TS2367
+                    {batch.status !== Status.Completed && (
                       <td>
                         {editPackaging && editPackaging.id === pkg.id ? (
                           <div className="d-flex gap-2">
@@ -1263,7 +1327,7 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
                     <p className="card-text"><strong>Volume:</strong> {pkg.volume.toFixed(3)} barrels</p>
                     <p className="card-text"><strong>Location:</strong> {locations.find(loc => loc.locationId === pkg.locationId)?.name || pkg.locationId}</p>
                     <p className="card-text"><strong>Keg Codes:</strong> {pkg.keg_codes ? JSON.parse(pkg.keg_codes).join(', ') : 'N/A'}</p>
-                    {batch.status !== Status.Completed && ( // Fixed TS2367
+                    {batch.status !== Status.Completed && (
                       <div className="d-flex gap-2">
                         <button className="btn btn-primary btn-sm" onClick={() => setEditPackaging(pkg)}>
                           Edit
@@ -1341,6 +1405,39 @@ const BatchDetails: React.FC<BatchDetailsProps> = ({ inventory, refreshInventory
               </button>
               <button className="btn btn-danger" onClick={() => handlePackage(true)}>
                 No, Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showProductionPrompt && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-content" style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="modal-header">
+              <h5 className="modal-title">Record Produced Spirits</h5>
+            </div>
+            <div className="modal-body">
+              <label className="form-label">Produced Volume (gallons):</label>
+              <input
+                type="number"
+                value={producedVolume || ''}
+                onChange={(e) => setProducedVolume(parseFloat(e.target.value) || 0)}
+                className="form-control mb-2"
+              />
+              <label className="form-label">Produced Proof:</label>
+              <input
+                type="number"
+                value={producedProof || ''}
+                onChange={(e) => setProducedProof(parseFloat(e.target.value) || 0)}
+                className="form-control"
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleProductionConfirmation}>
+                Record and Complete
+              </button>
+              <button className="btn btn-danger" onClick={() => setShowProductionPrompt(false)}>
+                Cancel
               </button>
             </div>
           </div>
