@@ -49,6 +49,112 @@ const ProductDetails: React.FC = () => {
     [ProductType.DistilledSpiritsSpecialty]: [Style.Cocktail, Style.Other],
   };
 
+  const spiritsTypes = [
+    ProductType.Whisky,
+    ProductType.Gin,
+    ProductType.Vodka,
+    ProductType.NeutralSpirits,
+    ProductType.Rum,
+    ProductType.Tequila,
+    ProductType.CordialsLiqueurs,
+    ProductType.FlavoredSpirits,
+    ProductType.DistilledSpiritsSpecialty,
+  ];
+
+  const wineTypes = [
+    ProductType.GrapeWine,
+    ProductType.SparklingWine,
+    ProductType.CarbonatedWine,
+    ProductType.FruitWine,
+    ProductType.Cider,
+    ProductType.OtherAgriculturalWine,
+  ];
+
+  const beerTypes = [ProductType.MaltBeverage, ProductType.Seltzer];
+
+  const mapServerToFrontend = (serverProduct: any): Product => {
+    let mapped: Product = { ...serverProduct };
+    let serverClass = serverProduct.class;
+    let serverType = serverProduct.type;
+    let serverStyle = serverProduct.style as Style | undefined;
+
+    if (serverClass === 'Distilled') {
+      mapped.class = ProductClass.Spirits;
+    }
+
+    let frontendType: ProductType | undefined;
+    let frontendStyle: Style | undefined = serverStyle;
+
+    if (mapped.class === ProductClass.Beer) {
+      if (serverType === 'Malt') {
+        frontendType = ProductType.MaltBeverage;
+      } else if (serverType === 'Seltzer') {
+        frontendType = ProductType.Seltzer;
+      } else {
+        frontendType = ProductType.MaltBeverage; // default
+      }
+    } else if (mapped.class === ProductClass.Wine) {
+      if (serverType === 'Cider') {
+        frontendType = ProductType.Cider;
+      } else {
+        frontendType = ProductType.GrapeWine; // default
+        if (serverStyle) {
+          if (serverStyle === 'Other') {
+            frontendType = ProductType.GrapeWine;
+          } else {
+            for (const t of wineTypes) {
+              if (styleOptions[t]?.includes(serverStyle)) {
+                frontendType = t;
+                break;
+              }
+            }
+          }
+        }
+      }
+    } else if (mapped.class === ProductClass.Spirits) {
+      frontendType = ProductType.NeutralSpirits; // default
+      if (serverStyle) {
+        if (serverStyle === 'Other') {
+          frontendType = ProductType.NeutralSpirits;
+        } else {
+          for (const t of spiritsTypes) {
+            if (styleOptions[t]?.includes(serverStyle)) {
+              frontendType = t;
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      frontendType = serverType as ProductType;
+    }
+
+    mapped.type = frontendType;
+    mapped.style = frontendStyle;
+
+    return mapped;
+  };
+
+  const mapToServerClass = (classValue: string | undefined): string => {
+    if (classValue === ProductClass.Spirits) {
+      return 'Distilled';
+    }
+    return classValue || '';
+  };
+
+  const mapToServerType = (classValue: string | undefined, typeValue: string | undefined): string => {
+    if (classValue === ProductClass.Beer) {
+      if (typeValue === ProductType.MaltBeverage) return 'Malt';
+      if (typeValue === ProductType.Seltzer) return 'Seltzer';
+    } else if (classValue === ProductClass.Wine) {
+      if (typeValue === ProductType.Cider) return 'Cider';
+      return 'Wine';
+    } else if (classValue === ProductClass.Spirits) {
+      return 'Spirits';
+    }
+    return typeValue || '';
+  };
+
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -56,7 +162,8 @@ const ProductDetails: React.FC = () => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         console.log('[ProductDetails] Fetched product:', data);
-        setProduct(data);
+        const mappedProduct = mapServerToFrontend(data);
+        setProduct(mappedProduct);
         setPackageTypes(data.packageTypes || []);
       } catch (err: any) {
         setError('Failed to fetch product: ' + err.message);
@@ -108,6 +215,21 @@ const ProductDetails: React.FC = () => {
       fetchRecipes();
       fetchItems();
       fetchPackageTypes();
+    } else {
+      // For create mode
+      setProduct({
+        id: 0,
+        name: '',
+        abbreviation: '',
+        enabled: 1,
+        priority: 1,
+        class: ProductClass.Beer,
+        type: ProductType.MaltBeverage,
+        style: Style.Other,
+        abv: 0,
+        ibu: 0,
+      });
+      setPackageTypes([]);
     }
   }, [id]);
 
@@ -126,12 +248,15 @@ const ProductDetails: React.FC = () => {
       return;
     }
     try {
+      const serverClass = mapToServerClass(product.class);
+      const serverType = mapToServerType(product.class, product.type);
+      const serverProduct = { ...product, class: serverClass, type: serverType };
       const method = id ? 'PATCH' : 'POST';
       const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ...product, packageTypes: validPackageTypes }),
+        body: JSON.stringify({ ...serverProduct, packageTypes: validPackageTypes }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -259,10 +384,13 @@ const ProductDetails: React.FC = () => {
                 value={product?.class || ''}
                 onChange={(e) => {
                   const classValue = e.target.value as ProductClass;
+                  const defaultType = classValue === ProductClass.Beer ? ProductType.MaltBeverage :
+                    classValue === ProductClass.Wine ? ProductType.GrapeWine :
+                    classValue === ProductClass.Spirits ? ProductType.NeutralSpirits : ProductType.MaltBeverage;
                   setProduct({
                     ...product!,
                     class: classValue,
-                    type: product?.type || ProductType.MaltBeverage, // Default to valid type
+                    type: defaultType,
                     style: undefined,
                     ibu: classValue === ProductClass.Spirits ? null : (product?.ibu ?? null),
                   });
