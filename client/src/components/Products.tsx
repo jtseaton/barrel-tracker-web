@@ -77,6 +77,26 @@ const Products: React.FC = () => {
     }
   }, [showAddModal, newProduct.class, newProduct.ibu]);
 
+  const mapToServerClass = (classValue: string | undefined): string => {
+    if (classValue === ProductClass.Spirits) {
+      return 'Distilled';
+    }
+    return classValue || '';
+  };
+
+  const mapToServerType = (classValue: string | undefined, typeValue: string | undefined): string => {
+    if (classValue === ProductClass.Beer) {
+      if (typeValue === ProductType.MaltBeverage) return 'Malt';
+      if (typeValue === ProductType.Seltzer) return 'Seltzer';
+    } else if (classValue === ProductClass.Wine) {
+      if (typeValue === ProductType.Cider) return 'Cider';
+      return 'Wine';
+    } else if (classValue === ProductClass.Spirits) {
+      return 'Spirits';
+    }
+    return typeValue || '';
+  };
+
   const handleAddProduct = async () => {
     if (!newProduct.name || !newProduct.abbreviation || !newProduct.class || !newProduct.type || !newProduct.style) {
       setError('Name, Abbreviation, Class, Type, and Style are required');
@@ -84,8 +104,12 @@ const Products: React.FC = () => {
     }
 
     try {
+      const serverClass = mapToServerClass(newProduct.class);
+      const serverType = mapToServerType(newProduct.class, newProduct.type);
       const payload = {
         ...newProduct,
+        class: serverClass,
+        type: serverType,
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
         ibu: null, // Always set ibu to null since IBU field is removed
       };
