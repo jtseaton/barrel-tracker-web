@@ -1,6 +1,6 @@
 const express = require('express');
-const { db } = require('../../services/database');
-const { transporter } = require('../../services/email');
+const { db } = require('../services/database');
+const { transporter } = require('../services/email');
 
 const router = express.Router();
 
