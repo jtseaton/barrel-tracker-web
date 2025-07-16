@@ -4,12 +4,12 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { initializeDatabase, insertTestData } = require('./services/database');
 const { loadPackageTypesFromXML, loadItemsFromXML } = require('./services/xml-parser');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'client/build')));
+app.use(express.static(path.join(__dirname, '../client/build')));
 
 // JWT Authentication Middleware
 const authenticate = (req, res, next) => {
@@ -50,7 +50,7 @@ app.use('/api/production', authenticate, require('./routes/production'));
 
 // Static file route
 app.get('/styles.xml', (req, res) => {
-  const filePath = path.join(__dirname, 'config/styles.xml');
+  const filePath = path.join(__dirname, '../config/styles.xml');
   console.log('Serving styles.xml from:', filePath);
   res.sendFile(filePath, (err) => {
     if (err) {
@@ -61,7 +61,7 @@ app.get('/styles.xml', (req, res) => {
 });
 
 // Catch-all route for frontend
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'client/build/index.html')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/build/index.html')));
 
 // Initialize database and load data
 loadPackageTypesFromXML().then(() => {

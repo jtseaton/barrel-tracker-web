@@ -1,17 +1,18 @@
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 
+const OUR_DSP = 'DSP-AL-20010';
+
 const db = new sqlite3.Database(':memory:', (err) => {
   if (err) console.error('Database connection error:', err);
   else console.log('Connected to SQLite database');
 });
 
-const OUR_DSP = 'DSP-AL-20010';
-
 const initializeDatabase = () => {
   db.serialize(() => {
     console.log('Initializing database schema...');
 
+    // Create tables
     db.run(`
       CREATE TABLE IF NOT EXISTS sites (
         siteId TEXT PRIMARY KEY,
@@ -20,7 +21,7 @@ const initializeDatabase = () => {
         address TEXT,
         enabled INTEGER DEFAULT 1
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating sites table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS locations (
         locationId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +31,7 @@ const initializeDatabase = () => {
         enabled INTEGER DEFAULT 1,
         FOREIGN KEY (siteId) REFERENCES sites(siteId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating locations table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS equipment (
         equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +42,7 @@ const initializeDatabase = () => {
         type TEXT,
         FOREIGN KEY (siteId) REFERENCES sites(siteId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating equipment table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS customers (
         customerId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +57,7 @@ const initializeDatabase = () => {
         createdDate TEXT,
         updatedDate TEXT
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating customers table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY,
@@ -70,7 +71,7 @@ const initializeDatabase = () => {
         abv REAL,
         ibu INTEGER
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating products table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS product_package_types (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +82,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (productId) REFERENCES products(id),
         UNIQUE(productId, type)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating product_package_types table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS recipes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +93,7 @@ const initializeDatabase = () => {
         unit TEXT,
         FOREIGN KEY (productId) REFERENCES products(id)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating recipes table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS recipe_ingredients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +103,7 @@ const initializeDatabase = () => {
         unit TEXT NOT NULL,
         FOREIGN KEY (recipeId) REFERENCES recipes(id)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating recipe_ingredients table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS sales_orders (
         orderId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,7 +113,7 @@ const initializeDatabase = () => {
         createdDate TEXT NOT NULL,
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating sales_orders table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS sales_order_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +126,7 @@ const initializeDatabase = () => {
         kegCodes TEXT,
         FOREIGN KEY (orderId) REFERENCES sales_orders(orderId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating sales_order_items table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS invoices (
         invoiceId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,7 +142,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (orderId) REFERENCES sales_orders(orderId),
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating invoices table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS invoice_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,14 +156,14 @@ const initializeDatabase = () => {
         keg_codes TEXT,
         FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating invoice_items table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS system_settings (
         settingId INTEGER PRIMARY KEY AUTOINCREMENT,
         key TEXT NOT NULL UNIQUE,
         value TEXT NOT NULL
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating system_settings table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS inventory (
         identifier TEXT,
@@ -187,14 +188,14 @@ const initializeDatabase = () => {
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating inventory table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS items (
         name TEXT PRIMARY KEY,
         type TEXT,
         enabled INTEGER DEFAULT 1
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating items table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS transactions (
         barrelId TEXT,
@@ -207,7 +208,7 @@ const initializeDatabase = () => {
         toAccount TEXT,
         userId TEXT
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating transactions table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS vendors (
         name TEXT PRIMARY KEY,
@@ -217,7 +218,7 @@ const initializeDatabase = () => {
         email TEXT,
         phone TEXT
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating vendors table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS purchase_orders (
         poNumber TEXT PRIMARY KEY,
@@ -237,7 +238,7 @@ const initializeDatabase = () => {
         status TEXT DEFAULT 'Open',
         items TEXT
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating purchase_orders table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS facility_designs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,7 +249,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         UNIQUE(siteId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating facility_designs table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS batches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,7 +271,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
         FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating batches table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS inventory_losses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -286,7 +287,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating inventory_losses table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS batch_packaging (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -302,7 +303,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (locationId) REFERENCES locations(locationId),
         FOREIGN KEY (siteId) REFERENCES sites(siteId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating batch_packaging table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         email TEXT PRIMARY KEY,
@@ -311,7 +312,7 @@ const initializeDatabase = () => {
         enabled INTEGER NOT NULL DEFAULT 1,
         passkey TEXT
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating users table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS batch_actions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -320,7 +321,7 @@ const initializeDatabase = () => {
         timestamp TEXT,
         FOREIGN KEY (batchId) REFERENCES batches(batchId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating batch_actions table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS kegs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -335,7 +336,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (customerId) REFERENCES customers(customerId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )
-    `);
+    `, (err) => { if (err) console.error('Error creating kegs table:', err); });
     db.run(`
       CREATE TABLE IF NOT EXISTS keg_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,59 +354,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId),
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
-    `);
-
-    // Create indexes
-    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_siteId ON facility_designs(siteId)`, (err) => {
-      if (err) console.error('Error adding UNIQUE index:', err);
-      else console.log('Added UNIQUE index on siteId');
-    });
-
-    // Cleanup duplicates
-    db.run(`
-      DELETE FROM facility_designs
-      WHERE id NOT IN (
-        SELECT id FROM (
-          SELECT id, ROW_NUMBER() OVER (PARTITION BY siteId ORDER BY updatedAt DESC) AS rn
-          FROM facility_designs
-        ) WHERE rn = 1
-      )
-    `, (err) => {
-      if (err) console.error('Error cleaning up duplicate designs:', err);
-      else console.log('Cleaned up duplicate facility designs');
-    });
-
-    // Migrate kegs table to use locationId
-    db.get('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="kegs_old"', (err, row) => {
-      if (err) console.error('Migration check error:', err);
-      else if (row.count === 0) {
-        db.run(`
-          ALTER TABLE kegs RENAME TO kegs_old;
-          CREATE TABLE kegs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT NOT NULL UNIQUE,
-            status TEXT NOT NULL,
-            productId INTEGER,
-            lastScanned TEXT,
-            locationId INTEGER,
-            customerId INTEGER,
-            packagingType TEXT,
-            FOREIGN KEY (productId) REFERENCES products(id),
-            FOREIGN KEY (customerId) REFERENCES customers(customerId),
-            FOREIGN KEY (locationId) REFERENCES locations(locationId)
-          );
-          INSERT INTO kegs (id, code, status, productId, lastScanned, locationId, customerId, packagingType)
-          SELECT id, code, status, productId, lastScanned,
-                 CASE WHEN location IN (SELECT locationId FROM locations) THEN location ELSE NULL END,
-                 customerId, packagingType
-          FROM kegs_old;
-          DROP TABLE kegs_old;
-        `, (err) => {
-          if (err) console.error('Kegs migration error:', err);
-          else console.log('Kegs table migrated to use locationId');
-        });
-      }
-    });
+    `, (err) => { if (err) console.error('Error creating keg_transactions table:', err); });
 
     console.log('Database schema initialized');
   });
@@ -420,108 +369,144 @@ const insertTestData = async () => {
     const hash = await bcrypt.hash(password, 10);
     db.run('INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
       ['jtseaton@gmail.com', hash, 'SuperAdmin', 1],
-      (err) => {
-        if (err) console.error('Error inserting default user:', err);
-        else console.log('Inserted default Super Admin user');
-      });
+      (err) => { if (err) console.error('Error inserting default user:', err); else console.log('Inserted default Super Admin user'); });
 
     // Sites
     db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
-      ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611']);
+      ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611'],
+      (err) => { if (err) console.error('Error inserting site DSP-AL-20051:', err); });
     db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
-      ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611']);
+      ['BR-AL-20088', 'Athens Brewery', 'Brewery', '311 Marion St, Athens, AL 35611'],
+      (err) => { if (err) console.error('Error inserting site BR-AL-20088:', err); });
     db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758']);
+      ['BR-AL-20019', 'Madison Brewery', 'Brewery', '212 Main St Madison, AL 35758'],
+      (err) => { if (err) console.error('Error inserting site BR-AL-20019:', err); });
     db.run(`INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
-      ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758']);
+      ['DSP-AL-20010', 'Madison Distillery', 'DSP', '212 Main St Madison, AL 35758'],
+      (err) => { if (err) console.error('Error inserting site DSP-AL-20010:', err); });
 
     // Locations
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['DSP-AL-20010', 'Spirits Storage', 'Spirits']);
+      ['DSP-AL-20010', 'Spirits Storage', 'Spirits'],
+      (err) => { if (err) console.error('Error inserting location Spirits Storage:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['DSP-AL-20010', 'Grain Storage', null]);
+      ['DSP-AL-20010', 'Grain Storage', null],
+      (err) => { if (err) console.error('Error inserting location Grain Storage:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['DSP-AL-20010', 'Fermentation Tanks', null]);
+      ['DSP-AL-20010', 'Fermentation Tanks', null],
+      (err) => { if (err) console.error('Error inserting location Fermentation Tanks:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Fermenter 1', null]);
+      ['BR-AL-20019', 'Madison Fermenter 1', null],
+      (err) => { if (err) console.error('Error inserting location Madison Fermenter 1:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Outdoor Racks', null]);
+      ['BR-AL-20019', 'Madison Outdoor Racks', null],
+      (err) => { if (err) console.error('Error inserting location Madison Outdoor Racks:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Fermenter 2', null]);
+      ['BR-AL-20019', 'Madison Fermenter 2', null],
+      (err) => { if (err) console.error('Error inserting location Madison Fermenter 2:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Fermenter 3', null]);
+      ['BR-AL-20019', 'Madison Fermenter 3', null],
+      (err) => { if (err) console.error('Error inserting location Madison Fermenter 3:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Fermenter 4', null]);
+      ['BR-AL-20019', 'Madison Fermenter 4', null],
+      (err) => { if (err) console.error('Error inserting location Madison Fermenter 4:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Cold Storage', 'Beer Cooler']);
+      ['BR-AL-20019', 'Madison Cold Storage', 'Beer Cooler'],
+      (err) => { if (err) console.error('Error inserting location Madison Cold Storage:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Mash Tun', 'Mash Tun']);
+      ['BR-AL-20019', 'Madison Mash Tun', 'Mash Tun'],
+      (err) => { if (err) console.error('Error inserting location Madison Mash Tun:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20019', 'Madison Boil Kettle', null]);
+      ['BR-AL-20019', 'Madison Boil Kettle', null],
+      (err) => { if (err) console.error('Error inserting location Madison Boil Kettle:', err); });
     db.run(`INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
-      ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler']);
+      ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'],
+      (err) => { if (err) console.error('Error inserting location Athens Cold Storage:', err); });
 
     // Equipment
     db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
-      ['Mash Tun', 'MT', 'BR-AL-20019', 1, 'Mash Tun']);
+      ['Mash Tun', 'MT', 'BR-AL-20019', 1, 'Mash Tun'],
+      (err) => { if (err) console.error('Error inserting equipment Mash Tun:', err); });
     db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
-      ['Boil Kettle', 'BK', 'BR-AL-20019', 1, 'Kettle']);
+      ['Boil Kettle', 'BK', 'BR-AL-20019', 1, 'Kettle'],
+      (err) => { if (err) console.error('Error inserting equipment Boil Kettle:', err); });
     db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
-      ['Fermentation FV1', 'FV1', 'BR-AL-20019', 1, 'Fermenter']);
+      ['Fermentation FV1', 'FV1', 'BR-AL-20019', 1, 'Fermenter'],
+      (err) => { if (err) console.error('Error inserting equipment Fermentation FV1:', err); });
     db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
-      ['Fermentation FV2', 'FV2', 'BR-AL-20019', 1, 'Fermenter']);
+      ['Fermentation FV2', 'FV2', 'BR-AL-20019', 1, 'Fermenter'],
+      (err) => { if (err) console.error('Error inserting equipment Fermentation FV2:', err); });
     db.run('INSERT OR IGNORE INTO equipment (name, abbreviation, siteId, enabled, type) VALUES (?, ?, ?, ?, ?)',
-      ['Brite Tank', 'BT', 'BR-AL-20019', 1, 'Brite Tank']);
+      ['Brite Tank', 'BT', 'BR-AL-20019', 1, 'Brite Tank'],
+      (err) => { if (err) console.error('Error inserting equipment Brite Tank:', err); });
 
     // Products
     db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 40, 0]);
+      [1, 'Whiskey', 'WH', 1, 1, 'Distilled', 'Spirits', 'Bourbon', 40, 0],
+      (err) => { if (err) console.error('Error inserting product Whiskey:', err); });
     db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [2, 'Hazy Train IPA', 'IPA', 1, 2, 'Beer', 'Malt', 'American IPA', 6.5, 60]);
+      [2, 'Hazy Train IPA', 'IPA', 1, 2, 'Beer', 'Malt', 'American IPA', 6.5, 60],
+      (err) => { if (err) console.error('Error inserting product Hazy Train IPA:', err); });
     db.run('INSERT OR IGNORE INTO products (id, name, abbreviation, enabled, priority, class, type, style, abv, ibu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [3, 'Cave City Lager', 'CCL', 1, 3, 'Beer', 'Malt', 'American Amber Ale', 5.2, 21]);
+      [3, 'Cave City Lager', 'CCL', 1, 3, 'Beer', 'Malt', 'American Amber Ale', 5.2, 21],
+      (err) => { if (err) console.error('Error inserting product Cave City Lager:', err); });
 
     // Items
     db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-      ['Finished Goods', 'Finished Goods', 1]);
+      ['Finished Goods', 'Finished Goods', 1],
+      (err) => { if (err) console.error('Error inserting item Finished Goods:', err); });
     db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-      ['Corn', 'Grain', 1]);
+      ['Corn', 'Grain', 1],
+      (err) => { if (err) console.error('Error inserting item Corn:', err); });
     db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-      ['Hops', 'Hops', 1]);
+      ['Hops', 'Hops', 1],
+      (err) => { if (err) console.error('Error inserting item Hops:', err); });
 
     // Inventory
     db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['Flaked Corn', 'Storage', 'Grain', '1000', 'lbs', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored']);
+      ['Flaked Corn', 'Storage', 'Grain', '1000', 'lbs', '2025-04-20', 'Acme Supplies', 'BR-AL-20019', 1, 'Stored'],
+      (err) => { if (err) console.error('Error inserting inventory Flaked Corn:', err); });
     db.run('INSERT OR REPLACE INTO inventory (identifier, type, quantity, unit, siteId, type, receivedDate, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['Hops', 'Hops', '550', 'lbs', 'BR-AL-20019', 'Hops', '2025-04-20', 'Stored', 'Acme Supplies']);
+      ['Hops', 'Hops', '550', 'lbs', 'BR-AL-20019', 'Hops', '2025-04-20', 'Stored', 'Acme Supplies'],
+      (err) => { if (err) console.error('Error inserting inventory Hops:', err); });
     db.run('INSERT OR IGNORE INTO inventory (identifier, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['Hops Cascade', 'Hops', '50', 'lbs', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored']);
+      ['Hops Cascade', 'Hops', '50', 'lbs', '2025-04-20', 'Acme Supplies', 'BR-AL-20088', 11, 'Stored'],
+      (err) => { if (err) console.error('Error inserting inventory Hops Cascade:', err); });
     db.run('INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['Hops Country Malt', 'Storage', 'Hops', '100', 'Pounds', '2025-04-21', 'Country Malt', 'BR-AL-20019', 9, 'Stored']);
+      ['Hops Country Malt', 'Storage', 'Hops', '100', 'Pounds', '2025-04-21', 'Country Malt', 'BR-AL-20019', 9, 'Stored'],
+      (err) => { if (err) console.error('Error inserting inventory Hops Country Malt:', err); });
 
     // Recipes
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
-      [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }]), '100', 'gallons']);
+      [1, 'Whiskey Recipe', 1, JSON.stringify([{ itemName: 'Corn', quantity: 100, unit: 'lbs' }]), '100', 'gallons'],
+      (err) => { if (err) console.error('Error inserting recipe Whiskey Recipe:', err); });
     db.run('INSERT OR IGNORE INTO recipes (id, name, productId, ingredients, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)',
-      [2, 'Hazy Train 20 BBL', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50, unit: 'lbs' }]), '20', 'barrels']);
+      [2, 'Hazy Train 20 BBL', 2, JSON.stringify([{ itemName: 'Hops', quantity: 50, unit: 'lbs' }]), '20', 'barrels'],
+      (err) => { if (err) console.error('Error inserting recipe Hazy Train 20 BBL:', err); });
 
     // Batches
     db.run('INSERT OR IGNORE INTO batches (batchId, productId, recipeId, siteId, status, date) VALUES (?, ?, ?, ?, ?, ?)',
-      ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20']);
+      ['BATCH-001', 1, 1, 'BR-AL-20019', 'In Progress', '2025-04-20'],
+      (err) => { if (err) console.error('Error inserting batch BATCH-001:', err); });
 
     // Customers
     db.run('INSERT OR IGNORE INTO customers (name, email) VALUES (?, ?)',
-      ['Gulf Distributing', 'jtseaton@gmail.com']);
+      ['Gulf Distributing', 'jtseaton@gmail.com'],
+      (err) => { if (err) console.error('Error inserting customer Gulf Distributing:', err); });
 
     // Vendors
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+      ['Acme Supplies', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234'],
+      (err) => { if (err) console.error('Error inserting vendor Acme Supplies:', err); });
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Country Malt', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+      ['Country Malt', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234'],
+      (err) => { if (err) console.error('Error inserting vendor Country Malt:', err); });
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Yakima Chief', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+      ['Yakima Chief', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234'],
+      (err) => { if (err) console.error('Error inserting vendor Yakima Chief:', err); });
     db.run('INSERT OR IGNORE INTO vendors (name, type, enabled, address, email, phone) VALUES (?, ?, ?, ?, ?, ?)',
-      ['Pharmco Aaper', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234']);
+      ['Pharmco Aaper', 'Supplier', 1, '123 Main St', 'acme@example.com', '555-1234'],
+      (err) => { if (err) console.error('Error inserting vendor Pharmco Aaper:', err); });
 
     // Packaging Types for Hazy Train
     db.get(`SELECT id FROM products WHERE name = ?`, ['Hazy Train IPA'], (err, row) => {
