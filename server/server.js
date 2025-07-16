@@ -1,76 +1,89 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const jwt = require('jsonwebtoken');
-const { initializeDatabase, insertTestData } = require('./services/database');
-const { loadPackageTypesFromXML, loadItemsFromXML } = require('./services/xml-parser');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../client/build')));
 
-// JWT Authentication Middleware
-const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
+const authenticateJWT = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+      if (err) {
+        console.error('JWT Verification Error:', err);
+        return res.status(403).json({ error: 'Invalid or expired token' });
+      }
+      req.user = user;
+      next();
+    });
+  } else {
     console.error('Authentication failed: No token provided', { path: req.path });
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
-  }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error('Authentication failed: Invalid token', { path: req.path, error: err.message });
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    res.status(401).json({ error: 'No token provided' });
   }
 };
 
-// Mount routes (login and static routes are unprotected)
-app.use('/api/users', require('./routes/users')); // /api/login is handled in users.js without auth
-app.use('/api/customers', authenticate, require('./routes/customers'));
-app.use('/api/sales-orders', authenticate, require('./routes/sales-orders'));
-app.use('/api/invoices', authenticate, require('./routes/invoices'));
-app.use('/api/products', authenticate, require('./routes/products'));
-app.use('/api/batches', authenticate, require('./routes/batches'));
-app.use('/api/recipes', authenticate, require('./routes/recipes'));
-app.use('/api/items', authenticate, require('./routes/items'));
-app.use('/api/vendors', authenticate, require('./routes/vendors'));
-app.use('/api/purchase-orders', authenticate, require('./routes/purchase-orders'));
-app.use('/api/inventory', authenticate, require('./routes/inventory'));
-app.use('/api/equipment', authenticate, require('./routes/equipment'));
-app.use('/api/sites', authenticate, require('./routes/sites'));
-app.use('/api/locations', authenticate, require('./routes/locations'));
-app.use('/api/facility-design', authenticate, require('./routes/facility-design'));
-app.use('/api/reports', authenticate, require('./routes/reports'));
-app.use('/api/kegs', authenticate, require('./routes/kegs'));
-app.use('/api/production', authenticate, require('./routes/production'));
+const usersRouter = require('./routes/users');
+const customersRouter = require('./routes/customers');
+const salesOrdersRouter = require('./routes/sales-orders');
+const invoicesRouter = require('./routes/invoices');
+const productsRouter = require('./routes/products');
+const batchesRouter = require('./routes/batches');
+const recipesRouter = require('./routes/recipes');
+const itemsRouter = require('./routes/items');
+const vendorsRouter = require('./routes/vendors');
+const purchaseOrdersRouter = require('./routes/purchase-orders');
+const inventoryRouter = require('./routes/inventory');
+const equipmentRouter = require('./routes/equipment');
+const sitesRouter = require('./routes/sites');
+const locationsRouter = require('./routes/locations');
+const facilityDesignRouter = require('./routes/facility-design');
+const reportsRouter = require('./routes/reports');
+const kegsRouter = require('./routes/kegs');
+const productionRouter = require('./routes/production');
 
-// Static file route
-app.get('/styles.xml', (req, res) => {
-  const filePath = path.join(__dirname, '../config/styles.xml');
-  console.log('Serving styles.xml from:', filePath);
-  res.sendFile(filePath, (err) => {
+app.use('/api/login', usersRouter); // Unprotected
+app.use('/api/users', authenticateJWT, usersRouter);
+app.use('/api/customers', authenticateJWT, customersRouter);
+app.use('/api/sales-orders', authenticateJWT, salesOrdersRouter);
+app.use('/api/invoices', authenticateJWT, invoicesRouter);
+app.use('/api/products', authenticateJWT, productsRouter);
+app.use('/api/batches', authenticateJWT, batchesRouter);
+app.use('/api/recipes', authenticateJWT, recipesRouter);
+app.use('/api/items', authenticateJWT, itemsRouter);
+app.use('/api/vendors', authenticateJWT, vendorsRouter);
+app.use('/api/purchase-orders', authenticateJWT, purchaseOrdersRouter);
+app.use('/api/inventory', authenticateJWT, inventoryRouter);
+app.use('/api/equipment', authenticateJWT, equipmentRouter);
+app.use('/api/sites', authenticateJWT, sitesRouter);
+app.use('/api/locations', authenticateJWT, locationsRouter);
+app.use('/api/facility-design', authenticateJWT, facilityDesignRouter);
+app.use('/api/reports', authenticateJWT, reportsRouter);
+app.use('/api/kegs', authenticateJWT, kegsRouter);
+app.use('/api/production', authenticateJWT, productionRouter);
+
+app.use(express.static(path.join(__dirname, '../client/build')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build/index.html'), (err) => {
     if (err) {
-      console.error('Error serving styles.xml:', err);
-      res.status(404).json({ error: 'styles.xml not found' });
+      console.error('Error serving index.html:', err);
+      res.status(500).json({ error: 'Failed to serve frontend' });
     }
   });
 });
 
-// Catch-all route for frontend
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/build/index.html')));
-
-// Initialize database and load data
-loadPackageTypesFromXML().then(() => {
-  loadItemsFromXML();
-  initializeDatabase();
-  insertTestData();
+app.use((err, req, res, next) => {
+  console.error('Server Error:', err.stack);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

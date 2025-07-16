@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { ReportData, TankSummary } from '../types/interfaces';
 import { fetchMonthlyReport, fetchDailyReport } from '../utils/fetchUtils';
-import { exportTankSummaryToExcel } from '../utils/excelUtils'; // Add this import
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+import { exportTankSummaryToExcel, exportToExcel } from '../utils/excelUtils';
+import { API_BASE_URL } from '../config';
 
 const Reporting: React.FC<{ exportToExcel: (report: ReportData) => void }> = ({ exportToExcel }) => {
   const [report, setReport] = useState<ReportData | null>(null);
@@ -30,9 +29,16 @@ const Reporting: React.FC<{ exportToExcel: (report: ReportData) => void }> = ({ 
 
   const handlePhysicalInventory = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/physical-inventory`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/physical-inventory`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
       alert(`Physical inventory recorded at ${data.timestamp}`);
     } catch (err: any) {
       console.error('Physical inventory error:', err);
