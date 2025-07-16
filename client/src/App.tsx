@@ -1,9 +1,7 @@
-// client/src/App.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Role } from './types/enums';
 import { InventoryItem, Vendor, User } from './types/interfaces';
-import Home from './components/Home';
 import Production from './components/Production';
 import BrewLog from './components/BrewLog';
 import Inventory from './components/Inventory';
@@ -27,8 +25,8 @@ import FacilityDesigner from './components/FacilityDesigner';
 import FacilityView from './components/FacilityView';
 import EquipmentPage from './components/Equipment';
 import Login from './components/Login';
-import { fetchInventory, fetchDailySummary, InventoryResponse } from './utils/fetchUtils';
-import { exportTankSummaryToExcel, exportToExcel } from './utils/excelUtils';
+import { fetchInventory, fetchVendors } from './utils/fetchUtils';
+import { exportToExcel } from './utils/excelUtils';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import BatchDetails from './components/BatchDetails';
@@ -48,7 +46,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:300
 
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
-  const [menuOpen, setMenuOpen] = useState(false); // Default closed on mobile
+  const [menuOpen, setMenuOpen] = useState(false);
   const [showInventorySubmenu, setShowInventorySubmenu] = useState(false);
   const [showProductionSubmenu, setShowProductionSubmenu] = useState(false);
   const [showManagementSubmenu, setShowManagementSubmenu] = useState(false);
@@ -58,25 +56,29 @@ const AppContent: React.FC = () => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
-  const menuRef = useRef<HTMLDivElement>(null); // Ref for menu
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Authentication state
   const [currentUser, setCurrentUser] = useState<User | null>(
     JSON.parse(localStorage.getItem('user') || 'null')
   );
-  const isAuthenticated = !!currentUser?.email;
+  const isAuthenticated = !!currentUser?.email && !!localStorage.getItem('token');
   const isAdmin = currentUser && [Role.SuperAdmin, Role.Admin].includes(currentUser.role as Role);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || 'null');
-    if (user !== currentUser) {
+    const token = localStorage.getItem('token');
+    if (user && token && user !== currentUser) {
       setCurrentUser(user);
+    } else if (!user || !token) {
+      setCurrentUser(null);
+      navigate('/login');
     }
-  }, [location.pathname]);
+  }, [location.pathname, navigate, currentUser]);
 
   const refreshInventory = async () => {
     try {
-      const data: InventoryResponse | null = await fetchInventory();
+      const data = await fetchInventory();
       console.log('[App] fetchInventory response:', {
         data,
         isObject: data && typeof data === 'object',
@@ -94,32 +96,29 @@ const AppContent: React.FC = () => {
 
   const refreshVendors = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/vendors`, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) throw new Error(`Vendors fetch failed: HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await fetchVendors();
       console.log('[App] fetchVendors response:', {
         data,
         isArray: Array.isArray(data),
         length: Array.isArray(data) ? data.length : 'N/A',
       });
       setVendors(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('[App] Fetch vendors error:', err);
+    } catch (error) {
+      console.error('[App] Fetch vendors error:', error);
       setVendors([]);
     }
   };
 
   useEffect(() => {
     const loadData = async () => {
-      await Promise.all([refreshInventory(), refreshVendors()]);
+      if (isAuthenticated) {
+        await Promise.all([refreshInventory(), refreshVendors()]);
+      }
       setTimeout(() => setIsLoading(false), 4000);
     };
     loadData();
-  }, []);
+  }, [isAuthenticated]);
 
-  // Handle outside clicks to close menu
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       if (
@@ -149,7 +148,6 @@ const AppContent: React.FC = () => {
       setShowInventorySubmenu(true);
       navigate('/inventory');
     }
-    // Removed setMenuOpen(false)
   };
 
   const handleProductionClick = () => {
@@ -163,7 +161,6 @@ const AppContent: React.FC = () => {
       setShowProductionSubmenu(true);
       navigate('/production');
     }
-    // Removed setMenuOpen(false)
   };
 
   const handleManagementClick = () => {
@@ -177,7 +174,6 @@ const AppContent: React.FC = () => {
       setShowManagementSubmenu(true);
       navigate('/management');
     }
-    // Removed setMenuOpen(false)
   };
 
   const handleSalesClick = () => {
@@ -191,17 +187,17 @@ const AppContent: React.FC = () => {
       setShowSalesSubmenu(true);
       navigate('/sales-orders');
     }
-    // Removed setMenuOpen(false)
   };
 
   const handleLogOff = () => {
     console.log('[App] Log Off clicked');
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     setCurrentUser(null);
     setActiveSection('Home');
     setShowManagementSubmenu(false);
     navigate('/login');
-    setMenuOpen(false); // Keep retraction for Log Off
+    setMenuOpen(false);
   };
 
   const handleBackClick = () => {
@@ -212,7 +208,6 @@ const AppContent: React.FC = () => {
     setShowSalesSubmenu(false);
     setActiveSection('Home');
     navigate('/');
-    // Removed setMenuOpen(false)
   };
 
   if (!isAuthenticated) {
@@ -253,7 +248,6 @@ const AppContent: React.FC = () => {
                     onClick={() => {
                       console.log('[App] Submenu item clicked:', item.name);
                       setActiveSection(item.name === 'Receive Inventory' ? 'Inventory' : item.name);
-                      // Removed setMenuOpen(false)
                     }}
                   >
                     {item.name}
@@ -281,7 +275,6 @@ const AppContent: React.FC = () => {
                     onClick={() => {
                       console.log('[App] Submenu item clicked:', item.name);
                       setActiveSection(item.name);
-                      // Removed setMenuOpen(false)
                     }}
                   >
                     {item.name}
@@ -307,7 +300,6 @@ const AppContent: React.FC = () => {
                     onClick={() => {
                       console.log('[App] Submenu item clicked:', item.name);
                       setActiveSection(item.name);
-                      // Removed setMenuOpen(false)
                     }}
                   >
                     {item.name}
@@ -332,7 +324,6 @@ const AppContent: React.FC = () => {
                     onClick={() => {
                       console.log('[App] Submenu item clicked:', item.name);
                       setActiveSection('Sales & Distribution');
-                      // Removed setMenuOpen(false)
                     }}
                   >
                     {item.name}
@@ -372,7 +363,6 @@ const AppContent: React.FC = () => {
                       setShowManagementSubmenu(false);
                       setShowSalesSubmenu(false);
                       navigate(section.name === 'Home' ? '/' : `/${section.name.toLowerCase().replace(' & ', '-')}`);
-                      // Removed setMenuOpen(false)
                     }
                   }}
                   className={activeSection === section.name ? 'active' : ''}
@@ -446,10 +436,7 @@ const AppContent: React.FC = () => {
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetails />} />
           <Route path="/production" element={<Production inventory={inventory} refreshInventory={refreshInventory} />} />
-          <Route
-            path="/production/:batchId"
-            element={<BatchDetails inventory={inventory} refreshInventory={refreshInventory} />}
-          />
+          <Route path="/production/:batchId" element={<BatchDetails inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/production/:batchId/brewlog" element={<BrewLog />} />
           <Route path="/production-page" element={<ProductionPage />} />
           <Route path="/locations" element={isAdmin ? <Locations /> : <div className="container"><h2>Access Denied</h2><p>Only Admins can access this page</p></div>} />
@@ -473,19 +460,19 @@ const AppContent: React.FC = () => {
       <nav className="navbar-mobile">
         <Link to="/keg-tracking" onClick={() => {
           console.log('[App] Navbar-mobile Kegs clicked');
-          setMenuOpen(false); // Keep for mobile bottom nav
+          setMenuOpen(false);
         }}>Kegs</Link>
         <Link to="/sales-orders" onClick={() => {
           console.log('[App] Navbar-mobile Sales Orders clicked');
-          setMenuOpen(false); // Keep for mobile bottom nav
+          setMenuOpen(false);
         }}>Sales Orders</Link>
         <Link to="/invoices" onClick={() => {
           console.log('[App] Navbar-mobile Invoices clicked');
-          setMenuOpen(false); // Keep for mobile bottom nav
+          setMenuOpen(false);
         }}>Invoices</Link>
         <Link to="/production" onClick={() => {
           console.log('[App] Navbar-mobile Batches clicked');
-          setMenuOpen(false); // Keep for mobile bottom nav
+          setMenuOpen(false);
         }}>Batches</Link>
       </nav>
     </div>
