@@ -20,43 +20,84 @@ const FacilityView: React.FC<FacilityViewProps> = ({ siteId: initialSiteId }) =>
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [selectedObject, setSelectedObject] = useState<DesignObject | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-useEffect(() => {
-  const fetchData = async () => {
-    try {
-      const [sitesData, locationsData, equipmentData, designData] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/sites`).then((res) => res.json()),
-        siteId ? fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
-        siteId ? fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve([]),
-        siteId ? fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`).then((res) => res.json()) : Promise.resolve({ objects: [] }),
-      ]);
-      console.log('FacilityView fetched data:', { sitesData, locationsData, equipmentData, designData });
-      setSites(sitesData);
-      setLocations(locationsData);
-      setEquipment(equipmentData);
-      setObjects(designData?.objects && Array.isArray(designData.objects) ? designData.objects : []);
-      setError(designData?.error || (designData?.objects && !Array.isArray(designData.objects) ? 'Invalid design data' : null));
-    } catch (err: any) {
-      console.error('Fetch error:', err);
-      setError('Failed to load facility design: ' + err.message);
-    }
-  };
-  fetchData();
-}, [siteId, refreshTrigger]);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        const [sitesData, locationsData, equipmentData, designData] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/sites`, { headers }).then(res => {
+            if (!res.ok) throw new Error(`Sites fetch failed: HTTP ${res.status}`);
+            return res.json();
+          }),
+          siteId
+            ? fetch(`${API_BASE_URL}/api/locations?siteId=${siteId}`, { headers }).then(res => {
+                if (!res.ok) throw new Error(`Locations fetch failed: HTTP ${res.status}`);
+                return res.json();
+              })
+            : Promise.resolve([]),
+          siteId
+            ? fetch(`${API_BASE_URL}/api/equipment?siteId=${siteId}`, { headers }).then(res => {
+                if (!res.ok) throw new Error(`Equipment fetch failed: HTTP ${res.status}`);
+                return res.json();
+              })
+            : Promise.resolve([]),
+          siteId
+            ? fetch(`${API_BASE_URL}/api/facility-design?siteId=${siteId}`, { headers }).then(res => {
+                if (!res.ok) throw new Error(`Facility designs fetch failed: HTTP ${res.status}`);
+                return res.json();
+              })
+            : Promise.resolve({ objects: [] }),
+        ]);
+
+        console.log('FacilityView fetched data:', { sitesData, locationsData, equipmentData, designData });
+        setSites(Array.isArray(sitesData) ? sitesData : []);
+        setLocations(Array.isArray(locationsData) ? locationsData : []);
+        setEquipment(Array.isArray(equipmentData) ? equipmentData : []);
+        setObjects(designData?.objects && Array.isArray(designData.objects) ? designData.objects : []);
+        setError(designData?.error || (designData?.objects && !Array.isArray(designData.objects) ? 'Invalid design data' : null));
+      } catch (err: any) {
+        console.error('Fetch error:', err);
+        setError('Failed to load facility design: ' + err.message);
+        setSites([]);
+        setLocations([]);
+        setEquipment([]);
+        setObjects([]);
+      }
+    };
+    fetchData();
+  }, [siteId]);
 
   useEffect(() => {
     if (selectedLocationId) {
-      fetch(`${API_BASE_URL}/api/inventory?locationId=${selectedLocationId}&siteId=${encodeURIComponent(siteId)}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          return res.json();
-        })
-        .then((data: InventoryItem[]) => {
+      const fetchInventory = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory?locationId=${selectedLocationId}&siteId=${encodeURIComponent(siteId)}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+            }
+          );
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data: InventoryItem[] = await response.json();
           console.log('Inventory data for locationId:', selectedLocationId, 'siteId:', siteId, data);
-          setInventory(data);
-        })
-        .catch((err) => setError('Failed to load inventory: ' + (err instanceof Error ? err.message : 'Unknown error')));
+          setInventory(Array.isArray(data) ? data : []);
+        } catch (err) {
+          console.error('Failed to load inventory:', err);
+          setError('Failed to load inventory: ' + (err instanceof Error ? err.message : 'Unknown error'));
+          setInventory([]);
+        }
+      };
+      fetchInventory();
     } else {
       setInventory([]);
     }
@@ -95,11 +136,15 @@ useEffect(() => {
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
             >
               <option value="">Select Site</option>
-              {sites.map((site: Site) => (
-                <option key={site.siteId} value={site.siteId}>
-                  {site.name}
-                </option>
-              ))}
+              {sites.length > 0 ? (
+                sites.map((site: Site) => (
+                  <option key={site.siteId} value={site.siteId}>
+                    {site.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">No sites available</option>
+              )}
             </select>
           </div>
           {(selectedLocationId || selectedEquipmentId) && selectedObject && (
@@ -159,105 +204,105 @@ useEffect(() => {
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           }}
         >
-<Stage width={800} height={600}>
-  <Layer>
-    {objects.length === 0 && (
-      <Text
-        x={400}
-        y={300}
-        width={200}
-        text="No design objects found"
-        fontSize={16}
-        fontFamily="Arial"
-        fill="gray"
-        align="center"
-      />
-    )}
-    {objects.map((obj: DesignObject) => {
-      console.log('Rendering object:', { id: obj.id, abbreviation: obj.abbreviation, locationId: obj.locationId, equipmentId: obj.equipmentId });
-      return (
-        <React.Fragment key={obj.id}>
-          {obj.shape === 'circle' ? (
-            <>
-              <Circle
-                x={obj.x}
-                y={obj.y}
-                radius={obj.radius}
-                fill="#90CAF9"
-                stroke="black"
-                onClick={() => handleShapeClick(obj)}
-              />
-              <Text
-                x={obj.x - (obj.radius || 30) / 2}
-                y={obj.y - (obj.radius || 30) / 2}
-                width={obj.radius || 30}
-                height={obj.radius || 30}
-                text={obj.abbreviation}
-                fontSize={12}
-                fontFamily="Arial"
-                fill="black"
-                align="center"
-                verticalAlign="middle"
-                listening={false}
-              />
-              {obj.batches && obj.batches.length > 0 && (
+          <Stage width={800} height={600}>
+            <Layer>
+              {objects.length === 0 && (
                 <Text
-                  x={obj.x - (obj.radius || 30) / 2}
-                  y={obj.y + (obj.radius || 30) + 10}
-                  width={obj.radius || 30}
-                  text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
-                  fontSize={10}
+                  x={400}
+                  y={300}
+                  width={200}
+                  text="No design objects found"
+                  fontSize={16}
                   fontFamily="Arial"
-                  fill="black"
+                  fill="gray"
                   align="center"
-                  listening={false}
                 />
               )}
-            </>
-          ) : (
-            <>
-              <Rect
-                x={obj.x}
-                y={obj.y}
-                width={obj.width}
-                height={obj.height}
-                fill="#A5D6A7"
-                stroke="black"
-                onClick={() => handleShapeClick(obj)}
-              />
-              <Text
-                x={obj.x}
-                y={obj.y + ((obj.height || 60) / 2) - 6}
-                width={obj.width || 100}
-                height={12}
-                text={obj.abbreviation}
-                fontSize={12}
-                fontFamily="Arial"
-                fill="black"
-                align="center"
-                verticalAlign="middle"
-                listening={false}
-              />
-              {obj.batches && obj.batches.length > 0 && (
-                <Text
-                  x={obj.x}
-                  y={obj.y + (obj.height || 60) + 10}
-                  width={obj.width || 100}
-                  text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
-                  fontSize={10}
-                  fontFamily="Arial"
-                  fill="black"
-                  align="center"
-                  listening={false}
-                />
-              )}
-            </>
-          )}
-        </React.Fragment>
-      );
-    })}
-  </Layer>
-</Stage>
+              {objects.map((obj: DesignObject) => {
+                console.log('Rendering object:', { id: obj.id, abbreviation: obj.abbreviation, locationId: obj.locationId, equipmentId: obj.equipmentId });
+                return (
+                  <React.Fragment key={obj.id}>
+                    {obj.shape === 'circle' ? (
+                      <>
+                        <Circle
+                          x={obj.x}
+                          y={obj.y}
+                          radius={obj.radius}
+                          fill="#90CAF9"
+                          stroke="black"
+                          onClick={() => handleShapeClick(obj)}
+                        />
+                        <Text
+                          x={obj.x - (obj.radius || 30) / 2}
+                          y={obj.y - (obj.radius || 30) / 2}
+                          width={obj.radius || 30}
+                          height={obj.radius || 30}
+                          text={obj.abbreviation}
+                          fontSize={12}
+                          fontFamily="Arial"
+                          fill="black"
+                          align="center"
+                          verticalAlign="middle"
+                          listening={false}
+                        />
+                        {obj.batches && obj.batches.length > 0 && (
+                          <Text
+                            x={obj.x - (obj.radius || 30) / 2}
+                            y={obj.y + (obj.radius || 30) + 10}
+                            width={obj.radius || 30}
+                            text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
+                            fontSize={10}
+                            fontFamily="Arial"
+                            fill="black"
+                            align="center"
+                            listening={false}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Rect
+                          x={obj.x}
+                          y={obj.y}
+                          width={obj.width}
+                          height={obj.height}
+                          fill="#A5D6A7"
+                          stroke="black"
+                          onClick={() => handleShapeClick(obj)}
+                        />
+                        <Text
+                          x={obj.x}
+                          y={obj.y + ((obj.height || 60) / 2) - 6}
+                          width={obj.width || 100}
+                          height={12}
+                          text={obj.abbreviation}
+                          fontSize={12}
+                          fontFamily="Arial"
+                          fill="black"
+                          align="center"
+                          verticalAlign="middle"
+                          listening={false}
+                        />
+                        {obj.batches && obj.batches.length > 0 && (
+                          <Text
+                            x={obj.x}
+                            y={obj.y + (obj.height || 60) + 10}
+                            width={obj.width || 100}
+                            text={Array.from(new Map(obj.batches.map(b => [b.batchId, b])).values()).map((b: Batch) => b.batchId).join(', ')}
+                            fontSize={10}
+                            fontFamily="Arial"
+                            fill="black"
+                            align="center"
+                            listening={false}
+                          />
+                        )}
+                      </>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </Layer>
+          </Stage>
         </div>
       </div>
     </div>
