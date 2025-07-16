@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, OUR_DSP } = require('../../services/database');
+const { db, OUR_DSP } = require('../services/database');
 
 const router = express.Router();
 

@@ -1,6 +1,6 @@
 const express = require('express');
-const { db, OUR_DSP } = require('../../services/database');
-const { packageVolumes } = require('../../services/xml-parser');
+const { db, OUR_DSP } = require('../services/database');
+const { packageVolumes } = require('../services/xml-parser');
 
 const router = express.Router();
 
