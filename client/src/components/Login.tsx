@@ -25,7 +25,6 @@ const Login: React.FC = () => {
         status: response.status,
         statusText: response.statusText,
         url: response.url,
-        headers: [...response.headers.entries()],
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
