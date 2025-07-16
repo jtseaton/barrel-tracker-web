@@ -10,24 +10,30 @@ const Login: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Login attempt:', { url: `${API_BASE_URL}/api/login`, email });
     try {
       const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+      console.log('Login response:', { status: response.status, statusText: response.statusText });
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Login endpoint not found. Please contact the administrator.');
         } else if (response.status === 401) {
           throw new Error('Invalid email or password');
+        } else if (response.status === 400) {
+          const data = await response.json();
+          console.log('Login error response:', data);
+          throw new Error(data.error || `HTTP error! status: ${response.status}`);
         }
-        const data = await response.json();
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       const { token, user } = await response.json();
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      console.log('Login successful:', { email, role: user.role });
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Login error:', err);
