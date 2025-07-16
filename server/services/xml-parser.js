@@ -7,7 +7,7 @@ let packageVolumes = {};
 
 const loadPackageTypesFromXML = async () => {
   try {
-    const data = await fs.readFile(path.join(__dirname, '../config/package_types.xml'), 'utf8');
+    const data = await fs.readFile(path.join(__dirname, '../../config/package_types.xml'), 'utf8');
     const result = await xml2js.parseStringPromise(data);
     const packageTypes = result.packageTypes.packageType || [];
     packageVolumes = packageTypes.reduce((acc, pkg) => {
@@ -28,7 +28,7 @@ const loadPackageTypesFromXML = async () => {
 };
 
 const loadItemsFromXML = () => {
-  fs.readFile(path.join(__dirname, '../config/items.xml'), 'utf8', (err, data) => {
+  fs.readFile(path.join(__dirname, '../../config/items.xml'), 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading items.xml:', err);
       return;
