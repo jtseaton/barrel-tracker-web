@@ -565,7 +565,7 @@ const insertTestData = async () => {
           `INSERT OR IGNORE INTO batches (batchId, productId, recipeId, volume, siteId, status, stage, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           ['HT321654', productId, recipeId, 20.000, 'BR-AL-20019', 'In Progress', 'Fermentation', '2025-05-24'],
           (err) => {
-            if (err) console.error('Insert batch HT321654 error:`, err);
+            if (err) console.error('Insert batch HT321654 error:', err);
             else console.log('Inserted batch HT321654');
           }
         );
