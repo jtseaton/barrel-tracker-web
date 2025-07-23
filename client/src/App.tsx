@@ -79,7 +79,7 @@ const AppContent: React.FC = () => {
       user = userData ? JSON.parse(userData) : null;
     } catch (e) {
       console.error('Error parsing user from localStorage:', e);
-      localStorage.removeItem('user'); // Clear bad data
+      localStorage.removeItem('user'); 
     }
     const token = localStorage.getItem('token');
     if (user && token && user !== currentUser) {
