@@ -11,13 +11,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`Incoming request: ${req.method} ${req.url}`, {
+    body: req.body,
+    headers: req.headers,
+    timestamp: new Date().toISOString(),
+  });
+  next();
+});
+
+// Test route to verify /api/login
+app.post('/api/login/test', (req, res) => {
+  console.log('Test route hit: POST /api/login/test', { body: req.body });
+  res.json({ message: 'Test route for /api/login', body: req.body });
+});
+
 const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader) {
     const token = authHeader.split(' ')[1];
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) {
-        console.error('JWT Verification Error:', err);
+        console.error('JWT Verification Error:', { error: err.message, stack: err.stack });
         return res.status(403).json({ error: 'Invalid or expired token' });
       }
       req.user = user;
@@ -72,15 +88,15 @@ app.use(express.static(path.join(__dirname, '../client/build')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build/index.html'), (err) => {
     if (err) {
-      console.error('Error serving index.html:', err);
+      console.error('Error serving index.html:', { error: err.message, stack: err.stack });
       res.status(500).json({ error: 'Failed to serve frontend' });
     }
   });
 });
 
 app.use((err, req, res, next) => {
-  console.error('Server Error:', err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error('Server Error:', { error: err.message, stack: err.stack });
+  res.status(500).json({ error: 'Internal server error: ' + err.message });
 });
 
 const PORT = process.env.PORT || 10000;
