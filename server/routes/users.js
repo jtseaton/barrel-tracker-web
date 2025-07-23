@@ -5,8 +5,15 @@ const { db } = require('../services/database');
 
 const router = express.Router();
 
+// Debug all requests to usersRouter
+router.use((req, res, next) => {
+  console.log(`usersRouter handling: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
+  next();
+});
+
 // Login (unprotected)
 router.post('/login', async (req, res) => {
+  console.log('Handling POST /api/login in users.js', { body: req.body });
   const { email, password } = req.body;
   if (!email || !password) {
     console.error('POST /api/login: Missing required fields', { email });
@@ -39,6 +46,7 @@ router.post('/login', async (req, res) => {
 
 // Protected routes
 router.get('/', (req, res) => {
+  console.log('Handling GET /api/users in users.js');
   db.all('SELECT email, role, enabled, passkey FROM users', (err, rows) => {
     if (err) {
       console.error('GET /api/users: Fetch users error:', err);
@@ -50,6 +58,7 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  console.log('Handling POST /api/users/ in users.js', { body: req.body });
   const { email, password, role } = req.body;
   if (!email || !password || !role || !['SuperAdmin', 'Admin', 'Sales', 'Production'].includes(role)) {
     console.log('POST /api/users: Invalid fields', req.body);
@@ -86,6 +95,7 @@ router.post('/', async (req, res) => {
 });
 
 router.delete('/', (req, res) => {
+  console.log('Handling DELETE /api/users in users.js', { body: req.body });
   const { emails } = req.body;
   if (!Array.isArray(emails) || emails.length === 0) {
     console.error('DELETE /api/users: Invalid emails array', emails);
@@ -103,6 +113,7 @@ router.delete('/', (req, res) => {
 });
 
 router.patch('/', (req, res) => {
+  console.log('Handling PATCH /api/users in users.js', { body: req.body });
   const { emails, enabled } = req.body;
   if (!Array.isArray(emails) || emails.length === 0 || typeof enabled !== 'boolean') {
     console.error('PATCH /api/users: Invalid input', { emails, enabled });
