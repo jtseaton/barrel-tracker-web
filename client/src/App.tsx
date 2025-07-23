@@ -27,6 +27,7 @@ import EquipmentPage from './components/Equipment';
 import Login from './components/Login';
 import { fetchInventory, fetchVendors } from './utils/fetchUtils';
 import { exportToExcel } from './utils/excelUtils';
+import { API_BASE_URL } from './config';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import BatchDetails from './components/BatchDetails';
@@ -39,10 +40,7 @@ import CustomerDetails from './components/CustomerDetails';
 import Settings from './components/Settings';
 import KegTracking from './components/KegTracking';
 
-// Stub component
 const ProductionPage: React.FC = () => <div className="container"><h2>Production</h2><p>Production page coming soon</p></div>;
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
@@ -58,15 +56,31 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Authentication state
   const [currentUser, setCurrentUser] = useState<User | null>(
-    JSON.parse(localStorage.getItem('user') || 'null')
+    (() => {
+      const userData = localStorage.getItem('user');
+      try {
+        return userData ? JSON.parse(userData) : null;
+      } catch (e) {
+        console.error('Error parsing user from localStorage:', e);
+        localStorage.removeItem('user'); // Clear bad data
+        return null;
+      }
+    })()
   );
   const isAuthenticated = !!currentUser?.email && !!localStorage.getItem('token');
   const isAdmin = currentUser && [Role.SuperAdmin, Role.Admin].includes(currentUser.role as Role);
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    console.log('App useEffect: Checking auth', { user: localStorage.getItem('user'), token: !!localStorage.getItem('token') });
+    const userData = localStorage.getItem('user');
+    let user = null;
+    try {
+      user = userData ? JSON.parse(userData) : null;
+    } catch (e) {
+      console.error('Error parsing user from localStorage:', e);
+      localStorage.removeItem('user'); // Clear bad data
+    }
     const token = localStorage.getItem('token');
     if (user && token && user !== currentUser) {
       setCurrentUser(user);

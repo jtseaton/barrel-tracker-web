@@ -40,6 +40,7 @@ const Login: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const { token, user } = await response.json();
+      localStorage.removeItem('user'); // Clear bad data
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       console.log('Login successful:', { email, role: user.role });

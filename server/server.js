@@ -4,13 +4,16 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
-const { db, initializeDatabase, insertTestData } = require('./services/database'); // Import initialization functions
+const { db, initializeDatabase, insertTestData } = require('./services/database');
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' ? 'https://tilly.onrender.com' : 'http://localhost:10001',
+  credentials: true,
+}));
 app.use(express.json());
 
 // Log all incoming requests
@@ -66,7 +69,7 @@ app.post('/api/login', async (req, res) => {
       }
       const token = jwt.sign({ email: user.email, role: user.role }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '1h' });
       console.log('POST /api/login: Authenticated', { email, role: user.role });
-      res.json({ email: user.email, role: user.role, token });
+      res.json({ token, user: { email: user.email, role: user.role } }); // Updated response structure
     });
   } catch (err) {
     console.error('POST /api/login: Error:', err);
@@ -120,6 +123,17 @@ app.post('/api/login/test', (req, res) => {
   res.json({ message: 'Test route for /api/login', body: req.body });
 });
 
+app.get('/api/debug/tables', (req, res) => {
+  db.all("SELECT name FROM sqlite_master WHERE type='table'", (err, tables) => {
+    if (err) {
+      console.error('Debug tables error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Database tables:', tables);
+    res.json(tables);
+  });
+});
+
 app.use(express.static(path.join(__dirname, '../client/build'), {
   setHeaders: (res, path) => {
     if (process.env.NODE_ENV === 'development') {
@@ -141,7 +155,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error: ' + err.message });
 });
 
-// Initialize database
 initializeDatabase();
 insertTestData();
 
