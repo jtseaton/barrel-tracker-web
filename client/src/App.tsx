@@ -42,7 +42,7 @@ import KegTracking from './components/KegTracking';
 // Stub component
 const ProductionPage: React.FC = () => <div className="container"><h2>Production</h2><p>Production page coming soon</p></div>;
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
 const AppContent: React.FC = () => {
   const [activeSection, setActiveSection] = useState('Home');
