@@ -8,6 +8,11 @@ const { db, initializeDatabase, insertTestData } = require('./services/database'
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET is not defined in .env');
+  process.exit(1);
+}
+
 const app = express();
 
 app.use(cors({
@@ -67,9 +72,9 @@ app.post('/api/login', async (req, res) => {
         console.error('POST /api/login: Invalid password', { email });
         return res.status(401).json({ error: 'Invalid password' });
       }
-      const token = jwt.sign({ email: user.email, role: user.role }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '1h' });
+      const token = jwt.sign({ email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
       console.log('POST /api/login: Authenticated', { email, role: user.role });
-      res.json({ token, user: { email: user.email, role: user.role } }); // Updated response structure
+      res.json({ token, user: { email: user.email, role: user.role } });
     });
   } catch (err) {
     console.error('POST /api/login: Error:', err);

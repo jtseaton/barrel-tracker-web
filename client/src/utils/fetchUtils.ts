@@ -1,49 +1,51 @@
 import { InventoryItem, DailySummaryItem, ReportData } from '../types/interfaces';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
 export interface InventoryResponse {
   items: InventoryItem[];
   totalPages: number;
 }
 
-export const fetchInventory = async (): Promise<InventoryResponse | null> => {
+export const fetchInventory = async () => {
   try {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}/api/inventory`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
     });
+    console.log('fetchInventory response:', { status: response.status, ok: response.ok });
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error: ${response.status}`);
     }
-    const data = await response.json();
-    return Array.isArray(data.items) ? data : null;
+    return await response.json();
   } catch (error) {
-    console.error('[fetchInventory] Error:', error);
-    return null;
+    console.error('fetchInventory error:', error);
+    throw error;
   }
 };
 
-export const fetchVendors = async (): Promise<any[] | null> => {
+export const fetchVendors = async () => {
   try {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}/api/vendors`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
     });
+    console.log('fetchVendors response:', { status: response.status, ok: response.ok });
     if (!response.ok) {
-      throw new Error(`Vendors fetch failed: HTTP ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error: ${response.status}`);
     }
-    const data = await response.json();
-    return Array.isArray(data) ? data : null;
+    return await response.json();
   } catch (error) {
-    console.error('[fetchVendors] Error:', error);
-    return null;
+    console.error('fetchVendors error:', error);
+    throw error;
   }
 };
 
