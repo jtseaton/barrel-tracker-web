@@ -3,7 +3,8 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const dotenv = require('dotenv');
-const bcrypt = require('bcrypt'); // Add bcrypt for direct login handling
+const bcrypt = require('bcrypt');
+const { db, initializeDatabase, insertTestData } = require('./services/database'); // Import initialization functions
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -41,7 +42,6 @@ const authenticateJWT = (req, res, next) => {
 };
 
 // Direct login route
-const { db } = require('./services/database');
 app.post('/api/login', async (req, res) => {
   console.log('Directly handling POST /api/login in server.js', { body: req.body });
   const { email, password } = req.body;
@@ -93,10 +93,6 @@ const reportsRouter = require('./routes/reports');
 const kegsRouter = require('./routes/kegs');
 const productionRouter = require('./routes/production');
 
-// app.use('/api/login', (req, res, next) => {
-//   console.log(`Routing to /api/login: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
-//   next();
-// }, usersRouter); // Comment out to avoid conflict
 app.use('/api/users', (req, res, next) => {
   console.log(`Routing to /api/users: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
   authenticateJWT(req, res, next);
@@ -144,6 +140,10 @@ app.use((err, req, res, next) => {
   console.error('Server Error:', { error: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error: ' + err.message });
 });
+
+// Initialize database
+initializeDatabase();
+insertTestData();
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {

@@ -21,7 +21,7 @@ const initializeDatabase = () => {
         address TEXT,
         enabled INTEGER DEFAULT 1
       )
-    `, (err) => { if (err) console.error('Error creating sites table:', err); });
+    `, (err) => { if (err) console.error('Error creating sites table:', err); else console.log('Sites table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS locations (
         locationId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +31,7 @@ const initializeDatabase = () => {
         enabled INTEGER DEFAULT 1,
         FOREIGN KEY (siteId) REFERENCES sites(siteId)
       )
-    `, (err) => { if (err) console.error('Error creating locations table:', err); });
+    `, (err) => { if (err) console.error('Error creating locations table:', err); else console.log('Locations table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS equipment (
         equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +42,7 @@ const initializeDatabase = () => {
         type TEXT,
         FOREIGN KEY (siteId) REFERENCES sites(siteId)
       )
-    `, (err) => { if (err) console.error('Error creating equipment table:', err); });
+    `, (err) => { if (err) console.error('Error creating equipment table:', err); else console.log('Equipment table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS customers (
         customerId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +57,7 @@ const initializeDatabase = () => {
         createdDate TEXT,
         updatedDate TEXT
       )
-    `, (err) => { if (err) console.error('Error creating customers table:', err); });
+    `, (err) => { if (err) console.error('Error creating customers table:', err); else console.log('Customers table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY,
@@ -71,7 +71,7 @@ const initializeDatabase = () => {
         abv REAL,
         ibu INTEGER
       )
-    `, (err) => { if (err) console.error('Error creating products table:', err); });
+    `, (err) => { if (err) console.error('Error creating products table:', err); else console.log('Products table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS product_package_types (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +82,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (productId) REFERENCES products(id),
         UNIQUE(productId, type)
       )
-    `, (err) => { if (err) console.error('Error creating product_package_types table:', err); });
+    `, (err) => { if (err) console.error('Error creating product_package_types table:', err); else console.log('Product_package_types table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS recipes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +93,7 @@ const initializeDatabase = () => {
         unit TEXT,
         FOREIGN KEY (productId) REFERENCES products(id)
       )
-    `, (err) => { if (err) console.error('Error creating recipes table:', err); });
+    `, (err) => { if (err) console.error('Error creating recipes table:', err); else console.log('Recipes table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS recipe_ingredients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +103,7 @@ const initializeDatabase = () => {
         unit TEXT NOT NULL,
         FOREIGN KEY (recipeId) REFERENCES recipes(id)
       )
-    `, (err) => { if (err) console.error('Error creating recipe_ingredients table:', err); });
+    `, (err) => { if (err) console.error('Error creating recipe_ingredients table:', err); else console.log('Recipe_ingredients table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS sales_orders (
         orderId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +113,7 @@ const initializeDatabase = () => {
         createdDate TEXT NOT NULL,
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
-    `, (err) => { if (err) console.error('Error creating sales_orders table:', err); });
+    `, (err) => { if (err) console.error('Error creating sales_orders table:', err); else console.log('Sales_orders table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS sales_order_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,7 +126,7 @@ const initializeDatabase = () => {
         kegCodes TEXT,
         FOREIGN KEY (orderId) REFERENCES sales_orders(orderId)
       )
-    `, (err) => { if (err) console.error('Error creating sales_order_items table:', err); });
+    `, (err) => { if (err) console.error('Error creating sales_order_items table:', err); else console.log('Sales_order_items table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS invoices (
         invoiceId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,7 +142,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (orderId) REFERENCES sales_orders(orderId),
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
-    `, (err) => { if (err) console.error('Error creating invoices table:', err); });
+    `, (err) => { if (err) console.error('Error creating invoices table:', err); else console.log('Invoices table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS invoice_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,14 +156,14 @@ const initializeDatabase = () => {
         keg_codes TEXT,
         FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId)
       )
-    `, (err) => { if (err) console.error('Error creating invoice_items table:', err); });
+    `, (err) => { if (err) console.error('Error creating invoice_items table:', err); else console.log('Invoice_items table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS system_settings (
         settingId INTEGER PRIMARY KEY AUTOINCREMENT,
         key TEXT NOT NULL UNIQUE,
         value TEXT NOT NULL
       )
-    `, (err) => { if (err) console.error('Error creating system_settings table:', err); });
+    `, (err) => { if (err) console.error('Error creating system_settings table:', err); else console.log('System_settings table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS inventory (
         identifier TEXT,
@@ -188,14 +188,14 @@ const initializeDatabase = () => {
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )
-    `, (err) => { if (err) console.error('Error creating inventory table:', err); });
+    `, (err) => { if (err) console.error('Error creating inventory table:', err); else console.log('Inventory table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS items (
         name TEXT PRIMARY KEY,
         type TEXT,
         enabled INTEGER DEFAULT 1
       )
-    `, (err) => { if (err) console.error('Error creating items table:', err); });
+    `, (err) => { if (err) console.error('Error creating items table:', err); else console.log('Items table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS transactions (
         barrelId TEXT,
@@ -208,7 +208,7 @@ const initializeDatabase = () => {
         toAccount TEXT,
         userId TEXT
       )
-    `, (err) => { if (err) console.error('Error creating transactions table:', err); });
+    `, (err) => { if (err) console.error('Error creating transactions table:', err); else console.log('Transactions table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS vendors (
         name TEXT PRIMARY KEY,
@@ -218,7 +218,7 @@ const initializeDatabase = () => {
         email TEXT,
         phone TEXT
       )
-    `, (err) => { if (err) console.error('Error creating vendors table:', err); });
+    `, (err) => { if (err) console.error('Error creating vendors table:', err); else console.log('Vendors table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS purchase_orders (
         poNumber TEXT PRIMARY KEY,
@@ -238,7 +238,7 @@ const initializeDatabase = () => {
         status TEXT DEFAULT 'Open',
         items TEXT
       )
-    `, (err) => { if (err) console.error('Error creating purchase_orders table:', err); });
+    `, (err) => { if (err) console.error('Error creating purchase_orders table:', err); else console.log('Purchase_orders table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS facility_designs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -249,7 +249,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         UNIQUE(siteId)
       )
-    `, (err) => { if (err) console.error('Error creating facility_designs table:', err); });
+    `, (err) => { if (err) console.error('Error creating facility_designs table:', err); else console.log('Facility_designs table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS batches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,7 +271,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
         FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
       )
-    `, (err) => { if (err) console.error('Error creating batches table:', err); });
+    `, (err) => { if (err) console.error('Error creating batches table:', err); else console.log('Batches table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS inventory_losses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -287,7 +287,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )
-    `, (err) => { if (err) console.error('Error creating inventory_losses table:', err); });
+    `, (err) => { if (err) console.error('Error creating inventory_losses table:', err); else console.log('Inventory_losses table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS batch_packaging (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -303,7 +303,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (locationId) REFERENCES locations(locationId),
         FOREIGN KEY (siteId) REFERENCES sites(siteId)
       )
-    `, (err) => { if (err) console.error('Error creating batch_packaging table:', err); });
+    `, (err) => { if (err) console.error('Error creating batch_packaging table:', err); else console.log('Batch_packaging table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         email TEXT PRIMARY KEY,
@@ -312,7 +312,7 @@ const initializeDatabase = () => {
         enabled INTEGER NOT NULL DEFAULT 1,
         passkey TEXT
       )
-    `, (err) => { if (err) console.error('Error creating users table:', err); });
+    `, (err) => { if (err) console.error('Error creating users table:', err); else console.log('Users table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS batch_actions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -321,7 +321,7 @@ const initializeDatabase = () => {
         timestamp TEXT,
         FOREIGN KEY (batchId) REFERENCES batches(batchId)
       )
-    `, (err) => { if (err) console.error('Error creating batch_actions table:', err); });
+    `, (err) => { if (err) console.error('Error creating batch_actions table:', err); else console.log('Batch_actions table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS kegs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -336,7 +336,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (customerId) REFERENCES customers(customerId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )
-    `, (err) => { if (err) console.error('Error creating kegs table:', err); });
+    `, (err) => { if (err) console.error('Error creating kegs table:', err); else console.log('Kegs table created'); });
     db.run(`
       CREATE TABLE IF NOT EXISTS keg_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -354,7 +354,7 @@ const initializeDatabase = () => {
         FOREIGN KEY (invoiceId) REFERENCES invoices(invoiceId),
         FOREIGN KEY (customerId) REFERENCES customers(customerId)
       )
-    `, (err) => { if (err) console.error('Error creating keg_transactions table:', err); });
+    `, (err) => { if (err) console.error('Error creating keg_transactions table:', err); else console.log('Keg_transactions table created'); });
 
     console.log('Database schema initialized');
   });
@@ -565,7 +565,7 @@ const insertTestData = async () => {
           `INSERT OR IGNORE INTO batches (batchId, productId, recipeId, volume, siteId, status, stage, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           ['HT321654', productId, recipeId, 20.000, 'BR-AL-20019', 'In Progress', 'Fermentation', '2025-05-24'],
           (err) => {
-            if (err) console.error('Insert batch HT321654 error:', err);
+            if (err) console.error('Insert batch HT321654 error:`, err);
             else console.log('Inserted batch HT321654');
           }
         );
