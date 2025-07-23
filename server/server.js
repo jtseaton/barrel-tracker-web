@@ -21,12 +21,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Test route to verify /api/login
-app.post('/api/login/test', (req, res) => {
-  console.log('Test route hit: POST /api/login/test', { body: req.body });
-  res.json({ message: 'Test route for /api/login', body: req.body });
-});
-
 const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader) {
@@ -64,8 +58,25 @@ const reportsRouter = require('./routes/reports');
 const kegsRouter = require('./routes/kegs');
 const productionRouter = require('./routes/production');
 
-app.use('/api/login', usersRouter); // Unprotected
-app.use('/api/users', authenticateJWT, usersRouter);
+// Explicit /api/login route
+app.post('/api/login', (req, res) => {
+  console.log('Direct hit: POST /api/login', { body: req.body });
+  usersRouter.handle(req, res, () => {
+    console.error('POST /api/login: Failed to handle in usersRouter');
+    res.status(500).json({ error: 'Failed to handle login route' });
+  });
+});
+
+// Test route to verify /api/login
+app.post('/api/login/test', (req, res) => {
+  console.log('Test route hit: POST /api/login/test', { body: req.body });
+  res.json({ message: 'Test route for /api/login', body: req.body });
+});
+
+app.use('/api/users', (req, res, next) => {
+  console.log(`Routing to /api/users: ${req.method} ${req.url}`, { body: req.body });
+  authenticateJWT(req, res, next);
+}, usersRouter);
 app.use('/api/customers', authenticateJWT, customersRouter);
 app.use('/api/sales-orders', authenticateJWT, salesOrdersRouter);
 app.use('/api/invoices', authenticateJWT, invoicesRouter);
