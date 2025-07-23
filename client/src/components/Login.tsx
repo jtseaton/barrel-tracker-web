@@ -10,13 +10,13 @@ const Login: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login attempt:', {
-      url: `${API_BASE_URL}/api/login`,
+    const loginUrl = `${API_BASE_URL}/api/login`;
+    console.log('Sending login request to:', loginUrl, {
       payload: { email, password },
       timestamp: new Date().toISOString(),
     });
     try {
-      const response = await fetch(`${API_BASE_URL}/api/login`, {
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -25,6 +25,7 @@ const Login: React.FC = () => {
         status: response.status,
         statusText: response.statusText,
         url: response.url,
+        redirected: response.redirected,
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
