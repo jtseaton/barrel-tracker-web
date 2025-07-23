@@ -13,6 +13,8 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+console.log('JWT_SECRET loaded:', process.env.JWT_SECRET);
+
 const app = express();
 
 app.use(cors({
@@ -41,6 +43,7 @@ const authenticateJWT = (req, res, next) => {
         return res.status(403).json({ error: 'Invalid or expired token' });
       }
       req.user = user;
+      console.log('JWT Verified:', { user });
       next();
     });
   } else {
