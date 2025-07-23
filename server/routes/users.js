@@ -1,6 +1,5 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const { db } = require('../services/database');
 
 const router = express.Router();
@@ -9,39 +8,6 @@ const router = express.Router();
 router.use((req, res, next) => {
   console.log(`usersRouter handling: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
   next();
-});
-
-// Login (unprotected)
-router.post('/login', async (req, res) => {
-  console.log('Handling POST /api/login in users.js', { body: req.body });
-  const { email, password } = req.body;
-  if (!email || !password) {
-    console.error('POST /api/login: Missing required fields', { email });
-    return res.status(400).json({ error: 'Email and password required' });
-  }
-  try {
-    db.get('SELECT email, passwordHash, role, enabled FROM users WHERE email = ? AND enabled = 1', [email], async (err, user) => {
-      if (err) {
-        console.error('POST /api/login: Database error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (!user) {
-        console.error('POST /api/login: Invalid email or disabled user', { email });
-        return res.status(401).json({ error: 'Invalid email or disabled user' });
-      }
-      const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) {
-        console.error('POST /api/login: Invalid password', { email });
-        return res.status(401).json({ error: 'Invalid password' });
-      }
-      const token = jwt.sign({ email: user.email, role: user.role }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '1h' });
-      console.log('POST /api/login: Authenticated', { email, role: user.role });
-      res.json({ email: user.email, role: user.role, token });
-    });
-  } catch (err) {
-    console.error('POST /api/login: Error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
 });
 
 // Protected routes

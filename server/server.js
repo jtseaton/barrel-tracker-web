@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const dotenv = require('dotenv');
+const bcrypt = require('bcrypt'); // Add bcrypt for direct login handling
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -39,6 +40,40 @@ const authenticateJWT = (req, res, next) => {
   }
 };
 
+// Direct login route
+const { db } = require('./services/database');
+app.post('/api/login', async (req, res) => {
+  console.log('Directly handling POST /api/login in server.js', { body: req.body });
+  const { email, password } = req.body;
+  if (!email || !password) {
+    console.error('POST /api/login: Missing required fields', { email });
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+  try {
+    db.get('SELECT email, passwordHash, role, enabled FROM users WHERE email = ? AND enabled = 1', [email], async (err, user) => {
+      if (err) {
+        console.error('POST /api/login: Database error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (!user) {
+        console.error('POST /api/login: Invalid email or disabled user', { email });
+        return res.status(401).json({ error: 'Invalid email or disabled user' });
+      }
+      const match = await bcrypt.compare(password, user.passwordHash);
+      if (!match) {
+        console.error('POST /api/login: Invalid password', { email });
+        return res.status(401).json({ error: 'Invalid password' });
+      }
+      const token = jwt.sign({ email: user.email, role: user.role }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '1h' });
+      console.log('POST /api/login: Authenticated', { email, role: user.role });
+      res.json({ email: user.email, role: user.role, token });
+    });
+  } catch (err) {
+    console.error('POST /api/login: Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const usersRouter = require('./routes/users');
 const customersRouter = require('./routes/customers');
 const salesOrdersRouter = require('./routes/sales-orders');
@@ -58,10 +93,10 @@ const reportsRouter = require('./routes/reports');
 const kegsRouter = require('./routes/kegs');
 const productionRouter = require('./routes/production');
 
-app.use('/api/login', (req, res, next) => {
-  console.log(`Routing to /api/login: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
-  next();
-}, usersRouter);
+// app.use('/api/login', (req, res, next) => {
+//   console.log(`Routing to /api/login: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
+//   next();
+// }, usersRouter); // Comment out to avoid conflict
 app.use('/api/users', (req, res, next) => {
   console.log(`Routing to /api/users: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
   authenticateJWT(req, res, next);
@@ -84,7 +119,6 @@ app.use('/api/reports', authenticateJWT, reportsRouter);
 app.use('/api/kegs', authenticateJWT, kegsRouter);
 app.use('/api/production', authenticateJWT, productionRouter);
 
-// Test route to verify /api/login
 app.post('/api/login/test', (req, res) => {
   console.log('Test route hit: POST /api/login/test', { body: req.body });
   res.json({ message: 'Test route for /api/login', body: req.body });
