@@ -1,3 +1,4 @@
+// server/server.js
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -105,10 +106,11 @@ const reportsRouter = require('./routes/reports');
 const kegsRouter = require('./routes/kegs');
 const productionRouter = require('./routes/production');
 
-app.use('/api/users', (req, res, next) => {
-  console.log(`Routing to /api/users: ${req.method} ${req.url} (original: ${req.originalUrl})`, { body: req.body });
-  authenticateJWT(req, res, next);
-}, usersRouter);
+// Initialize database once
+initializeDatabase();
+insertTestData();
+
+app.use('/api/users', authenticateJWT, usersRouter);
 app.use('/api/customers', authenticateJWT, customersRouter);
 app.use('/api/sales-orders', authenticateJWT, salesOrdersRouter);
 app.use('/api/invoices', authenticateJWT, invoicesRouter);
@@ -163,9 +165,6 @@ app.use((err, req, res, next) => {
   console.error('Server Error:', { error: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error: ' + err.message });
 });
-
-initializeDatabase();
-insertTestData();
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {

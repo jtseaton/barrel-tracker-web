@@ -8,7 +8,14 @@ const db = new sqlite3.Database(':memory:', (err) => {
   else console.log('Connected to SQLite database');
 });
 
-const initializeDatabase = () => {
+let isInitialized = false;
+
+function initializeDatabase() {
+  if (isInitialized) {
+    console.log('Database already initialized, skipping initialization');
+    return;
+  }
+  
   db.serialize(() => {
     console.log('Initializing database schema...');
 
@@ -167,6 +174,7 @@ const initializeDatabase = () => {
     db.run(`
       CREATE TABLE IF NOT EXISTS inventory (
         identifier TEXT,
+        item TEXT,
         account TEXT,
         type TEXT,
         quantity TEXT,
@@ -357,6 +365,7 @@ const initializeDatabase = () => {
     `, (err) => { if (err) console.error('Error creating keg_transactions table:', err); else console.log('Keg_transactions table created'); });
 
     console.log('Database schema initialized');
+    isInitialized = true;
   });
 };
 
