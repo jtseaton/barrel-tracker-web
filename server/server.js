@@ -37,13 +37,14 @@ const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader) {
     const token = authHeader.split(' ')[1];
+    console.log('authenticateJWT: Verifying token', { token: token.substring(0, 10) + '...' });
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) {
         console.error('JWT Verification Error:', { error: err.message, stack: err.stack });
         return res.status(403).json({ error: 'Invalid or expired token' });
       }
-      req.user = user;
       console.log('JWT Verified:', { user });
+      req.user = user;
       next();
     });
   } else {

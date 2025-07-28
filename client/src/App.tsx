@@ -151,48 +151,37 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      if (isAuthenticated) {
-        const isValid = await refreshToken();
-        if (isValid) {
-          await Promise.all([refreshInventory(), refreshVendors()]);
-        }
-      }
-      setIsLoading(false);
-    };
-    loadData();
-  }, [isAuthenticated]);
-
-  // Watch for localStorage changes
-  useEffect(() => {
-    const handleStorageChange = () => {
-      const userData = localStorage.getItem('user');
       const token = localStorage.getItem('token');
+      const userData = localStorage.getItem('user');
+      let user = null;
       try {
-        const user = userData ? JSON.parse(userData) : null;
-        if (user && token) {
-          console.log('[App] localStorage updated, setting user:', user);
-          setCurrentUser(user);
-          setIsAuthenticated(true);
-          navigate('/inventory');
-        } else {
-          console.log('[App] localStorage cleared, redirecting to login');
-          setCurrentUser(null);
-          setIsAuthenticated(false);
-          navigate('/login');
-        }
+        user = userData ? JSON.parse(userData) : null;
       } catch (e) {
         console.error('[App] Error parsing user from localStorage:', e);
         localStorage.removeItem('user');
         localStorage.removeItem('token');
+      }
+      if (user && token) {
+        console.log('[App] User and token found, validating');
+        const isValid = await refreshToken();
+        if (isValid) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          await Promise.all([refreshInventory(), refreshVendors()]);
+          if (location.pathname === '/login') {
+            navigate('/', { replace: true });
+          }
+        }
+      } else {
+        console.log('[App] No user or token, redirecting to login');
         setCurrentUser(null);
         setIsAuthenticated(false);
         navigate('/login');
       }
+      setIsLoading(false);
     };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [navigate]);
+    loadData();
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
