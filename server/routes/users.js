@@ -10,52 +10,48 @@ router.use((req, res, next) => {
   next();
 });
 
-// Protected routes
 router.get('/', (req, res) => {
-  console.log('Handling GET /api/users in users.js');
-  db.all('SELECT email, role, enabled, passkey FROM users', (err, rows) => {
+  console.log('Handling GET /api/users', { user: req.user });
+  if (!req.user || !['SuperAdmin', 'Admin'].includes(req.user.role)) {
+    console.error('GET /api/users: Unauthorized', { user: req.user });
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+  db.all('SELECT email, role, enabled FROM users', (err, rows) => {
     if (err) {
-      console.error('GET /api/users: Fetch users error:', err);
+      console.error('GET /api/users: Database error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('GET /api/users: Returning', rows);
+    console.log('GET /api/users: Success', { count: rows.length, data: rows });
     res.json(rows);
   });
 });
 
 router.post('/', async (req, res) => {
-  console.log('Handling POST /api/users/ in users.js', { body: req.body });
   const { email, password, role } = req.body;
-  if (!email || !password || !role || !['SuperAdmin', 'Admin', 'Sales', 'Production'].includes(role)) {
-    console.log('POST /api/users: Invalid fields', req.body);
-    return res.status(400).json({ error: 'Email, password, and valid role are required' });
+  if (!email || !password || !role) {
+    console.error('POST /api/users: Missing required fields', { email, role });
+    return res.status(400).json({ error: 'Email, password, and role are required' });
+  }
+  if (!['SuperAdmin', 'Admin', 'User'].includes(role)) {
+    console.error('POST /api/users: Invalid role', { role });
+    return res.status(400).json({ error: 'Invalid role' });
   }
   try {
-    db.get('SELECT email FROM users WHERE email = ?', [email], async (err, existing) => {
-      if (err) {
-        console.error('POST /api/users: Check existing user error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (existing) {
-        console.log('POST /api/users: Email already exists', { email });
-        return res.status(400).json({ error: 'Email already exists' });
-      }
-      const hash = await bcrypt.hash(password, 10);
-      db.run(
-        'INSERT INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
-        [email, hash, role, 1],
-        function(err) {
-          if (err) {
-            console.error('POST /api/users: Insert error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          console.log('POST /api/users: Added', { email, role });
-          res.json({ email, role, enabled: 1, passkey: null });
+    const passwordHash = await bcrypt.hash(password, 10);
+    db.run(
+      'INSERT INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
+      [email, passwordHash, role, 1],
+      function (err) {
+        if (err) {
+          console.error('POST /api/users: Insert error:', err);
+          return res.status(500).json({ error: err.message });
         }
-      );
-    });
+        console.log('POST /api/users: Success', { email, role });
+        res.json({ id: this.lastID, email, role });
+      }
+    );
   } catch (err) {
-    console.error('POST /api/users: Error:', err);
+    console.error('POST /api/users: Hash error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

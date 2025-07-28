@@ -85,7 +85,7 @@ export const fetchDailySummary = async () => {
       window.location.href = '/login';
       throw new Error('No token found in localStorage');
     }
-    const response = await fetch(`${API_BASE_URL}/api/daily-summary`, {
+    const response = await fetch(`${API_BASE_URL}/api/reports/daily-summary`, {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,

@@ -1,3 +1,4 @@
+// server/routes/reports.js
 const express = require('express');
 const { db } = require('../services/database');
 
@@ -90,6 +91,39 @@ router.get('/sales', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     console.log('GET /api/reports/sales: Success', { count: rows.length });
+    res.json(rows);
+  });
+});
+
+router.get('/daily-summary', (req, res) => {
+  console.log('Handling GET /api/reports/daily-summary', { query: req.query, user: req.user });
+  const { siteId, date } = req.query;
+  let query = `
+    SELECT 
+      i.receivedDate AS date,
+      i.account,
+      i.type,
+      SUM(i.quantity) AS totalProofGallons,
+      i.locationId
+    FROM inventory i
+    WHERE i.status IN ('Received', 'Stored')
+  `;
+  const params = [];
+  if (siteId) {
+    query += ' AND i.siteId = ?';
+    params.push(siteId);
+  }
+  if (date) {
+    query += ' AND i.receivedDate = ?';
+    params.push(date);
+  }
+  query += ' GROUP BY i.receivedDate, i.account, i.type, i.locationId';
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('GET /api/reports/daily-summary: Fetch error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/reports/daily-summary: Success', { count: rows.length, data: rows });
     res.json(rows);
   });
 });

@@ -125,10 +125,13 @@ const AppContent: React.FC = () => {
         hasItems: data && 'items' in data,
         itemsIsArray: data && Array.isArray(data?.items),
         itemsLength: data && Array.isArray(data?.items) ? data.items.length : 'N/A',
-        totalPages: data && 'totalPages' in data ? data.totalPages : 'N/A',
+        items: data?.items?.map((item: InventoryItem) => ({
+          identifier: item.identifier,
+          status: item.status,
+        })),
       });
       setInventory(data && typeof data === 'object' && Array.isArray(data.items) ? data.items : []);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[App] refreshInventory error:', error);
       setInventory([]);
     }
