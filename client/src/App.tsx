@@ -128,12 +128,19 @@ const AppContent: React.FC = () => {
         items: data?.items?.map((item: InventoryItem) => ({
           identifier: item.identifier,
           status: item.status,
+          type: item.type,
         })),
       });
-      setInventory(data && typeof data === 'object' && Array.isArray(data.items) ? data.items : []);
+      if (data && typeof data === 'object' && Array.isArray(data.items)) {
+        setInventory(data.items);
+      } else {
+        console.error('[App] Invalid inventory data format:', data);
+        setInventory([]);
+      }
     } catch (error: unknown) {
       console.error('[App] refreshInventory error:', error);
       setInventory([]);
+      throw error; // Propagate error for debugging
     }
   };
 

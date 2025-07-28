@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem, Site } from '../types/interfaces';
-import { fetchDailySummary, fetchInventory } from '../utils/fetchUtils';
+import { fetchDailySummary } from '../utils/fetchUtils';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
 
@@ -36,32 +36,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
-  // Fetch inventory explicitly
-  useEffect(() => {
-    const loadInventory = async () => {
-      try {
-        console.log('[Inventory] Fetching inventory');
-        const data = await fetchInventory();
-        console.log('[Inventory] Fetched inventory:', {
-          data,
-          isObject: data && typeof data === 'object',
-          hasItems: data && 'items' in data,
-          itemsIsArray: data && Array.isArray(data?.items),
-          itemsLength: data && Array.isArray(data?.items) ? data.items.length : 'N/A',
-          items: data?.items?.map((item: InventoryItem) => ({
-            identifier: item.identifier,
-            status: item.status,
-          })),
-        });
-        await refreshInventory();
-      } catch (err: unknown) {
-        console.error('[Inventory] Fetch inventory error:', err);
-        setProductionError(err instanceof Error ? `Failed to load inventory: ${err.message}` : 'Failed to load inventory: Unknown error');
-      }
-    };
-    loadInventory();
-  }, [refreshInventory]);
-
   // Log inventory prop
   useEffect(() => {
     console.log('[Inventory] Inventory prop:', {
@@ -79,6 +53,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         buttons: 'background: #2196F3, hover: #1976D2',
       },
     });
+    setIsLoading(false); // Set loading false after inventory is received
   }, [inventory]);
 
   // Fetch daily summary
@@ -261,9 +236,9 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  // Relax status filter to debug
+  // Relax status filter to include all valid statuses
   const filteredInventory = inventory.filter(item => 
-    item?.status && (
+    item?.status && ['Received', 'Stored', 'Processing', 'Packaged'].includes(item.status) && (
       (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
