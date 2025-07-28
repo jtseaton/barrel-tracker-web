@@ -175,6 +175,7 @@ function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS inventory (
         identifier TEXT,
         item TEXT,
+        lotNumber TEXT,
         account TEXT,
         type TEXT,
         quantity TEXT,

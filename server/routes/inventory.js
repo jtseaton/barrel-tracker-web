@@ -227,7 +227,7 @@ router.post('/receive', (req, res) => {
         console.error('POST /api/receive: Errors during insert:', errors);
         return res.status(400).json({ error: 'Failed to receive some items', details: errors });
       }
-      console.log('POST /api/receive: Success', { count: items.length });
+      console.log('POST /api/inventory/receive: Success', { count: items.length });
       res.status(200).json({ message: 'Items received successfully', count: items.length });
     });
   });
