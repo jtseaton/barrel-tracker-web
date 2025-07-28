@@ -10,6 +10,11 @@ export interface InventoryResponse {
 export const fetchInventory = async () => {
   try {
     const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('fetchInventory: No token found, redirecting to login');
+      window.location.href = '/login';
+      throw new Error('No token found in localStorage');
+    }
     const response = await fetch(`${API_BASE_URL}/api/inventory`, {
       headers: {
         'Content-Type': 'application/json',
@@ -17,11 +22,20 @@ export const fetchInventory = async () => {
       },
     });
     console.log('fetchInventory response:', { status: response.status, ok: response.ok });
+    if (response.status === 401 || response.status === 403) {
+      console.log('fetchInventory: Token invalid or expired, redirecting to login');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      throw new Error('Session expired, please log in again');
+    }
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP error: ${response.status}`);
     }
-    return await response.json();
+    const data = await response.json();
+    console.log('fetchInventory data:', data);
+    return data;
   } catch (error) {
     console.error('fetchInventory error:', error);
     throw error;
@@ -31,6 +45,11 @@ export const fetchInventory = async () => {
 export const fetchVendors = async () => {
   try {
     const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('fetchVendors: No token found, redirecting to login');
+      window.location.href = '/login';
+      throw new Error('No token found in localStorage');
+    }
     const response = await fetch(`${API_BASE_URL}/api/vendors`, {
       headers: {
         'Content-Type': 'application/json',
@@ -38,34 +57,58 @@ export const fetchVendors = async () => {
       },
     });
     console.log('fetchVendors response:', { status: response.status, ok: response.ok });
+    if (response.status === 401 || response.status === 403) {
+      console.log('fetchVendors: Token invalid or expired, redirecting to login');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      throw new Error('Session expired, please log in again');
+    }
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP error: ${response.status}`);
     }
-    return await response.json();
+    const data = await response.json();
+    console.log('fetchVendors data:', data);
+    return data;
   } catch (error) {
     console.error('fetchVendors error:', error);
     throw error;
   }
 };
 
-export const fetchDailySummary = async (): Promise<DailySummaryItem[] | null> => {
+export const fetchDailySummary = async () => {
   try {
     const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('fetchDailySummary: No token found, redirecting to login');
+      window.location.href = '/login';
+      throw new Error('No token found in localStorage');
+    }
     const response = await fetch(`${API_BASE_URL}/api/daily-summary`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
     });
+    console.log('fetchDailySummary response:', { status: response.status, ok: response.ok });
+    if (response.status === 401 || response.status === 403) {
+      console.log('fetchDailySummary: Token invalid or expired, redirecting to login');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      throw new Error('Session expired, please log in again');
+    }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error: ${response.status}`);
     }
     const data = await response.json();
-    return Array.isArray(data) ? data : null;
+    console.log('fetchDailySummary data:', data);
+    return data;
   } catch (error) {
-    console.error('[fetchDailySummary] Error:', error);
-    return null;
+    console.error('fetchDailySummary error:', error);
+    throw error;
   }
 };
 

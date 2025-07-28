@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Role } from './types/enums';
@@ -63,32 +64,57 @@ const AppContent: React.FC = () => {
         return userData ? JSON.parse(userData) : null;
       } catch (e) {
         console.error('Error parsing user from localStorage:', e);
-        localStorage.removeItem('user'); // Clear bad data
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
         return null;
       }
     })()
   );
-  const isAuthenticated = !!currentUser?.email && !!localStorage.getItem('token');
+  const [isAuthenticated, setIsAuthenticated] = useState(!!currentUser?.email && !!localStorage.getItem('token'));
   const isAdmin = currentUser && [Role.SuperAdmin, Role.Admin].includes(currentUser.role as Role);
 
-  useEffect(() => {
-    console.log('App useEffect: Checking auth', { user: localStorage.getItem('user'), token: !!localStorage.getItem('token') });
-    const userData = localStorage.getItem('user');
-    let user = null;
-    try {
-      user = userData ? JSON.parse(userData) : null;
-    } catch (e) {
-      console.error('Error parsing user from localStorage:', e);
-      localStorage.removeItem('user'); 
-    }
+  const refreshToken = async () => {
+    console.log('[App] Checking token validity');
     const token = localStorage.getItem('token');
-    if (user && token && user !== currentUser) {
-      setCurrentUser(user);
-    } else if (!user || !token) {
+    if (!token) {
+      console.log('[App] No token, redirecting to login');
       setCurrentUser(null);
+      setIsAuthenticated(false);
       navigate('/login');
+      return false;
     }
-  }, [location.pathname, navigate, currentUser]);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      console.log('[App] Token check response:', { status: response.status, ok: response.ok });
+      if (response.status === 401 || response.status === 403) {
+        console.log('[App] Token expired or invalid, redirecting to login');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        navigate('/login');
+        return false;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+      setIsAuthenticated(true);
+      return true;
+    } catch (error) {
+      console.error('[App] Token validation error:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      navigate('/login');
+      return false;
+    }
+  };
 
   const refreshInventory = async () => {
     try {
@@ -126,12 +152,47 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       if (isAuthenticated) {
-        await Promise.all([refreshInventory(), refreshVendors()]);
+        const isValid = await refreshToken();
+        if (isValid) {
+          await Promise.all([refreshInventory(), refreshVendors()]);
+        }
       }
-      setTimeout(() => setIsLoading(false), 4000);
+      setIsLoading(false);
     };
     loadData();
   }, [isAuthenticated]);
+
+  // Watch for localStorage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const userData = localStorage.getItem('user');
+      const token = localStorage.getItem('token');
+      try {
+        const user = userData ? JSON.parse(userData) : null;
+        if (user && token) {
+          console.log('[App] localStorage updated, setting user:', user);
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          navigate('/inventory');
+        } else {
+          console.log('[App] localStorage cleared, redirecting to login');
+          setCurrentUser(null);
+          setIsAuthenticated(false);
+          navigate('/login');
+        }
+      } catch (e) {
+        console.error('[App] Error parsing user from localStorage:', e);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        navigate('/login');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [navigate]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -150,6 +211,16 @@ const AppContent: React.FC = () => {
       document.removeEventListener('mousedown', handleOutsideClick);
     };
   }, [menuOpen]);
+
+  const handleBackClick = () => {
+    console.log('[App] Back clicked');
+    setShowInventorySubmenu(false);
+    setShowProductionSubmenu(false);
+    setShowManagementSubmenu(false);
+    setShowSalesSubmenu(false);
+    setActiveSection('Home');
+    navigate('/');
+  };
 
   const handleInventoryClick = () => {
     console.log('[App] Inventory menu clicked');
@@ -208,20 +279,14 @@ const AppContent: React.FC = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
     setCurrentUser(null);
+    setIsAuthenticated(false);
     setActiveSection('Home');
     setShowManagementSubmenu(false);
-    navigate('/login');
-    setMenuOpen(false);
-  };
-
-  const handleBackClick = () => {
-    console.log('[App] Back clicked');
     setShowInventorySubmenu(false);
     setShowProductionSubmenu(false);
-    setShowManagementSubmenu(false);
     setShowSalesSubmenu(false);
-    setActiveSection('Home');
-    navigate('/');
+    navigate('/login');
+    setMenuOpen(false);
   };
 
   if (!isAuthenticated) {
@@ -424,17 +489,14 @@ const AppContent: React.FC = () => {
             }
           />
           <Route path="/login" element={<Login />} />
-          <Route
-            path="/inventory"
-            element={
-              <Inventory
-                vendors={vendors}
-                refreshVendors={refreshVendors}
-                inventory={inventory}
-                refreshInventory={refreshInventory}
-              />
-            }
-          />
+          <Route path="/inventory" element={
+            <Inventory
+              vendors={vendors}
+              refreshVendors={refreshVendors}
+              inventory={inventory}
+              refreshInventory={refreshInventory}
+            />
+          } />
           <Route path="/inventory/:identifier" element={<InventoryItemDetails inventory={inventory} refreshInventory={refreshInventory} />} />
           <Route path="/transfers" element={<div className="container"><h2>Transfers</h2><p>Transfers page coming soon</p></div>} />
           <Route path="/items" element={<Items />} />
