@@ -158,6 +158,81 @@ router.patch('/', (req, res) => {
   });
 });
 
+router.post('/receive', (req, res) => {
+  console.log('POST /api/receive: Received payload', req.body);
+  const items = Array.isArray(req.body) ? req.body : [req.body];
+  
+  if (!items.length) {
+    console.error('POST /api/receive: No items provided');
+    return res.status(400).json({ error: 'No items provided' });
+  }
+
+  const insertQuery = `
+    INSERT INTO inventory (
+      identifier, item, lotNumber, account, type, quantity, unit, proof, proofGallons,
+      receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  
+  db.serialize(() => {
+    const stmt = db.prepare(insertQuery);
+    let errors = [];
+
+    items.forEach((item) => {
+      const {
+        identifier, item: itemName, lotNumber, account, type, quantity, unit, proof, proofGallons,
+        receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber
+      } = item;
+
+      if (!identifier || !itemName || !type || !quantity || !unit || !siteId || !locationId || !status) {
+        errors.push(`Invalid item: ${JSON.stringify(item)}`);
+        return;
+      }
+
+      stmt.run(
+        [
+          identifier,
+          itemName,
+          lotNumber || '',
+          account || 'Storage',
+          type,
+          parseFloat(quantity) || 0,
+          unit,
+          proof || null,
+          proofGallons || null,
+          receivedDate || new Date().toISOString().split('T')[0],
+          source || 'Unknown',
+          siteId,
+          parseInt(locationId, 10) || null,
+          status,
+          description || null,
+          cost ? parseFloat(cost) : null,
+          totalCost ? parseFloat(totalCost) : null,
+          poNumber || null,
+        ],
+        (err) => {
+          if (err) {
+            errors.push(`Insert error for item ${identifier}: ${err.message}`);
+          }
+        }
+      );
+    });
+
+    stmt.finalize((err) => {
+      if (err) {
+        console.error('POST /api/receive: Database finalize error:', err);
+        return res.status(500).json({ error: 'Failed to receive items: ' + err.message });
+      }
+      if (errors.length) {
+        console.error('POST /api/receive: Errors during insert:', errors);
+        return res.status(400).json({ error: 'Failed to receive some items', details: errors });
+      }
+      console.log('POST /api/receive: Success', { count: items.length });
+      res.status(200).json({ message: 'Items received successfully', count: items.length });
+    });
+  });
+});
+
 router.post('/loss', (req, res) => {
   const { identifier, quantityLost, reason, date, siteId, locationId } = req.body;
   if (!identifier || !quantityLost || !reason || !siteId) {
