@@ -121,18 +121,16 @@ const AppContent: React.FC = () => {
       const data = await fetchInventory();
       console.log('[App] fetchInventory response:', {
         data,
-        isObject: data && typeof data === 'object',
-        hasItems: data && 'items' in data,
-        itemsIsArray: data && Array.isArray(data?.items),
-        itemsLength: data && Array.isArray(data?.items) ? data.items.length : 'N/A',
-        items: data?.items?.map((item: InventoryItem) => ({
+        isArray: Array.isArray(data),
+        length: Array.isArray(data) ? data.length : 'N/A',
+        items: Array.isArray(data) ? data.map((item: InventoryItem) => ({
           identifier: item.identifier,
           status: item.status,
           type: item.type,
-        })),
+        })) : [],
       });
-      if (data && typeof data === 'object' && Array.isArray(data.items)) {
-        setInventory(data.items);
+      if (Array.isArray(data)) {
+        setInventory(data);
       } else {
         console.error('[App] Invalid inventory data format:', data);
         setInventory([]);
@@ -140,7 +138,7 @@ const AppContent: React.FC = () => {
     } catch (error: unknown) {
       console.error('[App] refreshInventory error:', error);
       setInventory([]);
-      throw error; // Propagate error for debugging
+      throw error;
     }
   };
 
@@ -153,7 +151,7 @@ const AppContent: React.FC = () => {
         length: Array.isArray(data) ? data.length : 'N/A',
       });
       setVendors(Array.isArray(data) ? data : []);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[App] Fetch vendors error:', error);
       setVendors([]);
     }
@@ -177,7 +175,11 @@ const AppContent: React.FC = () => {
         if (isValid) {
           setCurrentUser(user);
           setIsAuthenticated(true);
-          await Promise.all([refreshInventory(), refreshVendors()]);
+          try {
+            await Promise.all([refreshInventory(), refreshVendors()]);
+          } catch (error) {
+            console.error('[App] Initial data fetch error:', error);
+          }
           if (location.pathname === '/login') {
             navigate('/', { replace: true });
           }
