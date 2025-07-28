@@ -607,7 +607,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       navigate('/login');
       throw new Error('No token found in localStorage');
     }
-    const res = await fetch(`${API_BASE_URL}/api/receive`, {
+    const res = await fetch(`${API_BASE_URL}/api/inventory/receive`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
