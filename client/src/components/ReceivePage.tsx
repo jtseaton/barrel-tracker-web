@@ -78,40 +78,51 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   // Updated fetchLocations with enhanced logging to diagnose blank Location dropdowns
   const fetchLocations = useCallback(async (siteId: string): Promise<void> => {
-    if (!siteId) {
-      setLocations([]);
-      setFilteredLocations([]);
-      setIsFetchingLocations(false);
-      console.log('No siteId provided for fetchLocations');
-      return;
-    }
+  if (!siteId) {
+    setLocations([]);
+    setFilteredLocations([]);
+    setIsFetchingLocations(false);
+    console.log('No siteId provided for fetchLocations');
+    return;
+  }
 
-    setIsFetchingLocations(true);
-    try {
-      const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
-      console.log(`Fetching locations from: ${url}`);
-      const res = await fetch(url);
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const data: Location[] = await res.json();
-      console.log(`Fetched locations for site ${siteId}:`, data);
-      if (data.length === 0) {
-        console.warn(`No locations returned for siteId ${siteId}`);
-        setProductionError(`No locations found for site ${siteId}`);
-      }
-      setLocations(data);
-      setFilteredLocations(data);
-      setIsFetchingLocations(false);
-    } catch (err: any) {
-      console.error(`Fetch locations error for siteId ${siteId}:`, err);
-      setProductionError(`Failed to fetch locations for site ${siteId}: ${err.message}`);
-      setLocations([]);
-      setFilteredLocations([]);
-      setIsFetchingLocations(false);
+  setIsFetchingLocations(true);
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('fetchLocations: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
     }
-  }, [API_BASE_URL]);
+    const url = `${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`;
+    console.log(`Fetching locations from: ${url}`);
+    const res = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+    }
+    const data: Location[] = await res.json();
+    console.log(`Fetched locations for site ${siteId}:`, data);
+    if (data.length === 0) {
+      console.warn(`No locations returned for siteId ${siteId}`);
+      setProductionError(`No locations found for site ${siteId}`);
+    }
+    setLocations(data);
+    setFilteredLocations(data);
+    setIsFetchingLocations(false);
+  } catch (err: any) {
+    console.error(`Fetch locations error for siteId ${siteId}:`, err);
+    setProductionError(`Failed to fetch locations for site ${siteId}: ${err.message}`);
+    setLocations([]);
+    setFilteredLocations([]);
+    setIsFetchingLocations(false);
+  }
+}, [API_BASE_URL, navigate]);
 
   useEffect(() => {
     if (locationState?.newSiteId) {
@@ -124,9 +135,21 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchItems = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchItems: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/items`, { signal: controller.signal });
+        const res = await fetch(`${API_BASE_URL}/api/items`, {
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
         clearTimeout(timeoutId);
         if (!res.ok) {
           const errorText = await res.text();
@@ -134,8 +157,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         }
         const data = await res.json();
         console.log('Fetched items:', data);
-        setItems(data);
-        setFilteredItems(data);
+        setItems(Array.isArray(data) ? data : []);
+        setFilteredItems(Array.isArray(data) ? data : []);
         if (data.length === 0) {
           setProductionError('No items found in database');
         }
@@ -147,11 +170,23 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchPOs = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchPOs: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(
           `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
-          { signal: controller.signal }
+          {
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
         clearTimeout(timeoutId);
         if (!res.ok) {
@@ -160,7 +195,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         }
         const data = await res.json();
         console.log('Fetched POs:', data);
-        setPurchaseOrders(data);
+        setPurchaseOrders(Array.isArray(data) ? data : []);
       } catch (err: any) {
         console.error('Fetch POs error:', err);
         setProductionError('Failed to fetch POs: ' + err.message);
@@ -169,9 +204,19 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
     const fetchSites = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('No token found in localStorage');
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/sites`, { signal: controller.signal });
+        const res = await fetch(`${API_BASE_URL}/api/sites`, {
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
         clearTimeout(timeoutId);
         if (!res.ok) {
           const errorText = await res.text();
@@ -179,8 +224,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         }
         const data = await res.json();
         console.log('Fetched sites:', data);
-        setSites(data);
-        setFilteredSites(data);
+        setSites(Array.isArray(data) ? data : []);
+        setFilteredSites(Array.isArray(data) ? data : []);
         if (data.length === 0) {
           setProductionError('No sites found in database');
           setSites([{ siteId: 'DSP-AL-20010', name: 'Madison Distillery' }]);
@@ -429,12 +474,24 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       return;
     }
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('handleCreateItem: No token found, redirecting to login');
+        navigate('/login');
+        throw new Error('No token found in localStorage');
+      }
       const res = await fetch(`${API_BASE_URL}/api/items`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ name: newItem, type: newItemType }),
       });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
       const updatedItems = [...items, { name: newItem, type: newItemType, enabled: 1 }];
       setItems(updatedItems);
       setFilteredItems(updatedItems);
@@ -462,108 +519,118 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setProductionError(null);
     } catch (err: any) {
       setProductionError('Failed to create item: ' + err.message);
+      console.error('handleCreateItem error:', err);
     }
   };
 
   const handleReceive = async (items?: ReceivableItem[]) => {
-    const itemsToReceive: ReceivableItem[] = items || (useSingleItem ? [singleForm] : receiveItems);
-    if (useSingleItem) {
-      console.log('Single Item Receive:', singleForm);
-    } else {
-      console.log('Multiple Items Receive:', itemsToReceive);
-    }
-  
-    if (
-      !itemsToReceive.length ||
-      itemsToReceive.some(
-        (item) =>
-          !item.item ||
-          !item.materialType ||
-          !item.quantity ||
-          !item.unit ||
-          !item.siteId ||
-          !item.locationId ||
-          item.locationId.trim() === ''
-      )
-    ) {
-      setProductionError('All inventory items must have Item, Material Type, Quantity, Unit, Site, and Location');
-      return;
-    }
-    const invalidItems = itemsToReceive.filter(
+  const itemsToReceive: ReceivableItem[] = items || (useSingleItem ? [singleForm] : receiveItems);
+  if (useSingleItem) {
+    console.log('Single Item Receive:', singleForm);
+  } else {
+    console.log('Multiple Items Receive:', itemsToReceive);
+  }
+
+  if (
+    !itemsToReceive.length ||
+    itemsToReceive.some(
       (item) =>
-        (item.materialType === MaterialType.Spirits &&
-          (!item.lotNumber || !item.lotNumber.trim() || !item.proof || item.proof.trim() === '')) ||
-        (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
-        isNaN(parseFloat(item.quantity)) ||
-        parseFloat(item.quantity) <= 0 ||
-        (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
-        (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
+        !item.item ||
+        !item.materialType ||
+        !item.quantity ||
+        !item.unit ||
+        !item.siteId ||
+        !item.locationId ||
+        item.locationId.trim() === ''
+    )
+  ) {
+    setProductionError('All inventory items must have Item, Material Type, Quantity, Unit, Site, and Location');
+    return;
+  }
+  const invalidItems = itemsToReceive.filter(
+    (item) =>
+      (item.materialType === MaterialType.Spirits &&
+        (!item.lotNumber || !item.lotNumber.trim() || !item.proof || item.proof.trim() === '')) ||
+      (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
+      isNaN(parseFloat(item.quantity)) ||
+      parseFloat(item.quantity) <= 0 ||
+      (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
+      (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
+  );
+  if (invalidItems.length) {
+    setProductionError(
+      'Invalid data: Spirits need lot number and proof, Other needs description, and numeric values must be valid'
     );
-    if (invalidItems.length) {
-      setProductionError(
-        'Invalid data: Spirits need lot number and proof, Other needs description, and numeric values must be valid'
-      );
-      return;
+    return;
+  }
+  const totalOtherCost = otherCharges.reduce((sum, charge) => sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
+  const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
+
+  const inventoryItems: InventoryItem[] = itemsToReceive.map((item) => {
+    const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
+    const quantity = parseFloat(item.quantity);
+    const unitCost = totalItemCost / quantity || 0;
+    const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
+    const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
+    const identifier =
+      item.materialType === MaterialType.Spirits ? item.lotNumber || 'UNKNOWN_LOT' : item.item || 'UNKNOWN_ITEM';
+    const locationId = item.locationId && item.locationId.trim() !== '' ? parseInt(item.locationId, 10) : 1;
+    return {
+      identifier,
+      item: item.item,
+      lotNumber: item.lotNumber || '',
+      account: item.materialType === MaterialType.Spirits ? singleForm.account : Account.Storage,
+      type: item.materialType,
+      quantity: item.quantity,
+      unit: item.unit,
+      proof: item.proof || (item.materialType === MaterialType.Spirits ? '0' : undefined),
+      proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
+      receivedDate: singleForm.receivedDate,
+      source: singleForm.source || 'Unknown',
+      siteId: item.siteId || singleForm.siteId,
+      locationId,
+      status: Status.Received,
+      description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
+      cost: finalUnitCost,
+      totalCost: finalTotalCost,
+      poNumber: item.poNumber,
+    };
+  });
+
+  console.log('Payload to /api/receive:', JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems, null, 2));
+
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('handleReceive: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
     }
-    const totalOtherCost = otherCharges.reduce((sum, charge) => sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
-    const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
-  
-    const inventoryItems: InventoryItem[] = itemsToReceive.map((item) => {
-      const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
-      const quantity = parseFloat(item.quantity);
-      const unitCost = totalItemCost / quantity || 0;
-      const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
-      const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
-      const identifier =
-        item.materialType === MaterialType.Spirits ? item.lotNumber || 'UNKNOWN_LOT' : item.item || 'UNKNOWN_ITEM';
-      const locationId = item.locationId && item.locationId.trim() !== '' ? parseInt(item.locationId, 10) : 1;
-      return {
-        identifier,
-        item: item.item,
-        lotNumber: item.lotNumber || '',
-        account: item.materialType === MaterialType.Spirits ? singleForm.account : Account.Storage,
-        type: item.materialType,
-        quantity: item.quantity,
-        unit: item.unit,
-        proof: item.proof || (item.materialType === MaterialType.Spirits ? '0' : undefined),
-        proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
-        receivedDate: singleForm.receivedDate,
-        source: singleForm.source || 'Unknown',
-        siteId: item.siteId || singleForm.siteId,
-        locationId,
-        status: Status.Received,
-        description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
-        cost: finalUnitCost,
-        totalCost: finalTotalCost,
-        poNumber: item.poNumber,
-      };
+    const res = await fetch(`${API_BASE_URL}/api/receive`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems),
     });
-  
-    console.log('Payload to /api/receive:', JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems, null, 2));
-  
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/receive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems),
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      setSuccessMessage('Items received successfully!');
-      await refreshInventory();
-      setTimeout(() => {
-        setSuccessMessage(null);
-        setShowMultipleItemsModal(false);
-        setReceiveItems([]);
-        navigate('/inventory');
-      }, 1000);
-    } catch (err: any) {
-      setProductionError('Failed to receive items: ' + err.message);
-      console.error('Receive error:', err);
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
     }
-  };
+    setSuccessMessage('Items received successfully!');
+    await refreshInventory();
+    setTimeout(() => {
+      setSuccessMessage(null);
+      setShowMultipleItemsModal(false);
+      setReceiveItems([]);
+      navigate('/inventory');
+    }, 1000);
+  } catch (err: any) {
+    setProductionError('Failed to receive items: ' + err.message);
+    console.error('Receive error:', err);
+  }
+};
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
