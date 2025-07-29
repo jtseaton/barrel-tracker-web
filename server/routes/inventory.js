@@ -34,8 +34,8 @@ router.post('/receive', async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [req.body];
   const validAccounts = ['Storage', 'Processing', 'Production'];
   const validateItem = (item) => {
-    const { identifier, item, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
-    if (!identifier || !item || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
+    const { identifier, item: itemName, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
+    if (!identifier || !itemName || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
       return 'Missing required fields (identifier, item, type, quantity, unit, receivedDate, status, siteId, locationId)';
     }
     if (type === 'Spirits' && (!account || !validAccounts.includes(account) || !proof)) {
