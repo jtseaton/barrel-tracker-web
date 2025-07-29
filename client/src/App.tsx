@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Role } from './types/enums';
 import { InventoryItem, Vendor, User } from './types/interfaces';
@@ -116,7 +116,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const refreshInventory = async () => {
+  const refreshInventory = useCallback(async () => {
     try {
       const data = await fetchInventory();
       console.log('[App] fetchInventory response:', {
@@ -140,9 +140,9 @@ const AppContent: React.FC = () => {
       setInventory([]);
       throw error;
     }
-  };
+  }, []);
 
-  const refreshVendors = async () => {
+  const refreshVendors = useCallback(async () => {
     try {
       const data = await fetchVendors();
       console.log('[App] fetchVendors response:', {
@@ -155,7 +155,7 @@ const AppContent: React.FC = () => {
       console.error('[App] Fetch vendors error:', error);
       setVendors([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
