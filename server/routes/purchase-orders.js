@@ -5,39 +5,27 @@ const { transporter } = require('../services/email');
 const router = express.Router();
 
 router.get('/', (req, res) => {
-  const { supplier, page = 1, limit = 10 } = req.query;
+  const { page = 1, limit = 10 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
-
-  let countQuery = 'SELECT COUNT(*) as total FROM purchase_orders WHERE status != ?';
-  let selectQuery = 'SELECT * FROM purchase_orders WHERE status != ?';
-  const params = ['Cancelled'];
-  const countParams = [...params];
-
-  if (supplier) {
-    countQuery += ' AND supplier = ?';
-    selectQuery += ' AND supplier = ?';
-    countParams.push(supplier);
-    params.push(supplier);
-  }
-
-  selectQuery += ' LIMIT ? OFFSET ?';
-  params.push(parseInt(limit), offset);
-
-  db.get(countQuery, countParams, (err, countResult) => {
+  db.get('SELECT COUNT(*) as total FROM purchase_orders WHERE status != ?', ['Cancelled'], (err, countResult) => {
     if (err) {
       console.error('GET /api/purchase-orders: Count error:', err);
       return res.status(500).json({ error: err.message });
     }
     const totalPOs = countResult.total;
     const totalPages = Math.ceil(totalPOs / parseInt(limit));
-    db.all(selectQuery, params, (err, rows) => {
-      if (err) {
-        console.error('GET /api/purchase-orders: Fetch error:', err);
-        return res.status(500).json({ error: err.message });
+    db.all(
+      `SELECT * FROM purchase_orders WHERE status != ? LIMIT ? OFFSET ?`,
+      ['Cancelled', parseInt(limit), offset],
+      (err, rows) => {
+        if (err) {
+          console.error('GET /api/purchase-orders: Fetch error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        console.log('GET /api/purchase-orders: Success', { count: rows.length, page, limit, totalPages });
+        res.json({ purchaseOrders: rows.map(row => ({ ...row, items: JSON.parse(row.items || '[]') })), totalPages });
       }
-      console.log('GET /api/purchase-orders: Success', { count: rows.length, page, limit, totalPages, supplier });
-      res.json({ purchaseOrders: rows.map(row => ({ ...row, items: JSON.parse(row.items || '[]') })), totalPages });
-    });
+    );
   });
 });
 
