@@ -232,36 +232,60 @@ export interface Batch {
 export interface ReceiveForm {
   identifier: string;
   item: string;
-  lotNumber: string;
-  account: Account;
   materialType: MaterialType;
   quantity: string;
   unit: Unit;
+  cost: string;
+  description?: string;
+  siteId: string;
+  locationId: string;
+  account?: Account;
   proof?: string;
-  source: string;
+  source?: string;
   dspNumber?: string;
   receivedDate: string;
-  description?: string;
-  cost?: string;
   poNumber?: string;
-  siteId: string;
-  locationId?: string;
+  lotNumber?: string;
 }
 
 export interface ReceiveItem {
   identifier: string;
   item: string;
-  lotNumber: string;
   materialType: MaterialType;
   quantity: string;
   unit: Unit;
   cost: string;
-  description: string;
+  description?: string;
   siteId: string;
   locationId: string;
-  poNumber?: string;
   account?: Account;
   proof?: string;
+  poNumber?: string;
+  lotNumber?: string;
+}
+
+export interface InventoryItem {
+  identifier: string;
+  item: string;
+  account?: Account;
+  type: MaterialType;
+  quantity: string;
+  unit: Unit;
+  price?: string;
+  isKegDepositItem?: number | null;
+  proof?: string;
+  proofGallons?: string;
+  receivedDate: string;
+  source?: string;
+  dspNumber?: string;
+  siteId: string;
+  locationId?: number;
+  status: Status;
+  description?: string;
+  cost?: string;
+  totalCost?: string;
+  poNumber?: string;
+  lotNumber?: string;
 }
 
 export interface ReceivableItem {
@@ -277,30 +301,6 @@ export interface ReceivableItem {
   poNumber?: string;
   siteId: string;
   locationId?: string;
-}
-
-export interface InventoryItem {
-  identifier: string;
-  item: string;
-  lotNumber: string;
-  account: Account;
-  type: MaterialType;
-  quantity: string;
-  unit: Unit;
-  proof?: string;
-  proofGallons?: string;
-  receivedDate: string;
-  source?: string;
-  dspNumber?: string;
-  status: 'Received' | 'Stored' | 'Processing' | 'Packaged';
-  description?: string;
-  cost?: string;
-  totalCost?: string;
-  poNumber?: string;
-  siteId: string;
-  locationId?: number;
-  price?: string;
-  isKegDepositItem?: number | null;
 }
 
 export interface BatchDetailsProps {

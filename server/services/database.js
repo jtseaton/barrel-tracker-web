@@ -174,8 +174,6 @@ function initializeDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS inventory (
         identifier TEXT,
-        item TEXT,
-        lotNumber TEXT,
         account TEXT,
         type TEXT,
         quantity TEXT,
@@ -193,7 +191,9 @@ function initializeDatabase() {
         description TEXT,
         cost TEXT,
         totalCost REAL DEFAULT 0,
-        UNIQUE(identifier, type, account, siteId, locationId),
+        poNumber TEXT,
+        lotNumber TEXT,
+        UNIQUE(identifier, type, account, siteId),
         FOREIGN KEY (siteId) REFERENCES sites(siteId),
         FOREIGN KEY (locationId) REFERENCES locations(locationId)
       )

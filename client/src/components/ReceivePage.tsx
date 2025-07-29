@@ -121,17 +121,22 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     setProductionError(`Failed to fetch locations for site ${siteId}: ${err.message}`);
     setLocations([]);
     setFilteredLocations([]);
-    setIsFetchingLocations(false);
+    setIsFetchingLocations(false)
   }
 }, [API_BASE_URL, navigate]);
 
-  useEffect(() => {
-    if (locationState?.newSiteId) {
-      setSelectedSite(locationState.newSiteId);
-      setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
+  // src/components/ReceivePage.tsx (replace the useEffect around line 134-249)
+useEffect(() => {
+  if (location.state?.fromLocations || location.state?.fromSites || location.state?.newLocationId) {
+    console.log('ReceivePage useEffect: location state', location.state);
+    const locationState = location.state as { fromLocations?: boolean; fromSites?: boolean; newLocationId?: string };
+    if (locationState?.fromLocations || locationState?.fromSites) {
+      setTimeout(() => {
+        navigate(location.pathname, { replace: true, state: {} });
+      }, 0);
     }
     if (locationState?.newLocationId) {
-      setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId }));
+      setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId || '' }));
     }
 
     const fetchItems = async () => {
@@ -142,32 +147,53 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           navigate('/login');
           throw new Error('No token found in localStorage');
         }
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(`${API_BASE_URL}/api/items`, {
-          signal: controller.signal,
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
         });
-        clearTimeout(timeoutId);
         if (!res.ok) {
           const errorText = await res.text();
           throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
         }
         const data = await res.json();
         console.log('Fetched items:', data);
-        setItems(Array.isArray(data) ? data : []);
-        setFilteredItems(Array.isArray(data) ? data : []);
-        if (data.length === 0) {
-          setProductionError('No items found in database');
-        }
+        setItems(data);
+        setFilteredItems(data);
       } catch (err: any) {
-        console.error('Fetch items error:', err);
         setProductionError('Failed to fetch items: ' + err.message);
+        console.error('fetchItems error:', err);
       }
     };
+    fetchItems();
+
+    const fetchVendors = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchVendors: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
+        const res = await fetch(`${API_BASE_URL}/api/vendors`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+        }
+        const data = await res.json();
+        console.log('Fetched vendors:', data);
+        refreshVendors();
+        setFilteredVendors(data);
+      } catch (err: any) {
+        setProductionError('Failed to fetch vendors: ' + err.message);
+        console.error('fetchVendors error:', err);
+      }
+    };
+    fetchVendors();
 
     const fetchPOs = async () => {
       try {
@@ -177,72 +203,28 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           navigate('/login');
           throw new Error('No token found in localStorage');
         }
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(
-          `${API_BASE_URL}/api/purchase-orders?supplier=${encodeURIComponent(singleForm.source || '')}`,
-          {
-            signal: controller.signal,
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-        clearTimeout(timeoutId);
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-        }
-        const data = await res.json();
-        console.log('Fetched POs:', data);
-        setPurchaseOrders(Array.isArray(data) ? data : []);
-      } catch (err: any) {
-        console.error('Fetch POs error:', err);
-        setProductionError('Failed to fetch POs: ' + err.message);
-      }
-    };
-
-    const fetchSites = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('No token found in localStorage');
-        }
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/api/sites`, {
-          signal: controller.signal,
+        const encodedSource = encodeURIComponent(singleForm.source || '');
+        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
         });
-        clearTimeout(timeoutId);
         if (!res.ok) {
           const errorText = await res.text();
           throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
         }
         const data = await res.json();
-        console.log('Fetched sites:', data);
-        setSites(Array.isArray(data) ? data : []);
-        setFilteredSites(Array.isArray(data) ? data : []);
-        if (data.length === 0) {
-          setProductionError('No sites found in database');
-          setSites([{ siteId: 'DSP-AL-20010', name: 'Madison Distillery' }]);
-          setFilteredSites([{ siteId: 'DSP-AL-20010', name: 'Madison Distillery' }]);
-        }
+        console.log('Fetched purchase orders:', data);
+        setPurchaseOrders(data);
       } catch (err: any) {
-        console.error('Fetch sites error:', err);
-        setProductionError('Failed to fetch sites: ' + err.message);
+        setProductionError('Failed to fetch purchase orders: ' + err.message);
+        console.error('fetchPOs error:', err);
       }
     };
-
-    fetchSites();
-    fetchItems();
     if (singleForm.source) fetchPOs();
     setFilteredVendors(vendors);
-  }, [locationState, singleForm.source, vendors]);
+  }
+}, [location.state, singleForm.source, vendors]);
 
   useEffect(() => {
     inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
@@ -359,23 +341,30 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   const handleItemSelect = (selectedItem: Item, index?: number) => {
   const normalizedType = selectedItem.type ? selectedItem.type.charAt(0).toUpperCase() + selectedItem.type.slice(1).toLowerCase() : 'Other';
   const materialType = Object.values(MaterialType).includes(normalizedType as MaterialType) ? normalizedType as MaterialType : MaterialType.Other;
-  console.log('handleItemSelect:', { selectedItem, materialType, index });
+  const defaultUnit = materialType === MaterialType.Spirits ? Unit.Gallons : Unit.Pounds;
+  console.log('handleItemSelect:', { selectedItem, materialType, defaultUnit, index });
   if (useSingleItem || showSingleItemCloneModal) {
     setSingleForm((prev: ReceiveForm) => ({
       ...prev,
+      identifier: selectedItem.name,
       item: selectedItem.name,
       materialType,
-      lotNumber: materialType === MaterialType.Spirits ? prev.lotNumber : '',
-      proof: materialType === MaterialType.Spirits ? prev.proof : '',
+      unit: defaultUnit,
+      lotNumber: materialType === MaterialType.Spirits ? prev.lotNumber || '' : undefined,
+      proof: materialType === MaterialType.Spirits ? prev.proof || '' : undefined,
+      account: materialType === MaterialType.Spirits ? prev.account || Account.Storage : undefined,
     }));
   } else if (index !== undefined) {
     const updatedItems = [...receiveItems];
     updatedItems[index] = {
       ...updatedItems[index],
+      identifier: selectedItem.name,
       item: selectedItem.name,
       materialType,
-      lotNumber: materialType === MaterialType.Spirits ? updatedItems[index].lotNumber : '',
-      proof: materialType === MaterialType.Spirits ? updatedItems[index].proof : '',
+      unit: defaultUnit,
+      lotNumber: materialType === MaterialType.Spirits ? updatedItems[index].lotNumber || '' : undefined,
+      proof: materialType === MaterialType.Spirits ? updatedItems[index].proof || '' : undefined,
+      account: materialType === MaterialType.Spirits ? updatedItems[index].account || Account.Storage : undefined,
       locationId: updatedItems[index].locationId || '',
     };
     setReceiveItems(updatedItems);
@@ -413,123 +402,142 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   const handlePOSelect = (poNumber: string) => {
-    const po = purchaseOrders.find((p) => p.poNumber === poNumber);
-    if (!po) {
-      setProductionError('Selected PO not found');
-      return;
-    }
-    if (!po.items || po.items.length === 0) {
-      setProductionError('Selected PO has no items');
-      return;
-    }
-    setSelectedPO(poNumber);
-    const nonSpiritsItems = po.items
-      .filter((item) => item.materialType !== MaterialType.Spirits)
-      .map((item) => ({
-        identifier: item.name || 'UNKNOWN_ITEM',
-        item: item.name,
-        lotNumber: '',
-        materialType: item.materialType,
-        quantity: item.quantity.toString(),
-        unit: Unit.Pounds,
-        cost: '',
-        poNumber,
-        siteId: selectedSite,
-        locationId: '',
-        description: '',
-      }));
-    const spiritsItems = po.items.filter((item) => item.materialType === MaterialType.Spirits);
-    if (spiritsItems.length > 0) {
-      setPoItemToSplit(spiritsItems[0]);
-    } else {
-      setPoItemToSplit(null);
-    }
-    setReceiveItems(nonSpiritsItems);
-    setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
-  };
+  const po = purchaseOrders.find((p) => p.poNumber === poNumber);
+  if (!po) {
+    setProductionError('Selected PO not found');
+    return;
+  }
+  if (!po.items || po.items.length === 0) {
+    setProductionError('Selected PO has no items');
+    return;
+  }
+  setSelectedPO(poNumber);
+  const nonSpiritsItems = po.items
+    .filter((item) => item.materialType !== MaterialType.Spirits)
+    .map((item) => ({
+      identifier: item.name || 'UNKNOWN_ITEM',
+      item: item.name || 'UNKNOWN_ITEM',
+      materialType: item.materialType,
+      quantity: item.quantity.toString(),
+      unit: Unit.Pounds,
+      cost: '',
+      description: item.materialType === MaterialType.Other ? '' : undefined,
+      siteId: selectedSite,
+      locationId: '',
+      account: undefined,
+      proof: undefined,
+      poNumber: undefined,
+      lotNumber: undefined,
+    }));
+  const spiritsItems = po.items.filter((item) => item.materialType === MaterialType.Spirits);
+  if (spiritsItems.length > 0) {
+    setPoItemToSplit(spiritsItems[0]);
+  } else {
+    setPoItemToSplit(null);
+  }
+  setReceiveItems(nonSpiritsItems);
+  setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+};
 
   const handleLotSplit = () => {
-    if (!poItemToSplit) return;
-    const totalGallons = lotItems.reduce((sum, item) => sum + parseFloat(item.quantity || '0'), 0);
-    const poQuantity = parseFloat(poItemToSplit.quantity.toString());
-    if (Math.abs(totalGallons - poQuantity) > 0.01) {
-      setProductionError(`Total gallons (${totalGallons.toFixed(2)}) must match PO quantity (${poQuantity.toFixed(2)})`);
-      return;
-    }
-    setReceiveItems((prev) => [
-      ...prev,
-      ...lotItems.map((item) => ({
-        ...item,
-        materialType: MaterialType.Spirits,
-        unit: Unit.Gallons,
-        poNumber: selectedPO || undefined,
-        siteId: selectedSite,
-        locationId: item.locationId || '',
-        description: item.description || '',
-      })),
-    ]);
-    setPoItemToSplit(null);
-    setLotItems([]);
-    setProductionError(null);
-  };
+  if (!poItemToSplit) return;
+  const totalGallons = lotItems.reduce((sum, item) => sum + parseFloat(item.quantity || '0'), 0);
+  const poQuantity = parseFloat(poItemToSplit.quantity.toString());
+  if (Math.abs(totalGallons - poQuantity) > 0.01) {
+    setProductionError(`Total gallons (${totalGallons.toFixed(2)}) must match PO quantity (${poQuantity.toFixed(2)})`);
+    return;
+  }
+  setReceiveItems((prev) => [
+    ...prev,
+    ...lotItems.map((item) => ({
+      identifier: item.item || poItemToSplit.name,
+      item: item.item || poItemToSplit.name,
+      materialType: MaterialType.Spirits,
+      quantity: item.quantity,
+      unit: Unit.Gallons,
+      cost: '',
+      description: undefined,
+      siteId: selectedSite,
+      locationId: item.locationId || '',
+      account: item.account || Account.Storage,
+      proof: item.proof || '',
+      poNumber: selectedPO || undefined,
+      lotNumber: item.lotNumber || '',
+    })),
+  ]);
+  setPoItemToSplit(null);
+  setLotItems([]);
+  setProductionError(null);
+};
 
   const handleCreateItem = async () => {
-    if (!newItem) {
-      setProductionError('New item name is required');
-      return;
+  if (!newItem) {
+    setProductionError('New item name is required');
+    return;
+  }
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('handleCreateItem: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
     }
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('handleCreateItem: No token found, redirecting to login');
-        navigate('/login');
-        throw new Error('No token found in localStorage');
-      }
-      const res = await fetch(`${API_BASE_URL}/api/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name: newItem, type: newItemType }),
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const updatedItems = [...items, { name: newItem, type: newItemType, enabled: 1 }];
-      setItems(updatedItems);
-      setFilteredItems(updatedItems);
-      if (useSingleItem) {
-        setSingleForm((prev: ReceiveForm) => ({ ...prev, item: newItem, materialType: newItemType }));
-      } else {
-        setReceiveItems([...receiveItems, {
-          identifier: 'Unknown',
-          item: newItem,
-          lotNumber: '',
-          materialType: newItemType,
-          quantity: '',
-          unit: Unit.Pounds,
-          cost: '',
-          description: '',
-          siteId: selectedSite,
-          locationId: '',
-          account: newItemType === MaterialType.Spirits ? Account.Storage : undefined,
-          proof: newItemType === MaterialType.Spirits ? '' : undefined,
-        }]);
-      }
-      setNewItem('');
-      setNewItemType(MaterialType.Grain);
-      setShowNewItemModal(false);
-      setProductionError(null);
-    } catch (err: any) {
-      setProductionError('Failed to create item: ' + err.message);
-      console.error('handleCreateItem error:', err);
+    const res = await fetch(`${API_BASE_URL}/api/items`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: newItem, type: newItemType }),
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
     }
-  };
+    const updatedItems = [...items, { name: newItem, type: newItemType, enabled: 1 }];
+    setItems(updatedItems);
+    setFilteredItems(updatedItems);
+    const defaultUnit = newItemType === MaterialType.Spirits ? Unit.Gallons : Unit.Pounds;
+    if (useSingleItem) {
+      setSingleForm((prev: ReceiveForm) => ({
+        ...prev,
+        identifier: newItem,
+        item: newItem,
+        materialType: newItemType,
+        unit: defaultUnit,
+        lotNumber: newItemType === MaterialType.Spirits ? prev.lotNumber || '' : undefined,
+        proof: newItemType === MaterialType.Spirits ? prev.proof || '' : undefined,
+        account: newItemType === MaterialType.Spirits ? Account.Storage : undefined,
+      }));
+    } else {
+      setReceiveItems([...receiveItems, {
+        identifier: newItem,
+        item: newItem,
+        materialType: newItemType,
+        quantity: '',
+        unit: defaultUnit,
+        cost: '',
+        description: newItemType === MaterialType.Other ? '' : undefined,
+        siteId: selectedSite,
+        locationId: '',
+        account: newItemType === MaterialType.Spirits ? Account.Storage : undefined,
+        proof: newItemType === MaterialType.Spirits ? '' : undefined,
+        poNumber: newItemType === MaterialType.Spirits ? '' : undefined,
+        lotNumber: newItemType === MaterialType.Spirits ? '' : undefined,
+      }]);
+    }
+    setNewItem('');
+    setNewItemType(MaterialType.Grain);
+    setShowNewItemModal(false);
+    setProductionError(null);
+  } catch (err: any) {
+    setProductionError('Failed to create item: ' + err.message);
+    console.error('handleCreateItem error:', err);
+  }
+};
 
-  const handleReceive = async (items?: ReceivableItem[]) => {
-  const itemsToReceive: ReceivableItem[] = items || (useSingleItem ? [singleForm] : receiveItems);
+  const handleReceive = async (items?: ReceiveItem[]) => {
+  const itemsToReceive: ReceiveItem[] = items || (useSingleItem ? [singleForm as ReceiveItem] : receiveItems);
   if (useSingleItem) {
     console.log('Single Item Receive:', singleForm);
   } else {
@@ -540,6 +548,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     !itemsToReceive.length ||
     itemsToReceive.some(
       (item) =>
+        !item.identifier ||
         !item.item ||
         !item.materialType ||
         !item.quantity ||
@@ -549,13 +558,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         item.locationId.trim() === ''
     )
   ) {
-    setProductionError('All inventory items must have Item, Material Type, Quantity, Unit, Site, and Location');
+    setProductionError('All inventory items must have Identifier, Item, Material Type, Quantity, Unit, Site, and Location');
     return;
   }
   const invalidItems = itemsToReceive.filter(
     (item) =>
       (item.materialType === MaterialType.Spirits &&
-        (!item.lotNumber || !item.lotNumber.trim() || !item.proof || item.proof.trim() === '')) ||
+        (!item.lotNumber || !item.lotNumber.trim() || !item.proof || !item.proof.trim() || !item.account)) ||
       (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
       isNaN(parseFloat(item.quantity)) ||
       parseFloat(item.quantity) <= 0 ||
@@ -564,7 +573,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   );
   if (invalidItems.length) {
     setProductionError(
-      'Invalid data: Spirits need lot number and proof, Other needs description, and numeric values must be valid'
+      'Invalid data: Spirits need lot number, proof, and account; Other needs description; numeric values must be valid'
     );
     return;
   }
@@ -577,28 +586,27 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     const unitCost = totalItemCost / quantity || 0;
     const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
     const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
-    const identifier =
-      item.materialType === MaterialType.Spirits ? item.lotNumber || 'UNKNOWN_LOT' : item.item || 'UNKNOWN_ITEM';
-    const locationId = item.locationId && item.locationId.trim() !== '' ? parseInt(item.locationId, 10) : 1;
+    const finalAccount = item.materialType === MaterialType.Spirits ? item.account : undefined;
+    const finalStatus = ['Grain', 'Hops'].includes(item.materialType) ? Status.Stored : Status.Received;
     return {
-      identifier,
+      identifier: item.identifier,
       item: item.item,
-      lotNumber: item.lotNumber || '',
-      account: item.materialType === MaterialType.Spirits ? singleForm.account : Account.Storage,
+      account: finalAccount,
       type: item.materialType,
       quantity: item.quantity,
       unit: item.unit,
-      proof: item.proof || (item.materialType === MaterialType.Spirits ? '0' : undefined),
+      proof: item.proof,
       proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
       receivedDate: singleForm.receivedDate,
       source: singleForm.source || 'Unknown',
       siteId: item.siteId || singleForm.siteId,
-      locationId,
-      status: Status.Received,
-      description: item.description || (item.materialType === MaterialType.Other ? 'N/A' : undefined),
+      locationId: parseInt(item.locationId, 10),
+      status: finalStatus,
+      description: item.description,
       cost: finalUnitCost,
       totalCost: finalTotalCost,
       poNumber: item.poNumber,
+      lotNumber: item.lotNumber,
     };
   });
 
@@ -692,7 +700,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </button>
         </div>
 
-        {useSingleItem ? (
+       {useSingleItem ? (
   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
     <div style={{ position: 'relative' }}>
       <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
@@ -826,7 +834,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       )}
     </div>
     <div style={{ position: 'relative' }}>
-      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor (optional):</label>
       <input
         type="text"
         value={singleForm.source}
@@ -857,14 +865,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       )}
     </div>
     <div style={{ position: 'relative' }}>
-      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item:</label>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item (required):</label>
       <input
         type="text"
         value={singleForm.item}
         onChange={(e) => {
           const value = e.target.value;
           console.log('Item input change:', { value });
-          setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value }));
+          setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value, identifier: value }));
           setFilteredItems(items.filter(i => i.name.toLowerCase().includes(value.toLowerCase())));
           setActiveItemDropdownIndex(0);
         }}
@@ -907,7 +915,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Lot Number (required):</label>
         <input
           type="text"
-          value={singleForm.lotNumber}
+          value={singleForm.lotNumber || ''}
           onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, lotNumber: e.target.value }))}
           style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
         />
@@ -920,8 +928,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         onChange={(e) => setSingleForm((prev: ReceiveForm) => ({
           ...prev,
           materialType: e.target.value as MaterialType,
-          lotNumber: e.target.value === MaterialType.Spirits ? prev.lotNumber : '',
-          proof: e.target.value === MaterialType.Spirits ? prev.proof : '',
+          lotNumber: e.target.value === MaterialType.Spirits ? prev.lotNumber || '' : undefined,
+          proof: e.target.value === MaterialType.Spirits ? prev.proof || '' : undefined,
+          account: e.target.value === MaterialType.Spirits ? prev.account || Account.Storage : undefined,
+          unit: e.target.value === MaterialType.Spirits ? Unit.Gallons : Unit.Pounds,
         }))}
         style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
       >
@@ -931,7 +941,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       </select>
     </div>
     <div>
-      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity (required):</label>
       <input
         type="number"
         value={singleForm.quantity}
@@ -956,12 +966,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     {singleForm.materialType === MaterialType.Spirits && (
       <>
         <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account:</label>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account (required):</label>
           <select
-            value={singleForm.account}
+            value={singleForm.account || ''}
             onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, account: e.target.value as Account }))}
             style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
           >
+            <option value="">Select Account</option>
             <option value={Account.Storage}>Storage</option>
             <option value={Account.Processing}>Processing</option>
             <option value={Account.Production}>Production</option>
@@ -1340,7 +1351,374 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             </div>
           </div>
         )}
-        {showSingleItemCloneModal && (
+       {useSingleItem ? (
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+    <div style={{ position: 'relative' }}>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+        Site (required):
+      </label>
+      <input
+        type="text"
+        value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
+        onChange={(e) => {
+          const value = e.target.value;
+          setFilteredSites(
+            sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
+          );
+          setShowSiteSuggestions(true);
+          if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
+            setSelectedSite('');
+            setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
+            setFilteredLocations([]);
+          }
+        }}
+        onFocus={() => setShowSiteSuggestions(true)}
+        onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
+        placeholder="Type to search sites"
+        style={{
+          width: '100%',
+          padding: '10px',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          boxSizing: 'border-box',
+          fontSize: '16px',
+        }}
+      />
+      {showSiteSuggestions && (
+        <ul className="typeahead">
+          {filteredSites.map((site) => (
+            <li
+              key={site.siteId}
+              onMouseDown={() => {
+                console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+                setSelectedSite(site.siteId);
+                setSingleForm((prev) => ({ ...prev, siteId: site.siteId }));
+                setShowSiteSuggestions(false);
+              }}
+              className={selectedSite === site.siteId ? 'selected' : ''}
+            >
+              {site.name}
+            </li>
+          ))}
+          <li
+            onMouseDown={() => {
+              navigate('/sites', { state: { fromReceive: true } });
+              setShowSiteSuggestions(false);
+            }}
+            className="add-new"
+          >
+            Add New Site
+          </li>
+        </ul>
+      )}
+    </div>
+    <div style={{ position: 'relative' }}>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+        Physical Location (required):
+      </label>
+      <input
+        type="text"
+        value={
+          singleForm.locationId
+            ? locations.find((loc) => loc.locationId.toString() === singleForm.locationId)?.name || ''
+            : ''
+        }
+        onChange={(e) => {
+          const value = e.target.value;
+          console.log('Location input change:', { value, locations, singleFormLocationId: singleForm.locationId });
+          setSingleForm((prev: ReceiveForm) => ({ ...prev, locationId: '' }));
+          setFilteredLocations(
+            locations.filter((loc) =>
+              loc.name.toLowerCase().includes(value.toLowerCase())
+            )
+          );
+          setShowLocationSuggestions(true);
+        }}
+        onFocus={() => {
+          console.log('Location input focus:', { isFetchingLocations, locations, selectedSite, singleForm });
+          if (!isFetchingLocations && locations.length > 0) {
+            setShowLocationSuggestions(true);
+            setFilteredLocations(locations);
+          }
+        }}
+        onBlur={() => {
+          setTimeout(() => {
+            setShowLocationSuggestions(false);
+          }, 300);
+        }}
+        placeholder={isFetchingLocations ? 'Loading locations...' : 'Type to search locations'}
+        disabled={isFetchingLocations || !selectedSite}
+        style={{
+          width: '100%',
+          padding: '10px',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          boxSizing: 'border-box',
+          fontSize: '16px',
+          backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
+        }}
+      />
+      {showLocationSuggestions && !isFetchingLocations && (
+        <ul className="typeahead">
+          {filteredLocations.length > 0 ? (
+            filteredLocations.map((location) => (
+              <li
+                key={location.locationId}
+                onMouseDown={() => handleLocationSelect(location)}
+                className={singleForm.locationId === location.locationId.toString() ? 'selected' : ''}
+              >
+                {location.name}
+              </li>
+            ))
+          ) : (
+            <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+              No locations found
+            </li>
+          )}
+          <li
+            onMouseDown={() => handleAddNewLocation()}
+            className="add-new"
+          >
+            Add New Location
+          </li>
+        </ul>
+      )}
+    </div>
+    <div style={{ position: 'relative' }}>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor (optional):</label>
+      <input
+        type="text"
+        value={singleForm.source}
+        onChange={handleVendorInputChange}
+        placeholder="Type to search vendors"
+        onFocus={() => setShowVendorSuggestions(true)}
+        onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+      />
+      {showVendorSuggestions && (
+        <ul className="typeahead">
+          {filteredVendors.map((vendor) => (
+            <li
+              key={vendor.name}
+              onMouseDown={(e) => { e.preventDefault(); handleVendorSelect(vendor); }}
+              className={singleForm.source === vendor.name ? 'selected' : ''}
+            >
+              {vendor.name}
+            </li>
+          ))}
+          <li
+            onMouseDown={(e) => { e.preventDefault(); navigate('/vendors/new', { state: { fromReceive: true } }); setShowVendorSuggestions(false); }}
+            className="add-new"
+          >
+            Add New Vendor
+          </li>
+        </ul>
+      )}
+    </div>
+    <div style={{ position: 'relative' }}>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item (required):</label>
+      <input
+        type="text"
+        value={singleForm.item}
+        onChange={(e) => {
+          const value = e.target.value;
+          console.log('Item input change:', { value });
+          setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value, identifier: value }));
+          setFilteredItems(items.filter(i => i.name.toLowerCase().includes(value.toLowerCase())));
+          setActiveItemDropdownIndex(0);
+        }}
+        onFocus={() => {
+          setActiveItemDropdownIndex(0);
+          setFilteredItems(items);
+        }}
+        onBlur={() => setTimeout(() => setActiveItemDropdownIndex(null), 300)}
+        placeholder="Type to search items"
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+      />
+      {activeItemDropdownIndex === 0 && (
+        <ul className="typeahead">
+          {filteredItems.length > 0 ? (
+            filteredItems.map(item => (
+              <li
+                key={item.name}
+                onMouseDown={() => handleItemSelect(item)}
+                className={singleForm.item === item.name ? 'selected' : ''}
+              >
+                {item.name}
+              </li>
+            ))
+          ) : (
+            <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+              No items found
+            </li>
+          )}
+          <li
+            onMouseDown={() => setShowNewItemModal(true)}
+            className="add-new"
+          >
+            Add New Item
+          </li>
+        </ul>
+      )}
+    </div>
+    {singleForm.materialType === MaterialType.Spirits && (
+      <div>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Lot Number (required):</label>
+        <input
+          type="text"
+          value={singleForm.lotNumber || ''}
+          onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, lotNumber: e.target.value }))}
+          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+        />
+      </div>
+    )}
+    <div>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Material Type:</label>
+      <select
+        value={singleForm.materialType}
+        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({
+          ...prev,
+          materialType: e.target.value as MaterialType,
+          lotNumber: e.target.value === MaterialType.Spirits ? prev.lotNumber || '' : undefined,
+          proof: e.target.value === MaterialType.Spirits ? prev.proof || '' : undefined,
+          account: e.target.value === MaterialType.Spirits ? prev.account || Account.Storage : undefined,
+          unit: e.target.value === MaterialType.Spirits ? Unit.Gallons : Unit.Pounds,
+        }))}
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+      >
+        {Object.values(MaterialType).map(type => (
+          <option key={type} value={type}>{type}</option>
+        ))}
+      </select>
+    </div>
+    <div>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity (required):</label>
+      <input
+        type="number"
+        value={singleForm.quantity}
+        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, quantity: e.target.value }))}
+        step="0.01"
+        min="0"
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+      />
+    </div>
+    <div>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Unit:</label>
+      <select
+        value={singleForm.unit}
+        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, unit: e.target.value as Unit }))}
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+      >
+        {Object.values(Unit).map(unit => (
+          <option key={unit} value={unit}>{unit}</option>
+        ))}
+      </select>
+    </div>
+    {singleForm.materialType === MaterialType.Spirits && (
+      <>
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account (required):</label>
+          <select
+            value={singleForm.account || ''}
+            onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, account: e.target.value as Account }))}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+          >
+            <option value="">Select Account</option>
+            <option value={Account.Storage}>Storage</option>
+            <option value={Account.Processing}>Processing</option>
+            <option value={Account.Production}>Production</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Proof (required):</label>
+          <input
+            type="number"
+            value={singleForm.proof || ''}
+            onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, proof: e.target.value }))}
+            step="0.01"
+            min="0"
+            max="200"
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+          />
+        </div>
+      </>
+    )}
+    {singleForm.materialType === MaterialType.Other && (
+      <div style={{ gridColumn: 'span 2' }}>
+        <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Description (required):</label>
+        <input
+          type="text"
+          value={singleForm.description || ''}
+          onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, description: e.target.value }))}
+          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+        />
+      </div>
+    )}
+    <div>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Received Date:</label>
+      <input
+        type="date"
+        value={singleForm.receivedDate}
+        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, receivedDate: e.target.value }))}
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+      />
+    </div>
+    <div>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Cost:</label>
+      <input
+        type="number"
+        value={singleForm.cost || ''}
+        onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, cost: e.target.value }))}
+        step="0.01"
+        min="0"
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+      />
+    </div>
+    <div style={{ gridColumn: 'span 2' }}>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>PO Number (optional):</label>
+      <select
+        value={singleForm.poNumber || ''}
+        onChange={(e) => {
+          const poNumber = e.target.value;
+          setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
+          if (poNumber) handlePOSelect(poNumber);
+        }}
+        style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+      >
+        <option value="">Select PO (optional)</option>
+        {purchaseOrders.map(po => (
+          <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
+        ))}
+      </select>
+    </div>
+    <div style={{ gridColumn: 'span 2', textAlign: 'center' }}>
+      <button
+        onClick={() => handleReceive([singleForm as ReceiveItem])}
+        style={{
+          backgroundColor: '#2196F3',
+          color: '#fff',
+          padding: '12px 24px',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontSize: '16px',
+          width: '100%',
+          maxWidth: '300px',
+          transition: 'background-color 0.3s',
+        }}
+        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+      >
+        Receive Item
+      </button>
+    </div>
+  </div>
+) : (
+  <div />
+)}
+
+// Update showSingleItemCloneModal (for completeness)
+{showSingleItemCloneModal && (
   <div
     style={{
       position: 'fixed',
@@ -1502,7 +1880,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor:</label>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor (optional):</label>
           <input
             type="text"
             value={singleForm.source}
@@ -1533,14 +1911,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item:</label>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Item (required):</label>
           <input
             type="text"
             value={singleForm.item}
             onChange={(e) => {
               const value = e.target.value;
               console.log('Item input change:', { value });
-              setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value }));
+              setSingleForm((prev: ReceiveForm) => ({ ...prev, item: value, identifier: value }));
               setFilteredItems(items.filter(i => i.name.toLowerCase().includes(value.toLowerCase())));
               setActiveItemDropdownIndex(0);
             }}
@@ -1583,7 +1961,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Lot Number (required):</label>
             <input
               type="text"
-              value={singleForm.lotNumber}
+              value={singleForm.lotNumber || ''}
               onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, lotNumber: e.target.value }))}
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
             />
@@ -1596,8 +1974,10 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
             onChange={(e) => setSingleForm((prev: ReceiveForm) => ({
               ...prev,
               materialType: e.target.value as MaterialType,
-              lotNumber: e.target.value === MaterialType.Spirits ? prev.lotNumber : '',
-              proof: e.target.value === MaterialType.Spirits ? prev.proof : '',
+              lotNumber: e.target.value === MaterialType.Spirits ? prev.lotNumber || '' : undefined,
+              proof: e.target.value === MaterialType.Spirits ? prev.proof || '' : undefined,
+              account: e.target.value === MaterialType.Spirits ? prev.account || Account.Storage : undefined,
+              unit: e.target.value === MaterialType.Spirits ? Unit.Gallons : Unit.Pounds,
             }))}
             style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
           >
@@ -1607,7 +1987,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
           </select>
         </div>
         <div>
-          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity:</label>
+          <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Quantity (required):</label>
           <input
             type="number"
             value={singleForm.quantity}
@@ -1632,12 +2012,13 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         {singleForm.materialType === MaterialType.Spirits && (
           <>
             <div>
-              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account:</label>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Account (required):</label>
               <select
-                value={singleForm.account}
+                value={singleForm.account || ''}
                 onChange={(e) => setSingleForm((prev: ReceiveForm) => ({ ...prev, account: e.target.value as Account }))}
                 style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
               >
+                <option value="">Select Account</option>
                 <option value={Account.Storage}>Storage</option>
                 <option value={Account.Processing}>Processing</option>
                 <option value={Account.Production}>Production</option>
@@ -1722,9 +2103,9 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               }
               if (
                 singleForm.materialType === MaterialType.Spirits &&
-                (!singleForm.lotNumber || !singleForm.proof)
+                (!singleForm.lotNumber || !singleForm.proof || !singleForm.account)
               ) {
-                setProductionError('Spirits require Lot Number and Proof');
+                setProductionError('Spirits require Lot Number, Proof, and Account');
                 return;
               }
               if (
@@ -1761,17 +2142,18 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               }
               const newItem: ReceiveItem = {
                 identifier: singleForm.identifier || 'UNKNOWN_ITEM',
-                item: singleForm.item,
-                lotNumber: singleForm.lotNumber || '',
+                item: singleForm.item || 'UNKNOWN_ITEM',
                 materialType: singleForm.materialType,
                 quantity: singleForm.quantity,
                 unit: singleForm.unit,
                 cost: singleForm.cost || '0',
-                description: singleForm.description || '',
+                description: singleForm.description,
                 siteId: singleForm.siteId,
                 locationId: singleForm.locationId,
-                account: singleForm.account || Account.Storage,
-                proof: singleForm.proof || '',
+                account: singleForm.materialType === MaterialType.Spirits ? singleForm.account : undefined,
+                proof: singleForm.materialType === MaterialType.Spirits ? singleForm.proof : undefined,
+                poNumber: singleForm.materialType === MaterialType.Spirits ? singleForm.poNumber : undefined,
+                lotNumber: singleForm.materialType === MaterialType.Spirits ? singleForm.lotNumber : undefined,
               };
               setReceiveItems((prev) => {
                 const updatedItems = [...prev, newItem];
@@ -1781,20 +2163,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               setSingleForm({
                 identifier: '',
                 item: '',
-                lotNumber: '',
                 materialType: MaterialType.Grain,
                 quantity: '',
                 unit: Unit.Pounds,
                 cost: '',
-                description: '',
+                description: undefined,
                 siteId: selectedSite || 'DSP-AL-20010',
                 locationId: '',
-                account: Account.Storage,
-                proof: '',
+                account: undefined,
+                proof: undefined,
                 source: singleForm.source || '',
-                dspNumber: '',
+                dspNumber: undefined,
                 receivedDate: singleForm.receivedDate,
-                poNumber: singleForm.poNumber || '',
+                poNumber: undefined,
+                lotNumber: undefined,
               });
               setShowSingleItemCloneModal(false);
               setProductionError(null);
@@ -1824,20 +2206,20 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
               setSingleForm({
                 identifier: '',
                 item: '',
-                lotNumber: '',
                 materialType: MaterialType.Grain,
                 quantity: '',
                 unit: Unit.Pounds,
                 cost: '',
-                description: '',
+                description: undefined,
                 siteId: selectedSite || 'DSP-AL-20010',
                 locationId: '',
-                account: Account.Storage,
-                proof: '',
+                account: undefined,
+                proof: undefined,
                 source: singleForm.source || '',
-                dspNumber: '',
+                dspNumber: undefined,
                 receivedDate: singleForm.receivedDate,
-                poNumber: singleForm.poNumber || '',
+                poNumber: undefined,
+                lotNumber: undefined,
               });
               setShowSiteSuggestions(false);
               setShowLocationSuggestions(false);
@@ -1864,190 +2246,191 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     </div>
   </div>
 )}
-        {showNewItemModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
-              <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>Create New Item</h3>
-              <input
-                type="text"
-                value={newItem}
-                onChange={(e) => setNewItem(e.target.value)}
-                placeholder="Item Name"
-                style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-              />
-              <select
-                value={newItemType}
-                onChange={(e) => setNewItemType(e.target.value as MaterialType)}
-                style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
-              >
-                {Object.values(MaterialType).map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button
-                  onClick={handleCreateItem}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    transition: 'background-color 0.3s',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-                >
-                  Create
-                </button>
-                <button
-                  onClick={() => setShowNewItemModal(false)}
-                  style={{
-                    backgroundColor: '#F86752',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    transition: 'background-color 0.3s',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {poItemToSplit && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
-              <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>Split Spirits into Lots</h3>
-              <p style={{ textAlign: 'center', marginBottom: '15px' }}>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>
-              {lotItems.map((lot, index) => (
-                <div key={`lot-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
-                  <input
-                    type="text"
-                    value={lot.lotNumber}
-                    onChange={(e) => {
-                      const updatedLots = [...lotItems];
-                      updatedLots[index].lotNumber = e.target.value;
-                      setLotItems(updatedLots);
-                    }}
-                    placeholder="Lot Number"
-                    style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                  />
-                  <input
-                    type="number"
-                    value={lot.quantity}
-                    onChange={(e) => {
-                      const updatedLots = [...lotItems];
-                      updatedLots[index].quantity = e.target.value;
-                      setLotItems(updatedLots);
-                    }}
-                    placeholder="Gallons"
-                    step="0.01"
-                    min="0"
-                    style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
-                  />
-                  <button
-                    onClick={() => setLotItems(lotItems.filter((_, i) => i !== index))}
-                    style={{
-                      backgroundColor: '#F86752',
-                      color: '#fff',
-                      padding: '8px 16px',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      transition: 'background-color 0.3s',
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setLotItems([...lotItems, {
-                  identifier: '',
-                  item: poItemToSplit.name,
-                  lotNumber: '',
-                  quantity: '',
-                  materialType: MaterialType.Spirits,
-                  unit: Unit.Gallons,
-                  cost: '',
-                  description: '',
-                  siteId: selectedSite,
-                  locationId: '',
-                  account: Account.Storage,
-                  proof: '',
-                }])}
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  display: 'block',
-                  margin: '15px auto 0',
-                  transition: 'background-color 0.3s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-              >
-                Add Lot
-              </button>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-                <button
-                  onClick={handleLotSplit}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    transition: 'background-color 0.3s',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
-                >
-                  Save Lots
-                </button>
-                <button
-                  onClick={() => {
-                    setPoItemToSplit(null);
-                    setLotItems([]);
-                  }}
-                  style={{
-                    backgroundColor: '#F86752',
-                    color: '#fff',
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    transition: 'background-color 0.3s',
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
-                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+{showNewItemModal && (
+  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
+      <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>Create New Item</h3>
+      <input
+        type="text"
+        value={newItem}
+        onChange={(e) => setNewItem(e.target.value)}
+        placeholder="Item Name"
+        style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+      />
+      <select
+        value={newItemType}
+        onChange={(e) => setNewItemType(e.target.value as MaterialType)}
+        style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+      >
+        {Object.values(MaterialType).map(type => (
+          <option key={type} value={type}>{type}</option>
+        ))}
+      </select>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <button
+          onClick={handleCreateItem}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+        >
+          Create
+        </button>
+        <button
+          onClick={() => setShowNewItemModal(false)}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{poItemToSplit && (
+  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>
+      <h3 style={{ color: '#555', marginBottom: '20px', textAlign: 'center' }}>Split Spirits into Lots</h3>
+      <p style={{ textAlign: 'center', marginBottom: '15px' }}>Split {poItemToSplit.name} ({poItemToSplit.quantity} gallons) into individual lots:</p>
+      {lotItems.map((lot, index) => (
+        <div key={`lot-${index}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.5fr', gap: '10px', marginBottom: '10px' }}>
+          <input
+            type="text"
+            value={lot.lotNumber}
+            onChange={(e) => {
+              const updatedLots = [...lotItems];
+              updatedLots[index].lotNumber = e.target.value;
+              setLotItems(updatedLots);
+            }}
+            placeholder="Lot Number"
+            style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+          />
+          <input
+            type="number"
+            value={lot.quantity}
+            onChange={(e) => {
+              const updatedLots = [...lotItems];
+              updatedLots[index].quantity = e.target.value;
+              setLotItems(updatedLots);
+            }}
+            placeholder="Gallons"
+            step="0.01"
+            min="0"
+            style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+          />
+          <button
+            onClick={() => setLotItems(lotItems.filter((_, i) => i !== index))}
+            style={{
+              backgroundColor: '#F86752',
+              color: '#fff',
+              padding: '8px 16px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'background-color 0.3s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => setLotItems([...lotItems, {
+          identifier: '',
+          item: poItemToSplit.name,
+          lotNumber: '',
+          quantity: '',
+          materialType: MaterialType.Spirits,
+          unit: Unit.Gallons,
+          cost: '',
+          description: undefined,
+          siteId: selectedSite,
+          locationId: '',
+          account: Account.Storage,
+          proof: '',
+          poNumber: selectedPO || undefined,
+        }])}
+        style={{
+          backgroundColor: '#2196F3',
+          color: '#fff',
+          padding: '10px 20px',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontSize: '16px',
+          display: 'block',
+          margin: '15px auto 0',
+          transition: 'background-color 0.3s',
+        }}
+        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+      >
+        Add Lot
+      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+        <button
+          onClick={handleLotSplit}
+          style={{
+            backgroundColor: '#2196F3',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1976D2')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2196F3')}
+        >
+          Save Lots
+        </button>
+        <button
+          onClick={() => {
+            setPoItemToSplit(null);
+            setLotItems([]);
+          }}
+          style={{
+            backgroundColor: '#F86752',
+            color: '#fff',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'background-color 0.3s',
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D32F2F')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F86752')}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       </div>
     </div>
   );
