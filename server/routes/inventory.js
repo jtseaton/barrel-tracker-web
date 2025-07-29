@@ -141,6 +141,81 @@ router.post('/receive', async (req, res) => {
   }
 });
 
+// New POST /api/move route
+router.post('/move', async (req, res) => {
+  const { identifier, toAccount, proofGallons } = req.body;
+  console.log('POST /api/move: Received payload', { identifier, toAccount, proofGallons });
+
+  // Validate request body
+  if (!identifier || !toAccount || !proofGallons) {
+    console.error('POST /api/move: Missing required fields', { identifier, toAccount, proofGallons });
+    return res.status(400).json({ error: 'Missing required fields: identifier, toAccount, proofGallons' });
+  }
+
+  const validAccounts = ['Storage', 'Processing', 'Production'];
+  if (!validAccounts.includes(toAccount)) {
+    console.error('POST /api/move: Invalid toAccount', { toAccount, validAccounts });
+    return res.status(400).json({ error: `Invalid toAccount: must be one of ${validAccounts.join(', ')}` });
+  }
+
+  const parsedProofGallons = parseFloat(proofGallons);
+  if (isNaN(parsedProofGallons) || parsedProofGallons <= 0) {
+    console.error('POST /api/move: Invalid proofGallons', { proofGallons });
+    return res.status(400).json({ error: 'proofGallons must be a positive number' });
+  }
+
+  try {
+    // Start transaction
+    await new Promise((resolve, reject) => {
+      db.run('BEGIN TRANSACTION', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    // Verify item exists
+    const item = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM inventory WHERE identifier = ? AND type = ?', [identifier, 'Spirits'], (err, row) => {
+        if (err) reject(err);
+        resolve(row);
+      });
+    });
+
+    if (!item) {
+      await new Promise((resolve) => db.run('ROLLBACK', resolve));
+      console.error('POST /api/move: Item not found or not Spirits', { identifier });
+      return res.status(404).json({ error: `Item with identifier ${identifier} not found or not of type Spirits` });
+    }
+
+    // Update inventory item
+    await new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE inventory SET account = ?, proofGallons = ? WHERE identifier = ?',
+        [toAccount, parsedProofGallons, identifier],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+
+    // Commit transaction
+    await new Promise((resolve, reject) => {
+      db.run('COMMIT', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    console.log('POST /api/move: Success', { identifier, toAccount, proofGallons: parsedProofGallons });
+    res.json({ message: 'Item moved successfully' });
+  } catch (err) {
+    console.error('POST /api/move: Error:', err);
+    await new Promise((resolve) => db.run('ROLLBACK', resolve));
+    res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
+});
+
 router.post('/loss', (req, res) => {
   const { identifier, quantityLost, reason, date, siteId, locationId } = req.body;
   if (!identifier || !quantityLost || !reason || !siteId) {
