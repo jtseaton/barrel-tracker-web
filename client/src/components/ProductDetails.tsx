@@ -244,13 +244,17 @@ const ProductDetails: React.FC = () => {
     const headers = getAuthHeaders();
     if (!headers) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/package-types`, { headers });
+      const res = await fetch(`${API_BASE_URL}/api/product-package-types`, { headers });
       if (!res.ok) {
         const text = await res.text();
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
           throw new Error('Unauthorized');
+        }
+        if (res.status === 404) {
+          console.error('[ProductDetails] Package types endpoint not found');
+          throw new Error('Package types endpoint not found: HTTP 404');
         }
         throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
       }
@@ -259,7 +263,7 @@ const ProductDetails: React.FC = () => {
       setAvailablePackageTypes(data);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch package types error:', err);
-      setError('Failed to fetch package types: ' + err.message);
+      setError(`Failed to fetch package types: ${err.message}`);
     }
   }, [getAuthHeaders, navigate]);
 
@@ -320,7 +324,7 @@ const ProductDetails: React.FC = () => {
           navigate('/login');
           throw new Error('Unauthorized');
         }
-        throw new Error(`Failed to save product: HTTP ${res.status}, ${text.slice(0, 50)}`);
+        throw new Error(`Failed to save product: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const savedProduct = await res.json();
       console.log('[ProductDetails] Saved product:', savedProduct);
@@ -340,7 +344,7 @@ const ProductDetails: React.FC = () => {
             navigate('/login');
             throw new Error('Unauthorized');
           }
-          throw new Error(`Failed to create item ${itemName}: HTTP ${itemRes.status}, ${text.slice(0, 50)}`);
+          throw new Error(`Failed to create item ${itemName}: HTTP ${itemRes.status}, Response: ${text.slice(0, 50)}`);
         }
       }
 
@@ -352,7 +356,7 @@ const ProductDetails: React.FC = () => {
       setError(null);
     } catch (err: any) {
       console.error('[ProductDetails] Save error:', err);
-      setError('Failed to save product: ' + err.message);
+      setError(`Failed to save product: ${err.message}`);
     }
   }, [product, packageTypes, id, getAuthHeaders, navigate]);
 
@@ -372,7 +376,7 @@ const ProductDetails: React.FC = () => {
           navigate('/login');
           throw new Error('Unauthorized');
         }
-        throw new Error(`Add recipe error: HTTP ${res.status}, ${text.slice(0, 50)}`);
+        throw new Error(`Add recipe error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const addedRecipe = await res.json();
       console.log('[ProductDetails] Added recipe:', addedRecipe);
@@ -381,7 +385,7 @@ const ProductDetails: React.FC = () => {
       setError(null);
     } catch (err: any) {
       console.error('[ProductDetails] Add recipe error:', err);
-      setError('Failed to add recipe: ' + err.message);
+      setError(`Failed to add recipe: ${err.message}`);
     }
   }, [recipes, getAuthHeaders, navigate]);
 
