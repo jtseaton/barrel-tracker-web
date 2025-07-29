@@ -254,21 +254,22 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   }, [fetchSites, navigate, refreshVendors, singleForm.source, vendors]);
 
   useEffect(() => {
-    console.log('ReceivePage useEffect: Handling navigation state', location.state);
-    const locationState = location.state as { fromLocations?: boolean; fromSites?: boolean; newLocationId?: string; newSiteId?: string };
-    if (locationState?.fromLocations || locationState?.fromSites) {
-      setTimeout(() => {
-        navigate(location.pathname, { replace: true, state: {} });
-      }, 0);
-    }
-    if (locationState?.newLocationId) {
-      setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId || '' }));
-    }
-    if (locationState?.newSiteId) {
-      setSelectedSite(locationState.newSiteId);
-      setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
-    }
-  }, [location.state, navigate]);
+  console.log('ReceivePage useEffect: Handling navigation state', location.state);
+  const locationState = location.state as { fromLocations?: boolean; fromSites?: boolean; newLocationId?: string; newSiteId?: string };
+  if (locationState?.fromLocations || locationState?.fromSites) {
+    setTimeout(() => {
+      navigate(location.pathname, { replace: true, state: {} });
+    }, 0);
+  }
+  if (locationState?.newLocationId && !singleForm.locationId) {
+    setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId || '' }));
+  }
+  if (locationState?.newSiteId && !selectedSite) {
+    setSelectedSite(locationState.newSiteId);
+    setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
+    fetchLocations(locationState.newSiteId);
+  }
+}, [location.state, navigate, selectedSite, singleForm.locationId, fetchLocations]);
 
   useEffect(() => {
     inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
@@ -296,14 +297,15 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   }, [activeSiteDropdownIndex]);
 
   useEffect(() => {
-    setSingleForm((prev) => {
-      if (prev.siteId !== selectedSite) {
-        console.log('Syncing singleForm.siteId with selectedSite:', selectedSite);
-        return { ...prev, siteId: selectedSite, locationId: '' };
-      }
-      return prev;
-    });
-  }, [selectedSite]);
+  console.log('Syncing singleForm.siteId with selectedSite:', { selectedSite, currentSiteId: singleForm.siteId });
+  setSingleForm((prev) => {
+    if (prev.siteId !== selectedSite) {
+      console.log('Updating singleForm.siteId to:', selectedSite);
+      return { ...prev, siteId: selectedSite, locationId: '' };
+    }
+    return prev;
+  });
+}, [selectedSite, singleForm.siteId]);
 
   useEffect(() => {
     if (
@@ -744,66 +746,67 @@ return (
       </div>
 
       {useSingleItem && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <div style={{ position: 'relative' }}>
-            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-              Site (required):
-            </label>
-            <input
-              type="text"
-              value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                setFilteredSites(
-                  sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
-                );
-                setShowSiteSuggestions(true);
-                if (!sites.find((s) => s.name.toLowerCase() === value.toLowerCase())) {
-                  setSelectedSite('');
-                  setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
-                  setFilteredLocations([]);
-                }
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+    <div style={{ position: 'relative' }}>
+      <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+        Site (required):
+      </label>
+      <input
+        type="text"
+        value={sites.find((s) => s.siteId === selectedSite)?.name || singleForm.siteId}
+        onChange={(e) => {
+          const value = e.target.value;
+          setFilteredSites(
+            sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
+          );
+          setShowSiteSuggestions(true);
+          if (value === '') {
+            setSelectedSite('');
+            setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
+            setFilteredLocations([]);
+          }
+        }}
+        onFocus={() => setShowSiteSuggestions(true)}
+        onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
+        placeholder="Type to search sites"
+        style={{
+          width: '100%',
+          padding: '10px',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          boxSizing: 'border-box',
+          fontSize: '16px',
+        }}
+      />
+      {showSiteSuggestions && (
+        <ul className="typeahead">
+          {filteredSites.map((site) => (
+            <li
+              key={site.siteId}
+              onMouseDown={() => {
+                console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+                setSelectedSite(site.siteId);
+                setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
+                setShowSiteSuggestions(false);
+                fetchLocations(site.siteId);
               }}
-              onFocus={() => setShowSiteSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
-              placeholder="Type to search sites"
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                boxSizing: 'border-box',
-                fontSize: '16px',
-              }}
-            />
-            {showSiteSuggestions && (
-              <ul className="typeahead">
-                {filteredSites.map((site) => (
-                  <li
-                    key={site.siteId}
-                    onMouseDown={() => {
-                      console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
-                      setSelectedSite(site.siteId);
-                      setSingleForm((prev) => ({ ...prev, siteId: site.siteId }));
-                      setShowSiteSuggestions(false);
-                    }}
-                    className={selectedSite === site.siteId ? 'selected' : ''}
-                  >
-                    {site.name}
-                  </li>
-                ))}
-                <li
-                  onMouseDown={() => {
-                    navigate('/sites', { state: { fromReceive: true } });
-                    setShowSiteSuggestions(false);
-                  }}
-                  className="add-new"
-                >
-                  Add New Site
-                </li>
-              </ul>
-            )}
-          </div>
+              className={selectedSite === site.siteId ? 'selected' : ''}
+            >
+              {site.name}
+            </li>
+          ))}
+          <li
+            onMouseDown={() => {
+              navigate('/sites', { state: { fromReceive: true } });
+              setShowSiteSuggestions(false);
+            }}
+            className="add-new"
+          >
+            Add New Site
+          </li>
+        </ul>
+      )}
+    </div>
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
               Physical Location (required):
