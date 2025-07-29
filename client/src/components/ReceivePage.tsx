@@ -232,7 +232,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     fetchVendors();
   }, [fetchSites, navigate]);
 
-const fetchPOs = async (source: string) => {
+// Update fetchPOs to allow undefined source with a default
+const fetchPOs = async (source: string, signal: AbortSignal) => {
   try {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -245,6 +246,7 @@ const fetchPOs = async (source: string) => {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal,
     });
     if (!res.ok) {
       const errorText = await res.text();
@@ -255,21 +257,37 @@ const fetchPOs = async (source: string) => {
     console.log('Fetched purchase orders:', data);
     setPurchaseOrders(data);
   } catch (err: any) {
+    if (err.name === 'AbortError') {
+      console.log('fetchPOs aborted due to component unmount');
+      return;
+    }
     console.error('fetchPOs error:', err);
-    setPurchaseOrders([]); // Ensure this doesn't trigger a loop
+    setPurchaseOrders([]);
     if (!err.message.includes('no table exist')) {
       setProductionError('Failed to fetch purchase orders: ' + err.message);
     }
   }
 };
 
+// Update useEffect with type assertion
 useEffect(() => {
+  const abortController = new AbortController();
+  let timeoutId: NodeJS.Timeout | null = null;
+
   if (singleForm.source) {
-    console.log('Fetching POs for source:', singleForm.source);
-    fetchPOs(singleForm.source);
+    console.log('Scheduling fetchPOs for source:', singleForm.source);
+    timeoutId = setTimeout(() => {
+      fetchPOs(singleForm.source!, abortController.signal); // Type assertion with ! since we checked source
+    }, 100);
   } else {
-    setPurchaseOrders([]); // Clear POs when no vendor is selected
+    setPurchaseOrders([]);
   }
+
+  return () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    abortController.abort();
+    console.log('Cleaned up fetchPOs useEffect');
+  };
 }, [singleForm.source, navigate]);
 
   useEffect(() => {
@@ -398,10 +416,14 @@ useEffect(() => {
 
   const handleVendorSelect = (vendor: Vendor) => {
   console.log('Selecting vendor:', vendor.name, 'Current site:', selectedSite, 'Current form:', singleForm);
-  setSingleForm((prev: ReceiveForm) => ({ ...prev, source: vendor.name, poNumber: '' })); // Reset poNumber
+  setSingleForm((prev: ReceiveForm) => {
+    if (prev.source !== vendor.name) {
+      return { ...prev, source: vendor.name, poNumber: '' }; // Only update if source changed
+    }
+    return prev;
+  });
   setShowVendorSuggestions(false);
-  setPurchaseOrders([]); // Clear POs immediately to avoid stale data
-};
+  };
 
   const handleItemSelect = (selectedItem: Item, index?: number) => {
     const normalizedType = selectedItem.type ? selectedItem.type.charAt(0).toUpperCase() + selectedItem.type.slice(1).toLowerCase() : 'Other';
