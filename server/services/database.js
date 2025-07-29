@@ -189,6 +189,20 @@ function initializeDatabase() {
         else console.log('Recipe Ingredients table created');
       });
       db.run(`
+        CREATE TABLE IF NOT EXISTS product_package_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          productId INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          price TEXT NOT NULL,
+          isKegDepositItem INTEGER NOT NULL,
+          FOREIGN KEY (productId) REFERENCES products(id),
+          UNIQUE(productId, type)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating product_package_types table:', err);
+        else console.log('Product Package Types table created');
+      });
+      db.run(`
         CREATE TABLE IF NOT EXISTS facility_designs (
           facilityDesignId INTEGER PRIMARY KEY AUTOINCREMENT,
           siteId TEXT,
