@@ -156,19 +156,30 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
   };
 
   const handleMove = async () => {
-    if (!moveForm.identifier || !moveForm.proofGallons) {
-      setProductionError('Please fill in Identifier and Proof Gallons.');
+    if (!moveForm.identifier || !moveForm.toAccount || !moveForm.proofGallons) {
+      setProductionError('Please fill in Identifier, To Account, and Proof Gallons.');
+      return;
+    }
+    const parsedProofGallons = parseFloat(moveForm.proofGallons);
+    if (isNaN(parsedProofGallons) || parsedProofGallons <= 0) {
+      setProductionError('Proof Gallons must be a positive number.');
       return;
     }
     try {
       console.log('[Inventory] Moving item:', moveForm);
-      const res = await fetch(`${API_BASE_URL}/api/move`, {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('[Inventory] No token found, redirecting to login');
+        navigate('/login');
+        throw new Error('No token found in localStorage');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/inventory/move`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ ...moveForm, proofGallons: parseFloat(moveForm.proofGallons) }),
+        body: JSON.stringify({ ...moveForm, proofGallons: parsedProofGallons }),
       });
       if (!res.ok) {
         const text = await res.text();
