@@ -65,7 +65,7 @@ router.post('/receive', async (req, res) => {
     });
     for (const item of items) {
       const { identifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
-      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 200)).toFixed(2)) : null;
+      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : null;
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
       const finalAccount = type === 'Spirits' ? account : null;
@@ -190,7 +190,7 @@ router.post('/move', async (req, res) => {
       return res.status(400).json({ error: 'Item proof must be a positive number' });
     }
 
-    const moveQuantity = (parsedProofGallons * 200 / proof).toFixed(2); // Convert proof gallons to gallons
+    const moveQuantity = (parsedProofGallons * 100 / proof).toFixed(2); // Convert proof gallons to wine gallons
     const currentQuantity = parseFloat(item.quantity || '0');
     if (moveQuantity > currentQuantity) {
       await new Promise((resolve) => db.run('ROLLBACK', resolve));
@@ -202,7 +202,7 @@ router.post('/move', async (req, res) => {
     await new Promise((resolve, reject) => {
       db.run(
         'UPDATE inventory SET quantity = ?, proofGallons = ? WHERE identifier = ?',
-        [newQuantity, (newQuantity * proof / 200).toFixed(2), identifier],
+        [newQuantity, (newQuantity * proof / 100).toFixed(2), identifier],
         (err) => {
           if (err) reject(err);
           else resolve();
@@ -210,7 +210,20 @@ router.post('/move', async (req, res) => {
       );
     });
 
-    const newIdentifier = `${identifier}-${toAccount}-${Date.now()}`; // Unique identifier for new item
+    let newIdentifier = `${identifier}-${toAccount}`;
+    let suffix = 1;
+    while (true) {
+      const existing = await new Promise((resolve, reject) => {
+        db.get('SELECT 1 FROM inventory WHERE identifier = ?', [newIdentifier], (err, row) => {
+          if (err) reject(err);
+          resolve(row);
+        });
+      });
+      if (!existing) break;
+      newIdentifier = `${identifier}-${toAccount}-${suffix}`;
+      suffix++;
+    }
+
     await new Promise((resolve, reject) => {
       db.run(
         `INSERT INTO inventory (identifier, item, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account)
