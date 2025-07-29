@@ -143,8 +143,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         const errorText = await res.text();
         throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
       }
-      
-      const data: Site[] = await res.json() || []; // Ensure data is an array
+      const data: Site[] = await res.json();
       console.log('Fetched sites:', data);
       if (data.length === 0) {
         console.warn('No sites returned from API');
@@ -163,104 +162,96 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     }
   }, [API_BASE_URL, navigate, locationState]);
 
-  const fetchItems = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('fetchItems: No token found, redirecting to login');
-        navigate('/login');
-        throw new Error('No token found in localStorage');
-      }
-      const res = await fetch(`${API_BASE_URL}/api/items`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const data = await res.json();
-      console.log('Fetched items:', data);
-      setItems(data);
-      setFilteredItems(data);
-    } catch (err: any) {
-      setProductionError('Failed to fetch items: ' + err.message);
-      console.error('fetchItems error:', err);
-    }
-  }, [API_BASE_URL, navigate]);
-
-  const fetchVendors = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('fetchVendors: No token found, redirecting to login');
-        navigate('/login');
-        throw new Error('No token found in localStorage');
-      }
-      const res = await fetch(`${API_BASE_URL}/api/vendors`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const data = await res.json();
-      console.log('Fetched vendors:', data);
-      refreshVendors();
-      setFilteredVendors(data);
-    } catch (err: any) {
-      setProductionError('Failed to fetch vendors: ' + err.message);
-      console.error('fetchVendors error:', err);
-    }
-  }, [API_BASE_URL, navigate, refreshVendors]);
-
-  const fetchPOs = useCallback(async () => {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('fetchPOs: No token found, redirecting to login');
-      navigate('/login');
-      throw new Error('No token found in localStorage');
-    }
-    const encodedSource = encodeURIComponent(singleForm.source || '');
-    const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-    }
-    const data: PurchaseOrder[] = (await res.json()) || [];
-    console.log('Fetched purchase orders:', data);
-    setPurchaseOrders(data);
-  } catch (err: any) {
-    setProductionError('Failed to fetch purchase orders: ' + err.message);
-    console.error('fetchPOs error:', err);
-    setPurchaseOrders([]); // Ensure array in case of error
-  }
-}, [API_BASE_URL, navigate, singleForm.source]);
-
   useEffect(() => {
-    console.log('Fetching sites, items, vendors');
+    console.log('ReceivePage useEffect: Fetching initial data');
+    
+    const fetchItems = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchItems: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
+        const res = await fetch(`${API_BASE_URL}/api/items`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+        }
+        const data = await res.json();
+        console.log('Fetched items:', data);
+        setItems(data);
+        setFilteredItems(data);
+      } catch (err: any) {
+        setProductionError('Failed to fetch items: ' + err.message);
+        console.error('fetchItems error:', err);
+      }
+    };
+
+    const fetchVendors = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchVendors: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
+        const res = await fetch(`${API_BASE_URL}/api/vendors`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+        }
+        const data = await res.json();
+        console.log('Fetched vendors:', data);
+        refreshVendors();
+        setFilteredVendors(data);
+      } catch (err: any) {
+        setProductionError('Failed to fetch vendors: ' + err.message);
+        console.error('fetchVendors error:', err);
+      }
+    };
+
+    const fetchPOs = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchPOs: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
+        const encodedSource = encodeURIComponent(singleForm.source || '');
+        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+        }
+        const data = await res.json();
+        console.log('Fetched purchase orders:', data);
+        setPurchaseOrders(data);
+      } catch (err: any) {
+        setProductionError('Failed to fetch purchase orders: ' + err.message);
+        console.error('fetchPOs error:', err);
+      }
+    };
+
     fetchSites();
     fetchItems();
     fetchVendors();
-  }, [fetchSites, fetchItems, fetchVendors]);
-
-  useEffect(() => {
-    console.log('Fetching POs');
-    fetchPOs();
-  }, [fetchPOs]);
-
-  useEffect(() => {
-    console.log('Updating filtered vendors', vendors);
+    if (singleForm.source) fetchPOs();
     setFilteredVendors(vendors);
-  }, [vendors]);
+  }, [fetchSites, navigate, refreshVendors, singleForm.source, vendors]);
 
   useEffect(() => {
     console.log('ReceivePage useEffect: Handling navigation state', location.state);
@@ -270,15 +261,14 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         navigate(location.pathname, { replace: true, state: {} });
       }, 0);
     }
-    if (locationState?.newLocationId && !singleForm.locationId) {
+    if (locationState?.newLocationId) {
       setSingleForm((prev) => ({ ...prev, locationId: locationState.newLocationId || '' }));
     }
-    if (locationState?.newSiteId && !selectedSite) {
+    if (locationState?.newSiteId) {
       setSelectedSite(locationState.newSiteId);
       setSingleForm((prev) => ({ ...prev, siteId: locationState.newSiteId || '' }));
-      fetchLocations(locationState.newSiteId);
     }
-  }, [location.state, navigate, singleForm.locationId, selectedSite, fetchLocations]);
+  }, [location.state, navigate]);
 
   useEffect(() => {
     inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
@@ -304,6 +294,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setSiteDropdownPosition(null);
     }
   }, [activeSiteDropdownIndex]);
+
+  useEffect(() => {
+    setSingleForm((prev) => {
+      if (prev.siteId !== selectedSite) {
+        console.log('Syncing singleForm.siteId with selectedSite:', selectedSite);
+        return { ...prev, siteId: selectedSite, locationId: '' };
+      }
+      return prev;
+    });
+  }, [selectedSite]);
 
   useEffect(() => {
     if (
@@ -751,7 +751,7 @@ return (
             </label>
             <input
               type="text"
-              value={sites.find((s) => s.siteId === selectedSite)?.name || singleForm.siteId}
+              value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
               onChange={(e) => {
                 const value = e.target.value;
                 setFilteredSites(
@@ -776,34 +776,34 @@ return (
                 fontSize: '16px',
               }}
             />
-           {showSiteSuggestions && Array.isArray(filteredSites) && (
-            <ul className="typeahead">
-              {filteredSites.map((site) => (
+            {showSiteSuggestions && Array.isArray(filteredSites) && (
+              <ul className="typeahead">
+                {filteredSites.map((site) => (
+                  <li
+                    key={site.siteId}
+                    onMouseDown={() => {
+                      console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+                      setSelectedSite(site.siteId);
+                      setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
+                      setShowSiteSuggestions(false);
+                      fetchLocations(site.siteId);
+                    }}
+                    className={selectedSite === site.siteId ? 'selected' : ''}
+                  >
+                    {site.name}
+                  </li>
+                ))}
                 <li
-                  key={site.siteId}
                   onMouseDown={() => {
-                    console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
-                    setSelectedSite(site.siteId);
-                    setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
+                    navigate('/sites', { state: { fromReceive: true } });
                     setShowSiteSuggestions(false);
-                    fetchLocations(site.siteId);
                   }}
-                  className={selectedSite === site.siteId ? 'selected' : ''}
+                  className="add-new"
                 >
-                  {site.name}
+                  Add New Site
                 </li>
-              ))}
-              <li
-                onMouseDown={() => {
-                  navigate('/sites', { state: { fromReceive: true } });
-                  setShowSiteSuggestions(false);
-                }}
-                className="add-new"
-              >
-                Add New Site
-              </li>
-            </ul>
-          )}
+              </ul>
+            )}
           </div>
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
@@ -851,31 +851,31 @@ return (
                 backgroundColor: isFetchingLocations || !selectedSite ? '#f5f5f5' : '#fff',
               }}
             />
-            {showLocationSuggestions && !isFetchingLocations && (
-            <ul className="typeahead">
-              {filteredLocations.length > 0 ? (
-                filteredLocations.map((location) => (
-                  <li
-                    key={location.locationId}
-                    onMouseDown={() => handleLocationSelect(location)}
-                    className={singleForm.locationId === location.locationId.toString() ? 'selected' : ''}
-                  >
-                    {location.name}
+            {showLocationSuggestions && !isFetchingLocations && Array.isArray(filteredLocations) && (
+              <ul className="typeahead">
+                {filteredLocations.length > 0 ? (
+                  filteredLocations.map((location) => (
+                    <li
+                      key={location.locationId}
+                      onMouseDown={() => handleLocationSelect(location)}
+                      className={singleForm.locationId === location.locationId.toString() ? 'selected' : ''}
+                    >
+                      {location.name}
+                    </li>
+                  ))
+                ) : (
+                  <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                    No locations found
                   </li>
-                ))
-              ) : (
-                <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                  No locations available for this site
+                )}
+                <li
+                  onMouseDown={() => handleAddNewLocation()}
+                  className="add-new"
+                >
+                  Add New Location
                 </li>
-              )}
-              <li
-                onMouseDown={() => handleAddNewLocation()}
-                className="add-new"
-              >
-                Add New Location
-              </li>
-            </ul>
-          )}
+              </ul>
+            )}
           </div>
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor (optional):</label>
@@ -888,7 +888,7 @@ return (
               onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 300)}
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
             />
-            {showVendorSuggestions && (
+            {showVendorSuggestions && Array.isArray(filteredVendors) && (
               <ul className="typeahead">
                 {filteredVendors.map((vendor) => (
                   <li
@@ -928,7 +928,7 @@ return (
               placeholder="Type to search items"
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
             />
-            {activeItemDropdownIndex === 0 && (
+            {activeItemDropdownIndex === 0 && Array.isArray(filteredItems) && (
               <ul className="typeahead">
                 {filteredItems.length > 0 ? (
                   filteredItems.map((item) => (
