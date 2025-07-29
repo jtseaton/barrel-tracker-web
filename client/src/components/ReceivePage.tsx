@@ -232,41 +232,44 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     fetchVendors();
   }, [fetchSites, navigate]);
 
-  useEffect(() => {
-  console.log('Fetching POs for source:', singleForm.source);
-    const fetchPOs = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('fetchPOs: No token found, redirecting to login');
-          navigate('/login');
-          throw new Error('No token found in localStorage');
-        }
-        const encodedSource = encodeURIComponent(singleForm.source || '');
-        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-        }
-        const response: PurchaseOrdersResponse = await res.json(); // Type the response
-        const data: PurchaseOrder[] = response.purchaseOrders || []; // Safely access purchaseOrders
-        console.log('Fetched purchase orders:', data);
-        setPurchaseOrders(data);
-      } catch (err: any) {
-        console.error('fetchPOs error:', err);
-        setPurchaseOrders([]); // Set empty array on error
-        if (err.message.includes('no table exist')) {
-          // Suppress table not found error
-        } else {
-          setProductionError('Failed to fetch purchase orders: ' + err.message);
-        }
-      }
-    };
-  if (singleForm.source) fetchPOs();
+const fetchPOs = async (source: string) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('fetchPOs: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
+    }
+    const encodedSource = encodeURIComponent(source || '');
+    const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+    }
+    const response: PurchaseOrdersResponse = await res.json();
+    const data: PurchaseOrder[] = response.purchaseOrders || [];
+    console.log('Fetched purchase orders:', data);
+    setPurchaseOrders(data);
+  } catch (err: any) {
+    console.error('fetchPOs error:', err);
+    setPurchaseOrders([]); // Ensure this doesn't trigger a loop
+    if (!err.message.includes('no table exist')) {
+      setProductionError('Failed to fetch purchase orders: ' + err.message);
+    }
+  }
+};
+
+useEffect(() => {
+  if (singleForm.source) {
+    console.log('Fetching POs for source:', singleForm.source);
+    fetchPOs(singleForm.source);
+  } else {
+    setPurchaseOrders([]); // Clear POs when no vendor is selected
+  }
 }, [singleForm.source, navigate]);
 
   useEffect(() => {
@@ -394,10 +397,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   const handleVendorSelect = (vendor: Vendor) => {
-    console.log('Selecting vendor:', vendor.name, 'Current site:', selectedSite, 'Current form:', singleForm);
-    setSingleForm((prev: ReceiveForm) => ({ ...prev, source: vendor.name }));
-    setShowVendorSuggestions(false);
-  };
+  console.log('Selecting vendor:', vendor.name, 'Current site:', selectedSite, 'Current form:', singleForm);
+  setSingleForm((prev: ReceiveForm) => ({ ...prev, source: vendor.name, poNumber: '' })); // Reset poNumber
+  setShowVendorSuggestions(false);
+  setPurchaseOrders([]); // Clear POs immediately to avoid stale data
+};
 
   const handleItemSelect = (selectedItem: Item, index?: number) => {
     const normalizedType = selectedItem.type ? selectedItem.type.charAt(0).toUpperCase() + selectedItem.type.slice(1).toLowerCase() : 'Other';
