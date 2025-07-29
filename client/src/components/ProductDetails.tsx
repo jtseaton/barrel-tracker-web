@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Product, Recipe, PackageType, Ingredient } from '../types/interfaces';
 import { ProductClass, ProductType, Style } from '../types/enums';
@@ -6,7 +6,7 @@ import RecipeModal from './RecipeModal';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
 const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -71,6 +71,20 @@ const ProductDetails: React.FC = () => {
   ];
 
   const beerTypes = [ProductType.MaltBeverage, ProductType.Seltzer];
+
+  const getAuthHeaders = useCallback(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[ProductDetails] No token found, redirecting to login');
+      navigate('/login');
+      return null;
+    }
+    return {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+  }, [navigate]);
 
   const mapServerToFrontend = (serverProduct: any): Product => {
     let mapped: Product = { ...serverProduct };
@@ -155,68 +169,107 @@ const ProductDetails: React.FC = () => {
     return typeValue || '';
   };
 
+  const fetchProduct = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/products/${id}`, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) {
+          console.error('[ProductDetails] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('[ProductDetails] Fetched product:', data);
+      const mappedProduct = mapServerToFrontend(data);
+      setProduct(mappedProduct);
+      setPackageTypes(data.packageTypes || []);
+    } catch (err: any) {
+      console.error('[ProductDetails] Fetch product error:', err);
+      setError('Failed to fetch product: ' + err.message);
+    }
+  }, [id, getAuthHeaders, navigate]);
+
+  const fetchRecipes = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${id}`, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) {
+          console.error('[ProductDetails] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('[ProductDetails] Fetched recipes:', data);
+      setRecipes(data);
+    } catch (err: any) {
+      console.error('[ProductDetails] Fetch recipes error:', err);
+      setError('Failed to fetch recipes: ' + err.message);
+    }
+  }, [id, getAuthHeaders, navigate]);
+
+  const fetchItems = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/items`, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) {
+          console.error('[ProductDetails] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('[ProductDetails] Fetched items:', data);
+      setItems(data);
+    } catch (err: any) {
+      console.error('[ProductDetails] Fetch items error:', err);
+      setError('Failed to fetch items: ' + err.message);
+    }
+  }, [getAuthHeaders, navigate]);
+
+  const fetchPackageTypes = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/package-types`, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) {
+          console.error('[ProductDetails] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('[ProductDetails] Fetched package types:', data);
+      setAvailablePackageTypes(data);
+    } catch (err: any) {
+      console.error('[ProductDetails] Fetch package types error:', err);
+      setError('Failed to fetch package types: ' + err.message);
+    }
+  }, [getAuthHeaders, navigate]);
+
   useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/products/${id}`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        console.log('[ProductDetails] Fetched product:', data);
-        const mappedProduct = mapServerToFrontend(data);
-        setProduct(mappedProduct);
-        setPackageTypes(data.packageTypes || []);
-      } catch (err: any) {
-        setError('Failed to fetch product: ' + err.message);
-        console.error('[ProductDetails] Fetch product error:', err);
-      }
-    };
-
-    const fetchRecipes = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${id}`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        console.log('[ProductDetails] Fetched recipes:', data);
-        setRecipes(data);
-      } catch (err: any) {
-        setError('Failed to fetch recipes: ' + err.message);
-        console.error('[ProductDetails] Fetch recipes error:', err);
-      }
-    };
-
-    const fetchItems = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/items`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        console.log('[ProductDetails] Fetched items:', data);
-        setItems(data);
-      } catch (err: any) {
-        setError('Failed to fetch items: ' + err.message);
-        console.error('[ProductDetails] Fetch items error:', err);
-      }
-    };
-
-    const fetchPackageTypes = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/package-types`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        console.log('[ProductDetails] Fetched package types:', data);
-        setAvailablePackageTypes(data);
-      } catch (err: any) {
-        setError('Failed to fetch package types: ' + err.message);
-        console.error('[ProductDetails] Fetch package types error:', err);
-      }
-    };
-
     if (id) {
       fetchProduct();
       fetchRecipes();
       fetchItems();
       fetchPackageTypes();
     } else {
-      // For create mode
       setProduct({
         id: 0,
         name: '',
@@ -231,9 +284,9 @@ const ProductDetails: React.FC = () => {
       });
       setPackageTypes([]);
     }
-  }, [id]);
+  }, [id, fetchProduct, fetchRecipes, fetchItems, fetchPackageTypes]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!product?.name || !product.class || !product.type) {
       setError('Name, Class, and Type are required');
       return;
@@ -247,6 +300,8 @@ const ProductDetails: React.FC = () => {
       setError('All package types must have a valid type and non-negative price');
       return;
     }
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       const serverClass = mapToServerClass(product.class);
       const serverType = mapToServerType(product.class, product.type);
@@ -255,12 +310,17 @@ const ProductDetails: React.FC = () => {
       const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers,
         body: JSON.stringify({ ...serverProduct, packageTypes: validPackageTypes }),
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Failed to save product: ${text}`);
+        if (res.status === 401) {
+          console.error('[ProductDetails] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`Failed to save product: HTTP ${res.status}, ${text.slice(0, 50)}`);
       }
       const savedProduct = await res.json();
       console.log('[ProductDetails] Saved product:', savedProduct);
@@ -268,11 +328,20 @@ const ProductDetails: React.FC = () => {
       for (const pt of validPackageTypes) {
         const itemName = `${product.name} ${pt.type}`;
         console.log('[ProductDetails] Creating item:', { itemName });
-        await fetch(`${API_BASE_URL}/api/items`, {
+        const itemRes = await fetch(`${API_BASE_URL}/api/items`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers,
           body: JSON.stringify({ name: itemName, type: 'Finished Goods', enabled: 1 }),
         });
+        if (!itemRes.ok) {
+          const text = await itemRes.text();
+          if (itemRes.status === 401) {
+            console.error('[ProductDetails] Unauthorized, redirecting to login');
+            navigate('/login');
+            throw new Error('Unauthorized');
+          }
+          throw new Error(`Failed to create item ${itemName}: HTTP ${itemRes.status}, ${text.slice(0, 50)}`);
+        }
       }
 
       setSuccessMessage('Product and items saved successfully');
@@ -282,20 +351,27 @@ const ProductDetails: React.FC = () => {
       }, 2000);
       setError(null);
     } catch (err: any) {
-      setError('Failed to save product: ' + err.message);
       console.error('[ProductDetails] Save error:', err);
+      setError('Failed to save product: ' + err.message);
     }
-  };
+  }, [product, packageTypes, id, getAuthHeaders, navigate]);
 
-  const handleAddRecipe = async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
+  const handleAddRecipe = useCallback(async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers,
         body: JSON.stringify(recipe),
       });
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 401) {
+          console.error('[ProductDetails] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`Add recipe error: HTTP ${res.status}, ${text.slice(0, 50)}`);
       }
       const addedRecipe = await res.json();
@@ -304,24 +380,24 @@ const ProductDetails: React.FC = () => {
       setShowAddRecipeModal(false);
       setError(null);
     } catch (err: any) {
-      setError('Failed to add recipe: ' + err.message);
       console.error('[ProductDetails] Add recipe error:', err);
+      setError('Failed to add recipe: ' + err.message);
     }
-  };
+  }, [recipes, getAuthHeaders, navigate]);
 
-  const addPackageType = () => {
+  const addPackageType = useCallback(() => {
     setPackageTypes([...packageTypes, { type: '', price: '', isKegDepositItem: false }]);
-  };
+  }, [packageTypes]);
 
-  const removePackageType = (index: number) => {
+  const removePackageType = useCallback((index: number) => {
     setPackageTypes(packageTypes.filter((_, i) => i !== index));
-  };
+  }, [packageTypes]);
 
-  const updatePackageType = (index: number, field: keyof PackageType, value: string | boolean) => {
+  const updatePackageType = useCallback((index: number, field: keyof PackageType, value: string | boolean) => {
     const updatedPackageTypes = [...packageTypes];
     updatedPackageTypes[index] = { ...updatedPackageTypes[index], [field]: value };
     setPackageTypes(updatedPackageTypes);
-  };
+  }, [packageTypes]);
 
   console.log('[ProductDetails] Render:', {
     productId: id,
