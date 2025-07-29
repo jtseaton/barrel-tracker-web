@@ -120,6 +120,23 @@ function initializeDatabase() {
         else console.log('Equipment table created');
       });
       db.run(`
+        CREATE TABLE IF NOT EXISTS products (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          abbreviation TEXT,
+          enabled INTEGER DEFAULT 1,
+          priority INTEGER DEFAULT 1,
+          class TEXT,
+          type TEXT,
+          style TEXT,
+          abv REAL,
+          ibu INTEGER
+        )
+      `, (err) => {
+        if (err) console.error('Error creating product table:', err);
+        else console.log('Products table created');
+      });
+      db.run(`
         CREATE TABLE IF NOT EXISTS facility_designs (
           facilityDesignId INTEGER PRIMARY KEY AUTOINCREMENT,
           siteId TEXT,
