@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Product } from '../types/interfaces';
 import { ProductClass, ProductType, Style } from '../types/enums';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -24,7 +24,8 @@ const Products: React.FC = () => {
     ibu: null,
   });
 
-  // Map ProductType to valid Styles (optional for Vodka, NeutralSpirits)
+  const navigate = useNavigate();
+
   const styleOptions: { [key in ProductType]?: Style[] } = {
     [ProductType.MaltBeverage]: [
       Style.Ale,
@@ -54,23 +55,47 @@ const Products: React.FC = () => {
     [ProductType.DistilledSpiritsSpecialty]: [Style.Cocktail, Style.Other],
   };
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/products`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-        console.log('[Products] Fetched products:', data);
-        setProducts(data);
-      } catch (err: any) {
-        setError('Failed to fetch products: ' + err.message);
-        console.error('[Products] Fetch products error:', err);
-      }
+  const getAuthHeaders = useCallback(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[Products] No token found, redirecting to login');
+      navigate('/login');
+      return null;
+    }
+    return {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
     };
-    fetchProducts();
-  }, []);
+  }, [navigate]);
 
-  // Debug log for modal state
+  const fetchProducts = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/products`, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) {
+          console.error('[Products] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const data = await res.json();
+      console.log('[Products] Fetched products:', data);
+      setProducts(data);
+    } catch (err: any) {
+      console.error('[Products] Fetch products error:', err);
+      setError('Failed to fetch products: ' + err.message);
+    }
+  }, [getAuthHeaders, navigate]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
   useEffect(() => {
     if (showAddModal) {
       console.log('[Modal] newProduct state:', { class: newProduct.class, ibu: newProduct.ibu });
@@ -97,11 +122,14 @@ const Products: React.FC = () => {
     return typeValue || '';
   };
 
-  const handleAddProduct = async () => {
+  const handleAddProduct = useCallback(async () => {
     if (!newProduct.name || !newProduct.abbreviation || !newProduct.class || !newProduct.type || !newProduct.style) {
       setError('Name, Abbreviation, Class, Type, and Style are required');
       return;
     }
+
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
       const serverClass = mapToServerClass(newProduct.class);
@@ -111,16 +139,21 @@ const Products: React.FC = () => {
         class: serverClass,
         type: serverType,
         abv: newProduct.abv ? parseFloat(newProduct.abv.toString()) : 0,
-        ibu: null, // Always set ibu to null since IBU field is removed
+        ibu: null,
       };
       console.log('[Products] Adding product:', payload);
       const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 401) {
+          console.error('[Products] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`Failed to add product: HTTP ${res.status}, ${text.slice(0, 50)}`);
       }
       const addedProduct = await res.json();
@@ -140,12 +173,12 @@ const Products: React.FC = () => {
       });
       setError(null);
     } catch (err: any) {
-      setError('Failed to add product: ' + err.message);
       console.error('[Products] Add product error:', err);
+      setError('Failed to add product: ' + err.message);
     }
-  };
+  }, [newProduct, products, getAuthHeaders, navigate]);
 
-  const handleCancelAdd = () => {
+  const handleCancelAdd = useCallback(() => {
     console.log('[Products] Cancel add product');
     setShowAddModal(false);
     setNewProduct({
@@ -160,16 +193,25 @@ const Products: React.FC = () => {
       ibu: null,
     });
     setError(null);
-  };
+  }, []);
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       const promises = selectedProducts.map(id =>
         fetch(`${API_BASE_URL}/api/products/${id}`, {
           method: 'DELETE',
-          headers: { Accept: 'application/json' },
+          headers,
         }).then(res => {
-          if (!res.ok) throw new Error(`Failed to delete product ${id}: HTTP ${res.status}`);
+          if (!res.ok) {
+            if (res.status === 401) {
+              console.error('[Products] Unauthorized, redirecting to login');
+              navigate('/login');
+              throw new Error('Unauthorized');
+            }
+            throw new Error(`Failed to delete product ${id}: HTTP ${res.status}`);
+          }
         })
       );
       await Promise.all(promises);
@@ -177,10 +219,10 @@ const Products: React.FC = () => {
       setProducts(products.filter(p => !selectedProducts.includes(p.id)));
       setSelectedProducts([]);
     } catch (err: any) {
-      setError('Failed to delete products: ' + err.message);
       console.error('[Products] Delete products error:', err);
+      setError('Failed to delete products: ' + err.message);
     }
-  };
+  }, [selectedProducts, products, getAuthHeaders, navigate]);
 
   console.log('[Products] Render:', {
     productsLength: products.length,
@@ -330,7 +372,7 @@ const Products: React.FC = () => {
                       class: classValue,
                       type: undefined,
                       style: undefined,
-                      ibu: null, // Always null since IBU field is removed
+                      ibu: null,
                     });
                   }}
                   className="form-control"
