@@ -1,11 +1,10 @@
-// server/server.js (only relevant parts)
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
-const { db } = require('./services/database'); // init() is called in database.js
+const { db } = require('./services/database');
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -136,6 +135,17 @@ app.get('/api/debug/tables', (req, res) => {
     }
     console.log('Database tables:', tables);
     res.json(tables);
+  });
+});
+
+app.get('/api/debug/items', (req, res) => {
+  db.all('SELECT * FROM items WHERE enabled = 1', (err, rows) => {
+    if (err) {
+      console.error('Debug items error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Debug items:', rows);
+    res.json(rows);
   });
 });
 

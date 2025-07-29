@@ -22,7 +22,6 @@ function initializeDatabase() {
     
     db.serialize(() => {
       console.log('Initializing database schema...');
-      // Create tables
       db.run(`
         CREATE TABLE IF NOT EXISTS users (
           email TEXT PRIMARY KEY,
@@ -86,7 +85,86 @@ function initializeDatabase() {
           console.log('Items table created');
         }
       });
-      // ... other table creations (unchanged) ...
+      db.run(`
+        CREATE TABLE IF NOT EXISTS inventory (
+          inventoryId INTEGER PRIMARY KEY AUTOINCREMENT,
+          identifier TEXT NOT NULL,
+          item TEXT NOT NULL,
+          type TEXT,
+          quantity TEXT,
+          unit TEXT,
+          proof TEXT,
+          proofGallons TEXT,
+          receivedDate TEXT,
+          source TEXT,
+          siteId TEXT,
+          locationId INTEGER,
+          status TEXT,
+          description TEXT,
+          cost TEXT,
+          totalCost TEXT,
+          poNumber TEXT,
+          lotNumber TEXT,
+          account TEXT,
+          enabled INTEGER DEFAULT 1,
+          FOREIGN KEY (siteId) REFERENCES sites(siteId),
+          FOREIGN KEY (locationId) REFERENCES locations(locationId)
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating inventory table:', err);
+          reject(err);
+        } else {
+          console.log('Inventory table created');
+        }
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS vendors (
+          name TEXT PRIMARY KEY,
+          enabled INTEGER DEFAULT 1
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating vendors table:', err);
+          reject(err);
+        } else {
+          console.log('Vendors table created');
+        }
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS equipment (
+          equipmentId INTEGER PRIMARY KEY AUTOINCREMENT,
+          siteId TEXT,
+          name TEXT NOT NULL,
+          type TEXT,
+          enabled INTEGER DEFAULT 1,
+          FOREIGN KEY (siteId) REFERENCES sites(siteId)
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating equipment table:', err);
+          reject(err);
+        } else {
+          console.log('Equipment table created');
+        }
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS facility_designs (
+          facilityDesignId INTEGER PRIMARY KEY AUTOINCREMENT,
+          siteId TEXT,
+          name TEXT NOT NULL,
+          enabled INTEGER DEFAULT 1,
+          FOREIGN KEY (siteId) REFERENCES sites(siteId)
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating facility_designs table:', err);
+          reject(err);
+        } else {
+          console.log('Facility_designs table created');
+        }
+      });
+      // ... other table creations (e.g., purchase_orders, products, etc.) ...
       
       db.run('SELECT 1', (err) => {
         if (err) {
@@ -105,7 +183,6 @@ function initializeDatabase() {
 async function insertTestData() {
   console.log('Inserting test data...');
 
-  // Hash password for user
   let hash;
   try {
     hash = await bcrypt.hash('P@$$w0rd1234', 10);
@@ -115,11 +192,9 @@ async function insertTestData() {
     return;
   }
 
-  // Insert data
   try {
     await new Promise((resolve, reject) => {
       db.serialize(() => {
-        // Users
         db.run(
           'INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
           ['jtseaton@gmail.com', hash, 'SuperAdmin', 1],
@@ -133,7 +208,6 @@ async function insertTestData() {
           }
         );
 
-        // Sites
         db.run(
           `INSERT OR IGNORE INTO sites (siteId, name, type, address) VALUES (?, ?, ?, ?)`,
           ['DSP-AL-20051', 'Athens AL DSP', 'DSP', '311 Marion St, Athens, AL 35611'],
@@ -155,14 +229,13 @@ async function insertTestData() {
           (err) => { if (err) console.error('Error inserting site DSP-AL-20010:', err); }
         );
 
-        // Locations
         db.run(
           `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
           ['DSP-AL-20051', 'Athens DSP Storage', 'Storage'],
           (err) => { if (err) console.error('Error inserting location Athens DSP Storage:', err); }
         );
         db.run(
-          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?, ?)`,
           ['DSP-AL-20051', 'Athens DSP Processing', null],
           (err) => { if (err) console.error('Error inserting location Athens DSP Processing:', err); }
         );
@@ -171,9 +244,62 @@ async function insertTestData() {
           ['DSP-AL-20010', 'Spirits Storage', 'Spirits'],
           (err) => { if (err) console.error('Error inserting location Spirits Storage:', err); }
         );
-        // ... other location inserts (unchanged) ...
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['DSP-AL-20010', 'Grain Storage', null],
+          (err) => { if (err) console.error('Error inserting location Grain Storage:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['DSP-AL-20010', 'Fermentation Tanks', null],
+          (err) => { if (err) console.error('Error inserting location Fermentation Tanks:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Fermenter 1', null],
+          (err) => { if (err) console.error('Error inserting location Madison Fermenter 1:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Outdoor Racks', null],
+          (err) => { if (err) console.error('Error inserting location Madison Outdoor Racks:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Fermenter 2', null],
+          (err) => { if (err) console.error('Error inserting location Madison Fermenter 2:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Fermenter 3', null],
+          (err) => { if (err) console.error('Error inserting location Madison Fermenter 3:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Fermenter 4', null],
+          (err) => { if (err) console.error('Error inserting location Madison Fermenter 4:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Cold Storage', 'Beer Cooler'],
+          (err) => { if (err) console.error('Error inserting location Madison Cold Storage:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Mash Tun', 'Mash Tun'],
+          (err) => { if (err) console.error('Error inserting location Madison Mash Tun:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20019', 'Madison Boil Kettle', null],
+          (err) => { if (err) console.error('Error inserting location Madison Boil Kettle:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
+          ['BR-AL-20088', 'Athens Cold Storage', 'Athens Cooler'],
+          (err) => { if (err) console.error('Error inserting location Athens Cold Storage:', err); }
+        );
 
-        // Load items from items.xml
         (async () => {
           try {
             const xmlPath = path.join(__dirname, '../../config/items.xml');
@@ -186,9 +312,9 @@ async function insertTestData() {
             const itemsArray = Array.isArray(items) ? items : [items].filter(Boolean);
 
             for (const item of itemsArray) {
-              const name = item.name || '';
-              const type = item.type || 'Other';
-              const enabled = parseInt(item.enabled || '1', 10);
+              const name = item.$.name || '';
+              const type = item.$.type || 'Other';
+              const enabled = parseInt(item.$.enabled || '1', 10);
               if (!name) {
                 console.warn('Skipping item with missing name in items.xml:', item);
                 continue;
@@ -210,7 +336,6 @@ async function insertTestData() {
           }
         })();
 
-        // Existing test data for items
         db.run(
           'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
           ['Finished Goods', 'Finished Goods', 1],
@@ -222,12 +347,25 @@ async function insertTestData() {
           (err) => { if (err) console.error('Error inserting item Corn:', err); }
         );
         db.run(
-          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-          ['Hops', 'Hops', 1],
-          (err) => { if (err) console.error('Error inserting item Hops:', err); }
+          `INSERT OR IGNORE INTO vendors (name, enabled) VALUES (?, ?)`,
+          ['ABC Supplier', 1],
+          (err) => { if (err) console.error('Error inserting vendor ABC Supplier:', err); }
         );
-
-        // ... other test data inserts (unchanged) ...
+        db.run(
+          `INSERT OR IGNORE INTO vendors (name, enabled) VALUES (?, ?)`,
+          ['XYZ Distributors', 1],
+          (err) => { if (err) console.error('Error inserting vendor XYZ Distributors:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO vendors (name, enabled) VALUES (?, ?)`,
+          ['Grain Co', 1],
+          (err) => { if (err) console.error('Error inserting vendor Grain Co:', err); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO vendors (name, enabled) VALUES (?, ?)`,
+          ['Hops R Us', 1],
+          (err) => { if (err) console.error('Error inserting vendor Hops R Us:', err); }
+        );
 
         db.run('SELECT 1', (err) => {
           if (err) {
