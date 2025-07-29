@@ -1,4 +1,4 @@
-// server/server.js
+// server/server.js (only relevant parts)
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -24,7 +24,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Log all incoming requests
 app.use((req, res, next) => {
   console.log(`Incoming request: ${req.method} ${req.url} (original: ${req.originalUrl})`, {
     body: req.body,
@@ -54,7 +53,6 @@ const authenticateJWT = (req, res, next) => {
   }
 };
 
-// Direct login route
 app.post('/api/login', async (req, res) => {
   console.log('Directly handling POST /api/login in server.js', { body: req.body });
   const { email, password } = req.body;
@@ -106,7 +104,6 @@ const reportsRouter = require('./routes/reports');
 const kegsRouter = require('./routes/kegs');
 const productionRouter = require('./routes/production');
 
-// Initialize database once
 initializeDatabase();
 insertTestData();
 

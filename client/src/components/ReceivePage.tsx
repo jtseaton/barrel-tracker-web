@@ -125,6 +125,46 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   }
 }, [API_BASE_URL, navigate]);
 
+const fetchSites = useCallback(async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('fetchSites: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
+    }
+    const url = `${API_BASE_URL}/api/sites`;
+    console.log(`Fetching sites from: ${url}`);
+    const res = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+    }
+    const data: Site[] = await res.json();
+    console.log('Fetched sites:', data);
+    if (data.length === 0) {
+      console.warn('No sites returned from API');
+      setProductionError('No sites found');
+    }
+    setSites(data);
+    setFilteredSites(data);
+    // Set selectedSite to the first site or locationState.newSiteId
+    const newSiteId = locationState?.newSiteId || (data.length > 0 ? data[0].siteId : '');
+    setSelectedSite(newSiteId);
+    setSingleForm((prev) => ({ ...prev, siteId: newSiteId }));
+  } catch (err: any) {
+    console.error('Fetch sites error:', err);
+    setProductionError('Failed to fetch sites: ' + err.message);
+    setSites([]);
+    setFilteredSites([]);
+  }
+}, [API_BASE_URL, navigate, locationState]);
+
   // src/components/ReceivePage.tsx (replace the useEffect around line 134-249)
 useEffect(() => {
   if (location.state?.fromLocations || location.state?.fromSites || location.state?.newLocationId) {
@@ -221,10 +261,15 @@ useEffect(() => {
         console.error('fetchPOs error:', err);
       }
     };
+
+    fetchSites();
+    fetchItems();
+    fetchVendors();
+    
     if (singleForm.source) fetchPOs();
     setFilteredVendors(vendors);
   }
-}, [location.state, singleForm.source, vendors]);
+}, [location.state, singleForm.source, vendors, refreshVendors, fetchSites]);
 
   useEffect(() => {
     inputRefs.current = inputRefs.current.slice(0, receiveItems.length);
