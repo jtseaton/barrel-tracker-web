@@ -300,26 +300,23 @@ async function insertTestData() {
           (err) => { if (err) console.error('Error inserting vendor Hops R Us:', err); }
         );
 
-        try {
-          const xmlPath = path.join(__dirname, '../../config/items.xml');
-          console.log(`Reading items.xml from: ${xmlPath}`);
-          const xmlData = fs.readFileSync(xmlPath, 'utf-8');
-          const parser = new xml2js.Parser({ explicitArray: false });
-          parser.parseString(xmlData, (err, result) => {
-            if (err) {
-              console.error('Error parsing items.xml:', err);
-              return;
-            }
+        (async () => {
+          try {
+            const xmlPath = path.join(__dirname, '../../config/items.xml');
+            console.log(`Reading items.xml from: ${xmlPath}`);
+            const xmlData = await fs.readFile(xmlPath, 'utf-8');
+            const parser = new xml2js.Parser({ explicitArray: false });
+            const result = await parser.parseStringPromise(xmlData);
             const items = result.items.item;
             const itemsArray = Array.isArray(items) ? items : [items].filter(Boolean);
 
-            itemsArray.forEach(item => {
+            for (const item of itemsArray) {
               const name = item.$.name || '';
               const type = item.$.type || 'Other';
               const enabled = parseInt(item.$.enabled || '1', 10);
               if (!name) {
                 console.warn('Skipping item with missing name in items.xml:', item);
-                return;
+                continue;
               }
               db.run(
                 'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
@@ -329,11 +326,11 @@ async function insertTestData() {
                   else console.log(`Inserted item from items.xml: ${name}`);
                 }
               );
-            });
-          });
-        } catch (err) {
-          console.error('Error loading items.xml:', err);
-        }
+            }
+          } catch (err) {
+            console.error('Error loading items.xml:', err);
+          }
+        })();
 
         db.run(
           'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
@@ -344,6 +341,12 @@ async function insertTestData() {
           'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
           ['Corn', 'Grain', 1],
           (err) => { if (err) console.error('Error inserting item Corn:', err); }
+        );
+
+        db.run(
+          `INSERT OR IGNORE INTO inventory (identifier, item, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ['2-Row Barley-001', '2-Row Barley', 'Grain', '100', 'Pounds', new Date().toISOString().split('T')[0], 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
+          (err) => { if (err) console.error('Error inserting test inventory item:', err); else console.log('Inserted test inventory item'); }
         );
 
         db.run('SELECT 1', (err) => {
