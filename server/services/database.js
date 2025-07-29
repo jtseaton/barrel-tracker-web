@@ -161,7 +161,20 @@ function initializeDatabase() {
         if (err) console.error('Error creating batches table:', err);
         else console.log('Batches table created');
       });
-
+      db.run(`
+        CREATE TABLE IF NOT EXISTS recipes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          productId INTEGER,
+          ingredients TEXT,
+          quantity REAL,
+          unit TEXT,
+          FOREIGN KEY (productId) REFERENCES products(id)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating recipes table:', err);
+        else console.log('Recipes table created');
+      });
       db.run(`
         CREATE TABLE IF NOT EXISTS facility_designs (
           facilityDesignId INTEGER PRIMARY KEY AUTOINCREMENT,
