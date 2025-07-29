@@ -10,6 +10,11 @@ interface ReceivePageProps {
   refreshVendors: () => Promise<void>;
 }
 
+interface PurchaseOrdersResponse {
+  purchaseOrders: PurchaseOrder[];
+  totalPages: number;
+}
+
 interface Item {
   name: string;
   type: string;
@@ -229,7 +234,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   useEffect(() => {
   console.log('Fetching POs for source:', singleForm.source);
-  const fetchPOs = async () => {
+    const fetchPOs = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -247,13 +252,18 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         const errorText = await res.text();
         throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
       }
-      const data: PurchaseOrder[] = await res.json() || [];
+      const response: PurchaseOrdersResponse = await res.json(); // Type the response
+      const data: PurchaseOrder[] = response.purchaseOrders || []; // Safely access purchaseOrders
       console.log('Fetched purchase orders:', data);
       setPurchaseOrders(data);
     } catch (err: any) {
-      setProductionError('Failed to fetch purchase orders: ' + err.message);
       console.error('fetchPOs error:', err);
-      setPurchaseOrders([]);
+      setPurchaseOrders([]); // Set empty array on error
+      if (err.message.includes('no table exist')) {
+        // Suppress table not found error
+      } else {
+        setProductionError('Failed to fetch purchase orders: ' + err.message);
+      }
     }
   };
   if (singleForm.source) fetchPOs();
@@ -587,6 +597,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     }
   };
 
+  // In ReceivePage.tsx, update the handleReceive function to swap item and description for spirits
+
   const handleReceive = async (items?: ReceiveItem[]) => {
     const itemsToReceive: ReceiveItem[] = items || (useSingleItem ? [singleForm as ReceiveItem] : receiveItems);
     if (useSingleItem) {
@@ -639,9 +651,23 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
       const finalAccount = item.materialType === MaterialType.Spirits ? item.account : undefined;
       const finalStatus = ['Grain', 'Hops'].includes(item.materialType) ? Status.Stored : Status.Received;
+
+      let finalItem = item.item;
+      let finalDescription = item.description;
+      let finalIdentifier = item.identifier;
+      let finalLotNumber = item.lotNumber;
+
+      if (item.materialType === MaterialType.Spirits) {
+        // Swap for spirits: item becomes lotNumber, description becomes original item name
+        finalItem = item.lotNumber || 'UNKNOWN_LOT';
+        finalDescription = item.item; // Original item name as description
+        finalIdentifier = item.lotNumber || 'UNKNOWN_LOT'; // Use lotNumber as identifier for uniqueness
+        finalLotNumber = undefined; // Optional: since item is now lotNumber, maybe clear this
+      }
+
       return {
-        identifier: item.identifier,
-        item: item.item,
+        identifier: finalIdentifier,
+        item: finalItem,
         account: finalAccount,
         type: item.materialType,
         quantity: item.quantity,
@@ -653,11 +679,11 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         siteId: item.siteId || singleForm.siteId,
         locationId: parseInt(item.locationId, 10),
         status: finalStatus,
-        description: item.description,
+        description: finalDescription,
         cost: finalUnitCost,
         totalCost: finalTotalCost,
         poNumber: item.poNumber,
-        lotNumber: item.lotNumber,
+        lotNumber: finalLotNumber,
       };
     });
 
