@@ -149,31 +149,6 @@ function initializeDatabase() {
         if (err) console.error('Error creating inventory_losses table:', err);
         else console.log('Inventory_losses table created');
       });
-      db.run(`
-        CREATE TABLE IF NOT EXISTS purchase_orders (
-          poNumber TEXT PRIMARY KEY,
-          site TEXT NOT NULL,
-          poDate TEXT NOT NULL,
-          supplier TEXT NOT NULL,
-          supplierAddress TEXT,
-          supplierCity TEXT,
-          supplierState TEXT,
-          supplierZip TEXT,
-          comments TEXT,
-          shipToName TEXT,
-          shipToAddress TEXT,
-          shipToCity TEXT,
-          shipToState TEXT,
-          shipToZip TEXT,
-          status TEXT NOT NULL,
-          items TEXT NOT NULL,
-          FOREIGN KEY (site) REFERENCES sites(siteId),
-          FOREIGN KEY (supplier) REFERENCES vendors(name)
-        )
-      `, (err) => {
-        if (err) console.error('Error creating purchase_orders table:', err);
-        else console.log('Purchase_orders table created');
-      });
       db.run('SELECT 1', (err) => {
         if (err) {
           console.error('Error finalizing schema:', err);

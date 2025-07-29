@@ -10,11 +10,6 @@ interface ReceivePageProps {
   refreshVendors: () => Promise<void>;
 }
 
-interface PurchaseOrdersResponse {
-  purchaseOrders: PurchaseOrder[];
-  totalPages: number;
-}
-
 interface Item {
   name: string;
   type: string;
@@ -232,62 +227,36 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     fetchVendors();
   }, [fetchSites, navigate]);
 
-// Update fetchPOs to allow undefined source with a default
-const fetchPOs = async (source: string, signal: AbortSignal) => {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('fetchPOs: No token found, redirecting to login');
-      navigate('/login');
-      throw new Error('No token found in localStorage');
-    }
-    const encodedSource = encodeURIComponent(source || '');
-    const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      signal,
-    });
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-    }
-    const response: PurchaseOrdersResponse = await res.json();
-    const data: PurchaseOrder[] = response.purchaseOrders || [];
-    console.log('Fetched purchase orders:', data);
-    setPurchaseOrders(data);
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      console.log('fetchPOs aborted due to component unmount');
-      return;
-    }
-    console.error('fetchPOs error:', err);
-    setPurchaseOrders([]);
-    if (!err.message.includes('no table exist')) {
+  useEffect(() => {
+  console.log('Fetching POs for source:', singleForm.source);
+  const fetchPOs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('fetchPOs: No token found, redirecting to login');
+        navigate('/login');
+        throw new Error('No token found in localStorage');
+      }
+      const encodedSource = encodeURIComponent(singleForm.source || '');
+      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      const data: PurchaseOrder[] = await res.json() || [];
+      console.log('Fetched purchase orders:', data);
+      setPurchaseOrders(data);
+    } catch (err: any) {
       setProductionError('Failed to fetch purchase orders: ' + err.message);
+      console.error('fetchPOs error:', err);
+      setPurchaseOrders([]);
     }
-  }
-};
-
-// Update useEffect with type assertion
-useEffect(() => {
-  const abortController = new AbortController();
-  let timeoutId: NodeJS.Timeout | null = null;
-
-  if (singleForm.source) {
-    console.log('Scheduling fetchPOs for source:', singleForm.source);
-    timeoutId = setTimeout(() => {
-      fetchPOs(singleForm.source!, abortController.signal); // Type assertion with ! since we checked source
-    }, 100);
-  } else {
-    setPurchaseOrders([]);
-  }
-
-  return () => {
-    if (timeoutId) clearTimeout(timeoutId);
-    abortController.abort();
-    console.log('Cleaned up fetchPOs useEffect');
   };
+  if (singleForm.source) fetchPOs();
 }, [singleForm.source, navigate]);
 
   useEffect(() => {
@@ -415,14 +384,9 @@ useEffect(() => {
   };
 
   const handleVendorSelect = (vendor: Vendor) => {
-  console.log('Selecting vendor:', vendor.name, 'Current site:', selectedSite, 'Current form:', singleForm);
-  setSingleForm((prev: ReceiveForm) => {
-    if (prev.source !== vendor.name) {
-      return { ...prev, source: vendor.name, poNumber: '' }; // Only update if source changed
-    }
-    return prev;
-  });
-  setShowVendorSuggestions(false);
+    console.log('Selecting vendor:', vendor.name, 'Current site:', selectedSite, 'Current form:', singleForm);
+    setSingleForm((prev: ReceiveForm) => ({ ...prev, source: vendor.name }));
+    setShowVendorSuggestions(false);
   };
 
   const handleItemSelect = (selectedItem: Item, index?: number) => {
@@ -623,130 +587,114 @@ useEffect(() => {
     }
   };
 
-  // In ReceivePage.tsx, update the handleReceive function to swap item and description for spirits
+  const handleReceive = async (items?: ReceiveItem[]) => {
+    const itemsToReceive: ReceiveItem[] = items || (useSingleItem ? [singleForm as ReceiveItem] : receiveItems);
+    if (useSingleItem) {
+      console.log('Single Item Receive:', singleForm);
+    } else {
+      console.log('Multiple Items Receive:', itemsToReceive);
+    }
 
-const handleReceive = async (items?: ReceiveItem[]) => {
-  const itemsToReceive: ReceiveItem[] = items || (useSingleItem ? [singleForm as ReceiveItem] : receiveItems);
-  if (useSingleItem) {
-    console.log('Single Item Receive:', singleForm);
-  } else {
-    console.log('Multiple Items Receive:', itemsToReceive);
-  }
-
-  if (
-    !itemsToReceive.length ||
-    itemsToReceive.some(
+    if (
+      !itemsToReceive.length ||
+      itemsToReceive.some(
+        (item) =>
+          !item.identifier ||
+          !item.item ||
+          !item.materialType ||
+          !item.quantity ||
+          !item.unit ||
+          !item.siteId ||
+          !item.locationId ||
+          item.locationId.trim() === ''
+      )
+    ) {
+      setProductionError('All inventory items must have Identifier, Item, Material Type, Quantity, Unit, Site, and Location');
+      return;
+    }
+    const invalidItems = itemsToReceive.filter(
       (item) =>
-        !item.identifier ||
-        !item.item ||
-        !item.materialType ||
-        !item.quantity ||
-        !item.unit ||
-        !item.siteId ||
-        !item.locationId ||
-        item.locationId.trim() === ''
-    )
-  ) {
-    setProductionError('All inventory items must have Identifier, Item, Material Type, Quantity, Unit, Site, and Location');
-    return;
-  }
-  const invalidItems = itemsToReceive.filter(
-    (item) =>
-      (item.materialType === MaterialType.Spirits &&
-        (!item.lotNumber || !item.lotNumber.trim() || !item.proof || !item.proof.trim() || !item.account)) ||
-      (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
-      isNaN(parseFloat(item.quantity)) ||
-      parseFloat(item.quantity) <= 0 ||
-      (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
-      (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
-  );
-  if (invalidItems.length) {
-    setProductionError(
-      'Invalid data: Spirits need lot number, proof, and account; Other needs description; numeric values must be valid'
+        (item.materialType === MaterialType.Spirits &&
+          (!item.lotNumber || !item.lotNumber.trim() || !item.proof || !item.proof.trim() || !item.account)) ||
+        (item.materialType === MaterialType.Other && (!item.description || !item.description.trim())) ||
+        isNaN(parseFloat(item.quantity)) ||
+        parseFloat(item.quantity) <= 0 ||
+        (item.proof && (isNaN(parseFloat(item.proof)) || parseFloat(item.proof) > 200 || parseFloat(item.proof) < 0)) ||
+        (item.cost && (isNaN(parseFloat(item.cost)) || parseFloat(item.cost) < 0))
     );
-    return;
-  }
-  const totalOtherCost = otherCharges.reduce((sum, charge) => sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
-  const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
-
-  const inventoryItems: InventoryItem[] = itemsToReceive.map((item) => {
-    const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
-    const quantity = parseFloat(item.quantity);
-    const unitCost = totalItemCost / quantity || 0;
-    const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
-    const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
-    const finalAccount = item.materialType === MaterialType.Spirits ? item.account : undefined;
-    const finalStatus = ['Grain', 'Hops'].includes(item.materialType) ? Status.Stored : Status.Received;
-
-    let finalItem = item.item;
-    let finalDescription = item.description;
-    let finalIdentifier = item.identifier;
-    let finalLotNumber = item.lotNumber;
-
-    if (item.materialType === MaterialType.Spirits) {
-      // Swap for spirits: item becomes lotNumber, description becomes original item name
-      finalItem = item.lotNumber || 'UNKNOWN_LOT';
-      finalDescription = item.item; // Original item name as description
-      finalIdentifier = item.lotNumber || 'UNKNOWN_LOT'; // Use lotNumber as identifier for uniqueness
-      finalLotNumber = undefined; // Optional: since item is now lotNumber, maybe clear this
+    if (invalidItems.length) {
+      setProductionError(
+        'Invalid data: Spirits need lot number, proof, and account; Other needs description; numeric values must be valid'
+      );
+      return;
     }
+    const totalOtherCost = otherCharges.reduce((sum, charge) => sum + (charge.cost ? parseFloat(charge.cost) : 0), 0);
+    const costPerItem = itemsToReceive.length > 0 ? totalOtherCost / itemsToReceive.length : 0;
 
-    return {
-      identifier: finalIdentifier,
-      item: finalItem,
-      account: finalAccount,
-      type: item.materialType,
-      quantity: item.quantity,
-      unit: item.unit,
-      proof: item.proof,
-      proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
-      receivedDate: singleForm.receivedDate,
-      source: singleForm.source || 'Unknown',
-      siteId: item.siteId || singleForm.siteId,
-      locationId: parseInt(item.locationId, 10),
-      status: finalStatus,
-      description: finalDescription,
-      cost: finalUnitCost,
-      totalCost: finalTotalCost,
-      poNumber: item.poNumber,
-      lotNumber: finalLotNumber,
-    };
-  });
-
-  console.log('Payload to /api/inventory/receive:', JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems, null, 2));
-
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('handleReceive: No token found, redirecting to login');
-      navigate('/login');
-      throw new Error('No token found in localStorage');
-    }
-    const res = await fetch(`${API_BASE_URL}/api/inventory/receive`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems),
+    const inventoryItems: InventoryItem[] = itemsToReceive.map((item) => {
+      const totalItemCost = item.cost ? parseFloat(item.cost) : 0;
+      const quantity = parseFloat(item.quantity);
+      const unitCost = totalItemCost / quantity || 0;
+      const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
+      const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
+      const finalAccount = item.materialType === MaterialType.Spirits ? item.account : undefined;
+      const finalStatus = ['Grain', 'Hops'].includes(item.materialType) ? Status.Stored : Status.Received;
+      return {
+        identifier: item.identifier,
+        item: item.item,
+        account: finalAccount,
+        type: item.materialType,
+        quantity: item.quantity,
+        unit: item.unit,
+        proof: item.proof,
+        proofGallons: item.proof ? (parseFloat(item.quantity) * (parseFloat(item.proof) / 100)).toFixed(2) : undefined,
+        receivedDate: singleForm.receivedDate,
+        source: singleForm.source || 'Unknown',
+        siteId: item.siteId || singleForm.siteId,
+        locationId: parseInt(item.locationId, 10),
+        status: finalStatus,
+        description: item.description,
+        cost: finalUnitCost,
+        totalCost: finalTotalCost,
+        poNumber: item.poNumber,
+        lotNumber: item.lotNumber,
+      };
     });
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+
+    console.log('Payload to /api/inventory/receive:', JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems, null, 2));
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('handleReceive: No token found, redirecting to login');
+        navigate('/login');
+        throw new Error('No token found in localStorage');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/inventory/receive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(itemsToReceive.length === 1 ? inventoryItems[0] : inventoryItems),
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      setSuccessMessage('Items received successfully!');
+      await refreshInventory();
+      setTimeout(() => {
+        setSuccessMessage(null);
+        setShowMultipleItemsModal(false);
+        setReceiveItems([]);
+        navigate('/inventory');
+      }, 1000);
+    } catch (err: any) {
+      setProductionError('Failed to receive items: ' + err.message);
+      console.error('Receive error:', err);
     }
-    setSuccessMessage('Items received successfully!');
-    await refreshInventory();
-    setTimeout(() => {
-      setSuccessMessage(null);
-      setShowMultipleItemsModal(false);
-      setReceiveItems([]);
-      navigate('/inventory');
-    }, 1000);
-  } catch (err: any) {
-    setProductionError('Failed to receive items: ' + err.message);
-    console.error('Receive error:', err);
-  }
-};
+  };
 
 return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
