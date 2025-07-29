@@ -258,91 +258,106 @@ router.post('/move', async (req, res) => {
   }
 });
 
-router.post('/loss', (req, res) => {
+router.post('/loss', async (req, res) => {
   const { identifier, quantityLost, reason, date, siteId, locationId } = req.body;
+  console.log('POST /api/inventory/loss: Received payload', { identifier, quantityLost, reason, date, siteId, locationId });
+
   if (!identifier || !quantityLost || !reason || !siteId) {
     console.error('POST /api/inventory/loss: Missing required fields', { identifier, quantityLost, reason, siteId });
     return res.status(400).json({ error: 'identifier, quantityLost, reason, and siteId are required' });
   }
-  if (quantityLost <= 0) {
+
+  const parsedQuantityLost = parseFloat(quantityLost);
+  if (isNaN(parsedQuantityLost) || parsedQuantityLost <= 0) {
     console.error('POST /api/inventory/loss: Invalid quantityLost', { quantityLost });
-    return res.status(400).json({ error: 'quantityLost must be positive' });
+    return res.status(400).json({ error: 'quantityLost must be a positive number' });
   }
-  db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
-    if (err) {
-      console.error('POST /api/inventory/loss: Fetch site error:', err);
-      return res.status(500).json({ error: err.message });
-    }
+
+  try {
+    await new Promise((resolve, reject) => {
+      db.run('BEGIN TRANSACTION', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const site = await new Promise((resolve, reject) => {
+      db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
     if (!site) {
+      await new Promise((resolve) => db.run('ROLLBACK', resolve));
       console.error('POST /api/inventory/loss: Invalid siteId', { siteId });
       return res.status(400).json({ error: 'Invalid siteId' });
     }
-    db.get(
-      'SELECT quantity FROM inventory WHERE identifier = ?',
-      [identifier],
-      (err, inventory) => {
-        if (err) {
-          console.error('POST /api/inventory/loss: Fetch inventory error:', err);
-          return res.status(500).json({ error: err.message });
+
+    const inventory = await new Promise((resolve, reject) => {
+      db.get('SELECT quantity FROM inventory WHERE identifier = ?', [identifier], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!inventory) {
+      await new Promise((resolve) => db.run('ROLLBACK', resolve));
+      console.error('POST /api/inventory/loss: Inventory not found', { identifier, siteId, locationId });
+      return res.status(404).json({ error: 'Inventory item not found' });
+    }
+
+    const currentQuantity = parseFloat(inventory.quantity || '0');
+    if (currentQuantity < parsedQuantityLost) {
+      await new Promise((resolve) => db.run('ROLLBACK', resolve));
+      console.error('POST /api/inventory/loss: Insufficient quantity', { identifier, available: currentQuantity, requested: parsedQuantityLost });
+      return res.status(400).json({ error: 'Insufficient inventory quantity' });
+    }
+
+    await new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ?',
+        [parsedQuantityLost, identifier],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
         }
-        if (!inventory) {
-          console.error('POST /api/inventory/loss: Inventory not found', { identifier, siteId, locationId });
-          return res.status(404).json({ error: 'Inventory item not found' });
+      );
+    });
+
+    await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO inventory_losses (identifier, quantityLost, reason, date, siteId, locationId, userId) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          identifier,
+          parsedQuantityLost,
+          reason,
+          date || new Date().toISOString().split('T')[0],
+          siteId,
+          locationId || null,
+          req.user?.email || 'unknown',
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
         }
-        if (parseFloat(inventory.quantity) < quantityLost) {
-          console.error('POST /api/inventory/loss: Insufficient quantity', { identifier, available: inventory.quantity, requested: quantityLost });
-          return res.status(400).json({ error: 'Insufficient inventory quantity' });
-        }
-        db.serialize(() => {
-          db.run('BEGIN TRANSACTION', (err) => {
-            if (err) {
-              console.error('POST /api/inventory/loss: Begin transaction error:', err);
-              return res.status(500).json({ error: err.message });
-            }
-            db.run(
-              'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ?',
-              [quantityLost, identifier],
-              (err) => {
-                if (err) {
-                  db.run('ROLLBACK');
-                  console.error('POST /api/inventory/loss: Update inventory error:', err);
-                  return res.status(500).json({ error: err.message });
-                }
-                db.run(
-                  'INSERT INTO inventory_losses (identifier, quantityLost, reason, date, siteId, locationId, userId) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                  [
-                    identifier,
-                    quantityLost,
-                    reason,
-                    date || new Date().toISOString().split('T')[0],
-                    siteId,
-                    locationId || null,
-                    req.user?.email || 'unknown',
-                  ],
-                  (err) => {
-                    if (err) {
-                      db.run('ROLLBACK');
-                      console.error('POST /api/inventory/loss: Insert loss error:', err);
-                      return res.status(500).json({ error: err.message });
-                    }
-                    db.run('COMMIT', (err) => {
-                      if (err) {
-                        db.run('ROLLBACK');
-                        console.error('POST /api/inventory/loss: Commit error:', err);
-                        return res.status(500).json({ error: err.message });
-                      }
-                      console.log('POST /api/inventory/loss: Success', { identifier, quantityLost, reason });
-                      res.json({ message: 'Inventory loss recorded successfully' });
-                    });
-                  }
-                );
-              }
-            );
-          });
-        });
-      }
-    );
-  });
+      );
+    });
+
+    await new Promise((resolve, reject) => {
+      db.run('COMMIT', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    console.log('POST /api/inventory/loss: Success', { identifier, quantityLost, reason });
+    res.json({ message: 'Inventory loss recorded successfully' });
+  } catch (err) {
+    console.error('POST /api/inventory/loss: Error:', err);
+    await new Promise((resolve) => db.run('ROLLBACK', resolve));
+    res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
 });
 
 module.exports = router;

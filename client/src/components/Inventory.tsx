@@ -30,7 +30,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showLossModal, setShowLossModal] = useState(false);
   const [productionError, setProductionError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
@@ -81,20 +81,8 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
 
   // Fetch inventory on mount
   useEffect(() => {
-    console.log('[Inventory] Inventory prop:', {
-      length: inventory.length,
-      items: inventory.map(item => ({
-        identifier: item.identifier,
-        status: item.status,
-        type: item.type,
-        siteId: item.siteId,
-        locationId: item.locationId,
-        account: item.account,
-      })),
-    });
     const abortController = new AbortController();
     const fetchData = async () => {
-      if (isLoading) return;
       setIsLoading(true);
       try {
         await refreshInventory();
@@ -112,6 +100,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
 
   // Fetch daily summary on mount
   useEffect(() => {
+    const abortController = new AbortController();
     console.log('[Inventory] Fetching daily summary');
     fetchDailySummary()
       .then(data => {
@@ -126,14 +115,15 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         console.error('[Inventory] Daily summary error:', err);
         setProductionError(err instanceof Error ? `Failed to load daily summary: ${err.message}` : 'Failed to load daily summary: Unknown error');
         setDailySummary([]);
-      });
+      })
+      .finally(() => setIsLoading(false));
+    return () => abortController.abort();
   }, []);
 
   // Fetch sites and locations on mount
   useEffect(() => {
     const abortController = new AbortController();
     const fetchLocationsAndSites = async () => {
-      if (isLoading) return;
       setIsLoading(true);
       try {
         const sitesData: Site[] = await fetchSites(abortController.signal);
@@ -269,13 +259,14 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  const filteredInventory = inventory.filter(item =>
-    item?.status && ['Received', 'Stored', 'Processing', 'Packaged'].includes(item.status) && (
-      (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  const filteredInventory = React.useMemo(() =>
+    inventory.filter(item =>
+      item?.status && ['Received', 'Stored', 'Processing', 'Packaged'].includes(item.status) && (
+        (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item?.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    ), [inventory, searchTerm]);
 
   console.log('[Inventory] Render:', {
     isLoading,
@@ -327,7 +318,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
           type="text"
           placeholder="Search by Item-Lot, Type, or Description"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={e => setSearchTerm(e.target.value)}
           className="form-control"
           style={{ maxWidth: '300px' }}
         />
@@ -452,12 +443,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
                 type="text"
                 placeholder="Item-Lot (e.g., Flaked Corn)"
                 value={moveForm.identifier}
-                onChange={(e) => setMoveForm({ ...moveForm, identifier: e.target.value })}
+                onChange={e => setMoveForm({ ...moveForm, identifier: e.target.value })}
                 className="form-control mb-2"
               />
               <select
                 value={moveForm.toAccount}
-                onChange={(e) => setMoveForm({ ...moveForm, toAccount: e.target.value })}
+                onChange={e => setMoveForm({ ...moveForm, toAccount: e.target.value })}
                 className="form-control mb-2"
               >
                 <option value="Storage">Storage</option>
@@ -468,7 +459,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
                 type="number"
                 placeholder="Proof Gallons"
                 value={moveForm.proofGallons}
-                onChange={(e) => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
+                onChange={e => setMoveForm({ ...moveForm, proofGallons: e.target.value })}
                 className="form-control mb-2"
               />
             </div>
@@ -495,34 +486,34 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
                 type="text"
                 placeholder="Item-Lot (e.g., Flaked Corn)"
                 value={lossForm.identifier}
-                onChange={(e) => setLossForm({ ...lossForm, identifier: e.target.value })}
+                onChange={e => setLossForm({ ...lossForm, identifier: e.target.value })}
                 className="form-control mb-2"
               />
               <input
                 type="number"
                 placeholder="Quantity Lost"
                 value={lossForm.quantityLost}
-                onChange={(e) => setLossForm({ ...lossForm, quantityLost: e.target.value })}
+                onChange={e => setLossForm({ ...lossForm, quantityLost: e.target.value })}
                 className="form-control mb-2"
               />
               <input
                 type="number"
                 placeholder="Proof Gallons Lost"
                 value={lossForm.proofGallonsLost}
-                onChange={(e) => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
+                onChange={e => setLossForm({ ...lossForm, proofGallonsLost: e.target.value })}
                 className="form-control mb-2"
               />
               <input
                 type="text"
                 placeholder="Reason for Loss"
                 value={lossForm.reason}
-                onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
+                onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
                 className="form-control mb-2"
               />
               <input
                 type="date"
                 value={lossForm.date}
-                onChange={(e) => setLossForm({ ...lossForm, date: e.target.value })}
+                onChange={e => setLossForm({ ...lossForm, date: e.target.value })}
                 className="form-control mb-2"
               />
             </div>
