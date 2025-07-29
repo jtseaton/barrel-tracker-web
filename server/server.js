@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
-const { db, initializeDatabase, insertTestData } = require('./services/database');
+const { db } = require('./services/database'); // init() is called in database.js
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
