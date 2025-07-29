@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
 import { Status, Unit, MaterialType, Account, ProductClass, BatchType } from '../types/enums';
 import RecipeModal from './RecipeModal';
 import '../App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
 interface ProductionProps {
   inventory: InventoryItem[];
@@ -42,13 +42,36 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const fetchBatches = async () => {
+  const navigate = useNavigate();
+
+  const getAuthHeaders = useCallback(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[Production] No token found, redirecting to login');
+      navigate('/login');
+      return null;
+    }
+    return {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+  }, [navigate]);
+
+  const fetchBatches = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/batches?page=${page}&limit=10`, {
-        headers: { Accept: 'application/json' },
+        headers,
       });
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 401) {
+          console.error('[Production] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`Failed to fetch batches: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
@@ -59,13 +82,15 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setBatches(data.batches);
       setTotalPages(data.totalPages || 1);
     } catch (err: any) {
-      console.error('Fetch batches error:', err);
+      console.error('[Production] Fetch batches error:', err);
       setError('Failed to load batches: ' + err.message);
     }
-  };
+  }, [page, getAuthHeaders, navigate]);
 
   useEffect(() => {
     const fetchData = async () => {
+      const headers = getAuthHeaders();
+      if (!headers) return;
       try {
         const endpoints = [
           { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
@@ -73,13 +98,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
         ];
         const responses = await Promise.all(
-          endpoints.map(({ url }) => fetch(url, { headers: { Accept: 'application/json' } }))
+          endpoints.map(({ url }) => fetch(url, { headers }))
         );
         for (let i = 0; i < responses.length; i++) {
           const res = responses[i];
           const { name, setter } = endpoints[i];
           if (!res.ok) {
             const text = await res.text();
+            if (res.status === 401) {
+              console.error('[Production] Unauthorized, redirecting to login');
+              navigate('/login');
+              throw new Error(`Unauthorized: ${name}`);
+            }
             throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
           const data = await res.json();
@@ -91,20 +121,25 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         }
         await fetchBatches();
       } catch (err: any) {
-        console.error('Initial fetch error:', err);
+        console.error('[Production] Initial fetch error:', err);
         setError('Failed to load production data: ' + err.message);
       }
     };
     fetchData();
-  }, [page]);
+  }, [fetchBatches, getAuthHeaders, navigate]);
 
-  const refreshProducts = async () => {
+  const refreshProducts = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/products`, {
-        headers: { Accept: 'application/json' },
-      });
+      const res = await fetch(`${API_BASE_URL}/api/products`, { headers });
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 401) {
+          console.error('[Production] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`Failed to fetch products: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
@@ -114,20 +149,25 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       }
       setProducts(data);
     } catch (err: any) {
-      console.error('Refresh products error:', err);
+      console.error('[Production] Refresh products error:', err);
       setError('Failed to refresh products: ' + err.message);
     }
-  };
+  }, [getAuthHeaders, navigate]);
 
   useEffect(() => {
     if (newBatch.siteId) {
       const fetchFermenters = async () => {
+        const headers = getAuthHeaders();
+        if (!headers) return;
         try {
-          const res = await fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}&type=Fermenter`, {
-            headers: { Accept: 'application/json' },
-          });
+          const res = await fetch(`${API_BASE_URL}/api/equipment?siteId=${newBatch.siteId}&type=Fermenter`, { headers });
           if (!res.ok) {
             const text = await res.text();
+            if (res.status === 401) {
+              console.error('[Production] Unauthorized, redirecting to login');
+              navigate('/login');
+              throw new Error('Unauthorized');
+            }
             throw new Error(`Failed to fetch fermenters: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
           const data = await res.json();
@@ -139,7 +179,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           }
           setEquipment(data.filter(item => item && typeof item === 'object' && 'equipmentId' in item && 'name' in item));
         } catch (err: any) {
-          console.error('Fetch fermenters error:', err);
+          console.error('[Production] Fetch fermenters error:', err);
           setError('Failed to load fermenters: ' + err.message);
           setEquipment([]);
         }
@@ -148,19 +188,24 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     } else {
       setEquipment([]);
     }
-  }, [newBatch.siteId]);
+  }, [newBatch.siteId, getAuthHeaders, navigate]);
 
-  const fetchRecipes = async (productId: number) => {
+  const fetchRecipes = useCallback(async (productId: number) => {
     if (!productId) {
       setRecipes([]);
       return;
     }
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${productId}`, {
-        headers: { Accept: 'application/json' },
-      });
+      const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${productId}`, { headers });
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 401) {
+          console.error('[Production] Unauthorized, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         throw new Error(`Failed to fetch recipes: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
       }
       const data = await res.json();
@@ -170,33 +215,38 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       }
       setRecipes(data);
     } catch (err: any) {
-      console.error('Fetch recipes error:', err);
+      console.error('[Production] Fetch recipes error:', err);
       setError('Failed to fetch recipes: ' + err.message);
       setRecipes([]);
     }
-  };
+  }, [getAuthHeaders, navigate]);
 
   useEffect(() => {
     const fetchProductClass = async () => {
       if (newBatch.productId) {
+        const headers = getAuthHeaders();
+        if (!headers) return;
         try {
-          const res = await fetch(`${API_BASE_URL}/api/products/${newBatch.productId}`, {
-            headers: { Accept: 'application/json' },
-          });
+          const res = await fetch(`${API_BASE_URL}/api/products/${newBatch.productId}`, { headers });
           if (!res.ok) {
             const text = await res.text();
+            if (res.status === 401) {
+              console.error('[Production] Unauthorized, redirecting to login');
+              navigate('/login');
+              throw new Error('Unauthorized');
+            }
             throw new Error(`Failed to fetch product: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
           }
           const product = await res.json();
           setProductClass(product.class);
           if (product.class !== ProductClass.Spirits || newBatch.batchType === BatchType.Fermentation) {
-            fetchRecipes(newBatch.productId);
+            await fetchRecipes(newBatch.productId);
           } else {
             setRecipes([]);
             setNewBatch({ ...newBatch, recipeId: 0 });
           }
         } catch (err: any) {
-          console.error('Fetch product class error:', err);
+          console.error('[Production] Fetch product class error:', err);
           setError('Failed to load product details: ' + err.message);
         }
       } else {
@@ -205,7 +255,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       }
     };
     fetchProductClass();
-  }, [newBatch.productId, newBatch.batchType]);
+  }, [newBatch.productId, newBatch.batchType, fetchRecipes, getAuthHeaders, navigate]);
 
   const calculateSpiritsRequirements = () => {
     if (!desiredVolume || !desiredAbv) return { spiritVolume: 0, waterVolume: 0 };
@@ -230,6 +280,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setShowAddBatchModal(false);
       return;
     }
+
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
       console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
@@ -374,17 +427,20 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           identifier: '321654987',
           toAccount: Account.Production,
           proofGallons: proofGallons.toString(),
-          volume: spiritVolume,
-          proof: spiritProof,
         };
 
-        const moveRes = await fetch(`${API_BASE_URL}/api/move`, {
+        const moveRes = await fetch(`${API_BASE_URL}/api/inventory/move`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers,
           body: JSON.stringify(moveData),
         });
         if (!moveRes.ok) {
           const text = await moveRes.text();
+          if (moveRes.status === 401) {
+            console.error('[Production] Unauthorized move, redirecting to login');
+            navigate('/login');
+            throw new Error('Unauthorized');
+          }
           throw new Error(`Failed to move spirit: HTTP ${moveRes.status}, ${text.slice(0, 50)}`);
         }
       }
@@ -399,13 +455,18 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
       const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers,
         body: JSON.stringify(batchData),
       });
 
       if (!resBatch.ok) {
         const text = await resBatch.text();
         let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
+        if (resBatch.status === 401) {
+          console.error('[Production] Unauthorized batch creation, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
@@ -437,12 +498,17 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         });
         const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatch.batchId}/ingredients`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers,
           body: JSON.stringify(ingredientData),
         });
         if (!resIngredient.ok) {
           const text = await resIngredient.text();
           let errorMessage = `Failed to add ingredient ${ing.itemName}: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
+          if (resIngredient.status === 401) {
+            console.error('[Production] Unauthorized ingredient addition, redirecting to login');
+            navigate('/login');
+            throw new Error('Unauthorized');
+          }
           try {
             const errorData = JSON.parse(text);
             errorMessage = errorData.error || errorMessage;
@@ -478,11 +544,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleAddRecipe = async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       console.log('[Production] Creating recipe:', recipe);
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers,
         body: JSON.stringify({
           name: recipe.name,
           productId: recipe.productId,
@@ -498,6 +566,11 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       if (!res.ok) {
         const text = await res.text();
         let errorMessage = `Failed to add recipe: HTTP ${res.status}, ${text.slice(0, 50)}`;
+        if (res.status === 401) {
+          console.error('[Production] Unauthorized recipe creation, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
         try {
           const errorData = JSON.parse(text);
           errorMessage = errorData.error || errorMessage;
@@ -534,14 +607,21 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleCompleteBatches = async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       const promises = selectedBatchIds.map(batchId =>
         fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers,
           body: JSON.stringify({ status: Status.Completed }),
         }).then(res => {
           if (!res.ok) {
+            if (res.status === 401) {
+              console.error('[Production] Unauthorized batch completion, redirecting to login');
+              navigate('/login');
+              throw new Error('Unauthorized');
+            }
             throw new Error(`Failed to complete batch ${batchId}: HTTP ${res.status}`);
           }
           return res.json();
@@ -553,19 +633,26 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setShowBatchActionsModal(false);
       setError(null);
     } catch (err: any) {
-      console.error('Complete batches error:', err);
+      console.error('[Production] Complete batches error:', err);
       setError('Failed to complete batches: ' + err.message);
     }
   };
 
   const handleDeleteBatches = async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
     try {
       const promises = selectedBatchIds.map(batchId =>
         fetch(`${API_BASE_URL}/api/batches/${batchId}`, {
           method: 'DELETE',
-          headers: { Accept: 'application/json' },
+          headers,
         }).then(res => {
           if (!res.ok) {
+            if (res.status === 401) {
+              console.error('[Production] Unauthorized batch deletion, redirecting to login');
+              navigate('/login');
+              throw new Error('Unauthorized');
+            }
             throw new Error(`Failed to delete batch ${batchId}: HTTP ${res.status}`);
           }
         })
@@ -576,15 +663,16 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       setShowBatchActionsModal(false);
       setError(null);
     } catch (err: any) {
-      console.error('Delete batches error:', err);
+      console.error('[Production] Delete batches error:', err);
       setError('Failed to delete batches: ' + err.message);
     }
   };
 
-  const filteredBatches = batches.filter(batch =>
-    batch.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (batch.productName && batch.productName.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredBatches = React.useMemo(() =>
+    batches.filter(batch =>
+      batch.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (batch.productName && batch.productName.toLowerCase().includes(searchQuery.toLowerCase()))
+    ), [batches, searchQuery]);
 
   const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
 
