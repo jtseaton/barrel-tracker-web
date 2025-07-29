@@ -34,7 +34,7 @@ router.post('/receive', async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [req.body];
   const validAccounts = ['Storage', 'Processing', 'Production'];
   const validateItem = (item) => {
-    const { identifier, item: itemName, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
+    const { identifier, item: itemName, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
     if (!identifier || !itemName || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
       return 'Missing required fields (identifier, item, type, quantity, unit, receivedDate, status, siteId, locationId)';
     }
@@ -64,7 +64,7 @@ router.post('/receive', async (req, res) => {
       });
     });
     for (const item of items) {
-      const { identifier, item: itemName, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account } = item;
+      const { identifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 200)).toFixed(2)) : null;
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
