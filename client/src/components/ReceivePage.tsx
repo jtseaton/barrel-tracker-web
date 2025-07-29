@@ -218,31 +218,32 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   }, [API_BASE_URL, navigate, refreshVendors]);
 
   const fetchPOs = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('fetchPOs: No token found, redirecting to login');
-        navigate('/login');
-        throw new Error('No token found in localStorage');
-      }
-      const encodedSource = encodeURIComponent(singleForm.source || '');
-      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const data = await res.json();
-      console.log('Fetched purchase orders:', data);
-      setPurchaseOrders(data);
-    } catch (err: any) {
-      setProductionError('Failed to fetch purchase orders: ' + err.message);
-      console.error('fetchPOs error:', err);
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('fetchPOs: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
     }
-  }, [API_BASE_URL, navigate, singleForm.source]);
+    const encodedSource = encodeURIComponent(singleForm.source || '');
+    const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+    }
+    const data: PurchaseOrder[] = (await res.json()) || [];
+    console.log('Fetched purchase orders:', data);
+    setPurchaseOrders(data);
+  } catch (err: any) {
+    setProductionError('Failed to fetch purchase orders: ' + err.message);
+    console.error('fetchPOs error:', err);
+    setPurchaseOrders([]); // Ensure array in case of error
+  }
+}, [API_BASE_URL, navigate, singleForm.source]);
 
   useEffect(() => {
     console.log('Fetching sites, items, vendors');
@@ -1078,7 +1079,7 @@ return (
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
             >
               <option value="">Select PO (optional)</option>
-              {purchaseOrders.map(po => (
+              {Array.isArray(purchaseOrders) && purchaseOrders.map(po => (
                 <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
               ))}
             </select>
@@ -1185,10 +1186,10 @@ return (
                   setSingleForm((prev: ReceiveForm) => ({ ...prev, poNumber }));
                   if (poNumber) handlePOSelect(poNumber);
                 }}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box', fontSize: '16px' }}
+                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
               >
                 <option value="">Select PO (optional)</option>
-                {purchaseOrders.map(po => (
+                {Array.isArray(purchaseOrders) && purchaseOrders.map(po => (
                   <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
                 ))}
               </select>
@@ -1758,7 +1759,7 @@ return (
                   style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
                 >
                   <option value="">Select PO (optional)</option>
-                  {purchaseOrders.map(po => (
+                  {Array.isArray(purchaseOrders) && purchaseOrders.map(po => (
                     <option key={po.poNumber} value={po.poNumber}>{po.poNumber}</option>
                   ))}
                 </select>
