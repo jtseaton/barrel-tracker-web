@@ -176,6 +176,19 @@ function initializeDatabase() {
         else console.log('Recipes table created');
       });
       db.run(`
+        CREATE TABLE IF NOT EXISTS recipe_ingredients (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          recipeId INTEGER NOT NULL,
+          itemName TEXT NOT NULL,
+          quantity REAL NOT NULL,
+          unit TEXT NOT NULL,
+          FOREIGN KEY (recipeId) REFERENCES recipes(id)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating recipes_ingredients table:', err);
+        else console.log('Recipe Ingredients table created');
+      });
+      db.run(`
         CREATE TABLE IF NOT EXISTS facility_designs (
           facilityDesignId INTEGER PRIMARY KEY AUTOINCREMENT,
           siteId TEXT,
