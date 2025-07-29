@@ -1,4 +1,3 @@
-// src/components/Inventory.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem, Site } from '../types/interfaces';
@@ -36,7 +35,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
-  // Log inventory prop
   useEffect(() => {
     console.log('[Inventory] Inventory prop:', {
       length: inventory.length,
@@ -44,22 +42,26 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         identifier: item.identifier,
         status: item.status,
         type: item.type,
-        description: item.description,
+        siteId: item.siteId,
+        locationId: item.locationId,
       })),
-      styles: {
-        pageContainer: 'background: #FFFFFF, color: #000000',
-        header: 'color: #FFFFFF',
-        table: 'background: #FFFFFF, color: #555555',
-        buttons: 'background: #2196F3, hover: #1976D2',
-      },
     });
-    setIsLoading(false); // Set loading false after inventory is received
-  }, [inventory]);
+    const fetchData = async () => {
+      try {
+        await refreshInventory();
+        console.log('[Inventory] refreshInventory called');
+      } catch (err) {
+        console.error('[Inventory] refreshInventory error:', err);
+        setProductionError(err instanceof Error ? `Failed to refresh inventory: ${err.message}` : 'Failed to refresh inventory: Unknown error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [refreshInventory]);
 
-  // Fetch daily summary
   useEffect(() => {
     console.log('[Inventory] Fetching daily summary');
-    setIsLoading(true);
     fetchDailySummary()
       .then(data => {
         console.log('[Inventory] Daily summary:', {
@@ -73,22 +75,23 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         console.error('[Inventory] Daily summary error:', err);
         setProductionError(err instanceof Error ? `Failed to load daily summary: ${err.message}` : 'Failed to load daily summary: Unknown error');
         setDailySummary([]);
-      })
-      .finally(() => {
-        console.log('[Inventory] Daily summary fetch complete');
-        setIsLoading(false);
       });
   }, []);
 
-  // Fetch locations and sites
   useEffect(() => {
     const fetchLocationsAndSites = async () => {
       try {
         console.log('[Inventory] Fetching sites');
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('[Inventory] No token found, redirecting to login');
+          navigate('/login');
+          return;
+        }
         const sitesRes = await fetch(`${API_BASE_URL}/api/sites`, {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+            Authorization: `Bearer ${token}`,
           },
         });
         if (!sitesRes.ok) {
@@ -111,7 +114,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
           fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`, {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+              Authorization: `Bearer ${token}`,
             },
           }).then(res => {
             if (!res.ok) {
@@ -134,18 +137,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         setProductionError(err instanceof Error ? `Failed to fetch locations or sites: ${err.message}` : 'Failed to fetch locations or sites: Unknown error');
         setSites([]);
         setLocations([]);
-      } finally {
-        console.log('[Inventory] Locations/sites fetch complete');
-        setIsLoading(false);
       }
     };
 
-    if (inventory.length > 0) {
-      fetchLocationsAndSites();
-    } else {
-      console.log('[Inventory] Skipping locations/sites fetch: empty inventory');
-      setIsLoading(false);
-    }
+    fetchLocationsAndSites();
   }, [API_BASE_URL, inventory]);
 
   const getLocationName = (locationId: number | undefined) => {
@@ -192,13 +187,13 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
   };
 
   const handleRecordLoss = async () => {
-    if (!lossForm.identifier || !lossForm.quantityLost || !lossForm.proofGallonsLost || !lossForm.reason) {
-      setProductionError('Please fill in all fields.');
+    if (!lossForm.identifier || !lossForm.quantityLost || !lossForm.reason) {
+      setProductionError('Please fill in Identifier, Quantity Lost, and Reason.');
       return;
     }
     try {
       console.log('[Inventory] Recording loss:', lossForm);
-      const res = await fetch(`${API_BASE_URL}/api/record-loss`, {
+      const res = await fetch(`${API_BASE_URL}/api/inventory/loss`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,7 +231,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  // Relax status filter to include all valid statuses
   const filteredInventory = inventory.filter(item => 
     item?.status && ['Received', 'Stored', 'Processing', 'Packaged'].includes(item.status) && (
       (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -255,6 +249,8 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
       identifier: item.identifier,
       status: item.status,
       type: item.type,
+      siteId: item.siteId,
+      locationId: item.locationId,
     })),
   });
 
@@ -319,7 +315,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
               </thead>
               <tbody>
                 {filteredInventory.map((item, index) => (
-                  <tr key={index} onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
+                  <tr key={item.identifier} onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
                     <td>{getIdentifier(item)}</td>
                     <td>{item?.type || 'N/A'}</td>
                     <td>{item?.quantity ?? 'N/A'}</td>
@@ -336,7 +332,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
             </table>
             <div className="card-list">
               {filteredInventory.map((item, index) => (
-                <div key={index} className="card-item card mb-2" onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
+                <div key={item.identifier} className="card-item card mb-2" onClick={() => handleItemClick(item)} style={{ cursor: 'pointer' }}>
                   <div className="card-body">
                     <p className="card-text"><strong>Item-Lot:</strong> {getIdentifier(item)}</p>
                     <p className="card-text"><strong>Type:</strong> {item?.type || 'N/A'}</p>

@@ -31,12 +31,8 @@ function initializeDatabase() {
           passkey TEXT
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating users table:', err);
-          reject(err);
-        } else {
-          console.log('Users table created');
-        }
+        if (err) console.error('Error creating users table:', err);
+        else console.log('Users table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS sites (
@@ -47,12 +43,8 @@ function initializeDatabase() {
           enabled INTEGER DEFAULT 1
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating sites table:', err);
-          reject(err);
-        } else {
-          console.log('Sites table created');
-        }
+        if (err) console.error('Error creating sites table:', err);
+        else console.log('Sites table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS locations (
@@ -64,12 +56,8 @@ function initializeDatabase() {
           FOREIGN KEY (siteId) REFERENCES sites(siteId)
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating locations table:', err);
-          reject(err);
-        } else {
-          console.log('Locations table created');
-        }
+        if (err) console.error('Error creating locations table:', err);
+        else console.log('Locations table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS items (
@@ -78,17 +66,12 @@ function initializeDatabase() {
           enabled INTEGER DEFAULT 1
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating items table:', err);
-          reject(err);
-        } else {
-          console.log('Items table created');
-        }
+        if (err) console.error('Error creating items table:', err);
+        else console.log('Items table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS inventory (
-          inventoryId INTEGER PRIMARY KEY AUTOINCREMENT,
-          identifier TEXT NOT NULL,
+          identifier TEXT PRIMARY KEY,
           item TEXT NOT NULL,
           type TEXT,
           quantity TEXT,
@@ -111,12 +94,8 @@ function initializeDatabase() {
           FOREIGN KEY (locationId) REFERENCES locations(locationId)
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating inventory table:', err);
-          reject(err);
-        } else {
-          console.log('Inventory table created');
-        }
+        if (err) console.error('Error creating inventory table:', err);
+        else console.log('Inventory table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS vendors (
@@ -124,12 +103,8 @@ function initializeDatabase() {
           enabled INTEGER DEFAULT 1
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating vendors table:', err);
-          reject(err);
-        } else {
-          console.log('Vendors table created');
-        }
+        if (err) console.error('Error creating vendors table:', err);
+        else console.log('Vendors table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS equipment (
@@ -141,12 +116,8 @@ function initializeDatabase() {
           FOREIGN KEY (siteId) REFERENCES sites(siteId)
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating equipment table:', err);
-          reject(err);
-        } else {
-          console.log('Equipment table created');
-        }
+        if (err) console.error('Error creating equipment table:', err);
+        else console.log('Equipment table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS facility_designs (
@@ -157,15 +128,27 @@ function initializeDatabase() {
           FOREIGN KEY (siteId) REFERENCES sites(siteId)
         )
       `, (err) => {
-        if (err) {
-          console.error('Error creating facility_designs table:', err);
-          reject(err);
-        } else {
-          console.log('Facility_designs table created');
-        }
+        if (err) console.error('Error creating facility_designs table:', err);
+        else console.log('Facility_designs table created');
       });
-      // ... other table creations (e.g., purchase_orders, products, etc.) ...
-      
+      db.run(`
+        CREATE TABLE IF NOT EXISTS inventory_losses (
+          lossId INTEGER PRIMARY KEY AUTOINCREMENT,
+          identifier TEXT NOT NULL,
+          quantityLost TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          date TEXT NOT NULL,
+          siteId TEXT NOT NULL,
+          locationId INTEGER,
+          userId TEXT,
+          FOREIGN KEY (siteId) REFERENCES sites(siteId),
+          FOREIGN KEY (locationId) REFERENCES locations(locationId),
+          FOREIGN KEY (userId) REFERENCES users(email)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating inventory_losses table:', err);
+        else console.log('Inventory_losses table created');
+      });
       db.run('SELECT 1', (err) => {
         if (err) {
           console.error('Error finalizing schema:', err);
@@ -199,12 +182,8 @@ async function insertTestData() {
           'INSERT OR IGNORE INTO users (email, passwordHash, role, enabled) VALUES (?, ?, ?, ?)',
           ['jtseaton@gmail.com', hash, 'SuperAdmin', 1],
           (err) => {
-            if (err) {
-              console.error('Error inserting default user:', err);
-              reject(err);
-            } else {
-              console.log('Inserted default Super Admin user');
-            }
+            if (err) console.error('Error inserting default user:', err);
+            else console.log('Inserted default Super Admin user');
           }
         );
 
@@ -235,7 +214,7 @@ async function insertTestData() {
           (err) => { if (err) console.error('Error inserting location Athens DSP Storage:', err); }
         );
         db.run(
-          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?, ?)`,
+          `INSERT OR IGNORE INTO locations (siteId, name, abbreviation) VALUES (?, ?, ?)`,
           ['DSP-AL-20051', 'Athens DSP Processing', null],
           (err) => { if (err) console.error('Error inserting location Athens DSP Processing:', err); }
         );
@@ -300,52 +279,6 @@ async function insertTestData() {
           (err) => { if (err) console.error('Error inserting location Athens Cold Storage:', err); }
         );
 
-        (async () => {
-          try {
-            const xmlPath = path.join(__dirname, '../../config/items.xml');
-            console.log(`Reading items.xml from: ${xmlPath}`);
-            const xmlData = await fs.readFile(xmlPath, 'utf-8');
-            const parser = new xml2js.Parser({ explicitArray: false });
-            const result = await parser.parseStringPromise(xmlData);
-            
-            const items = result.items.item;
-            const itemsArray = Array.isArray(items) ? items : [items].filter(Boolean);
-
-            for (const item of itemsArray) {
-              const name = item.$.name || '';
-              const type = item.$.type || 'Other';
-              const enabled = parseInt(item.$.enabled || '1', 10);
-              if (!name) {
-                console.warn('Skipping item with missing name in items.xml:', item);
-                continue;
-              }
-              db.run(
-                'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-                [name, type, enabled],
-                (err) => {
-                  if (err) {
-                    console.error(`Error inserting item ${name}:`, err);
-                  } else {
-                    console.log(`Inserted item from items.xml: ${name}`);
-                  }
-                }
-              );
-            }
-          } catch (err) {
-            console.error('Error loading items.xml:', err);
-          }
-        })();
-
-        db.run(
-          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-          ['Finished Goods', 'Finished Goods', 1],
-          (err) => { if (err) console.error('Error inserting item Finished Goods:', err); }
-        );
-        db.run(
-          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
-          ['Corn', 'Grain', 1],
-          (err) => { if (err) console.error('Error inserting item Corn:', err); }
-        );
         db.run(
           `INSERT OR IGNORE INTO vendors (name, enabled) VALUES (?, ?)`,
           ['ABC Supplier', 1],
@@ -365,6 +298,52 @@ async function insertTestData() {
           `INSERT OR IGNORE INTO vendors (name, enabled) VALUES (?, ?)`,
           ['Hops R Us', 1],
           (err) => { if (err) console.error('Error inserting vendor Hops R Us:', err); }
+        );
+
+        try {
+          const xmlPath = path.join(__dirname, '../../config/items.xml');
+          console.log(`Reading items.xml from: ${xmlPath}`);
+          const xmlData = fs.readFileSync(xmlPath, 'utf-8');
+          const parser = new xml2js.Parser({ explicitArray: false });
+          parser.parseString(xmlData, (err, result) => {
+            if (err) {
+              console.error('Error parsing items.xml:', err);
+              return;
+            }
+            const items = result.items.item;
+            const itemsArray = Array.isArray(items) ? items : [items].filter(Boolean);
+
+            itemsArray.forEach(item => {
+              const name = item.$.name || '';
+              const type = item.$.type || 'Other';
+              const enabled = parseInt(item.$.enabled || '1', 10);
+              if (!name) {
+                console.warn('Skipping item with missing name in items.xml:', item);
+                return;
+              }
+              db.run(
+                'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+                [name, type, enabled],
+                (err) => {
+                  if (err) console.error(`Error inserting item ${name}:`, err);
+                  else console.log(`Inserted item from items.xml: ${name}`);
+                }
+              );
+            });
+          });
+        } catch (err) {
+          console.error('Error loading items.xml:', err);
+        }
+
+        db.run(
+          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+          ['Finished Goods', 'Finished Goods', 1],
+          (err) => { if (err) console.error('Error inserting item Finished Goods:', err); }
+        );
+        db.run(
+          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+          ['Corn', 'Grain', 1],
+          (err) => { if (err) console.error('Error inserting item Corn:', err); }
         );
 
         db.run('SELECT 1', (err) => {
