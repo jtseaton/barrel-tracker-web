@@ -143,7 +143,8 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         const errorText = await res.text();
         throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
       }
-      const data: Site[] = await res.json();
+      
+      const data: Site[] = await res.json() || []; // Ensure data is an array
       console.log('Fetched sites:', data);
       if (data.length === 0) {
         console.warn('No sites returned from API');
@@ -302,17 +303,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       setSiteDropdownPosition(null);
     }
   }, [activeSiteDropdownIndex]);
-
-  useEffect(() => {
-    console.log('Syncing singleForm.siteId with selectedSite:', { selectedSite, currentSiteId: singleForm.siteId });
-    setSingleForm((prev) => {
-      if (prev.siteId !== selectedSite) {
-        console.log('Updating singleForm.siteId to:', selectedSite);
-        return { ...prev, siteId: selectedSite, locationId: '' };
-      }
-      return prev;
-    });
-  }, [selectedSite]);
 
   useEffect(() => {
     if (
@@ -785,34 +775,34 @@ return (
                 fontSize: '16px',
               }}
             />
-            {showSiteSuggestions && (
-              <ul className="typeahead">
-                {filteredSites.map((site) => (
-                  <li
-                    key={site.siteId}
-                    onMouseDown={() => {
-                      console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
-                      setSelectedSite(site.siteId);
-                      setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
-                      setShowSiteSuggestions(false);
-                      fetchLocations(site.siteId);
-                    }}
-                    className={selectedSite === site.siteId ? 'selected' : ''}
-                  >
-                    {site.name}
-                  </li>
-                ))}
+           {showSiteSuggestions && Array.isArray(filteredSites) && (
+            <ul className="typeahead">
+              {filteredSites.map((site) => (
                 <li
+                  key={site.siteId}
                   onMouseDown={() => {
-                    navigate('/sites', { state: { fromReceive: true } });
+                    console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+                    setSelectedSite(site.siteId);
+                    setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
                     setShowSiteSuggestions(false);
+                    fetchLocations(site.siteId);
                   }}
-                  className="add-new"
+                  className={selectedSite === site.siteId ? 'selected' : ''}
                 >
-                  Add New Site
+                  {site.name}
                 </li>
-              </ul>
-            )}
+              ))}
+              <li
+                onMouseDown={() => {
+                  navigate('/sites', { state: { fromReceive: true } });
+                  setShowSiteSuggestions(false);
+                }}
+                className="add-new"
+              >
+                Add New Site
+              </li>
+            </ul>
+          )}
           </div>
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
@@ -861,30 +851,30 @@ return (
               }}
             />
             {showLocationSuggestions && !isFetchingLocations && (
-              <ul className="typeahead">
-                {filteredLocations.length > 0 ? (
-                  filteredLocations.map((location) => (
-                    <li
-                      key={location.locationId}
-                      onMouseDown={() => handleLocationSelect(location)}
-                      className={singleForm.locationId === location.locationId.toString() ? 'selected' : ''}
-                    >
-                      {location.name}
-                    </li>
-                  ))
-                ) : (
-                  <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                    No locations found
+            <ul className="typeahead">
+              {filteredLocations.length > 0 ? (
+                filteredLocations.map((location) => (
+                  <li
+                    key={location.locationId}
+                    onMouseDown={() => handleLocationSelect(location)}
+                    className={singleForm.locationId === location.locationId.toString() ? 'selected' : ''}
+                  >
+                    {location.name}
                   </li>
-                )}
-                <li
-                  onMouseDown={() => handleAddNewLocation()}
-                  className="add-new"
-                >
-                  Add New Location
+                ))
+              ) : (
+                <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
+                  No locations available for this site
                 </li>
-              </ul>
-            )}
+              )}
+              <li
+                onMouseDown={() => handleAddNewLocation()}
+                className="add-new"
+              >
+                Add New Location
+              </li>
+            </ul>
+          )}
           </div>
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>Vendor (optional):</label>
@@ -1465,7 +1455,7 @@ return (
                     fontSize: '16px',
                   }}
                 />
-                {showSiteSuggestions && (
+                {showSiteSuggestions && Array.isArray(filteredSites) && (
                   <ul className="typeahead">
                     {filteredSites.map((site) => (
                       <li
@@ -1473,10 +1463,11 @@ return (
                         onMouseDown={() => {
                           console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
                           setSelectedSite(site.siteId);
-                          setSingleForm((prev) => ({ ...prev, siteId: site.siteId }));
+                          setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
                           setShowSiteSuggestions(false);
+                          fetchLocations(site.siteId);
                         }}
-                        className={singleForm.siteId === site.siteId ? 'selected' : ''}
+                        className={selectedSite === site.siteId ? 'selected' : ''}
                       >
                         {site.name}
                       </li>
@@ -1553,7 +1544,7 @@ return (
                       ))
                     ) : (
                       <li style={{ padding: '8px 10px', color: '#888', borderBottom: '1px solid #eee' }}>
-                        No locations found
+                        No locations available for this site
                       </li>
                     )}
                     <li
