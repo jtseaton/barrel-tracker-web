@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InventoryItem, MoveForm, LossForm, Location, Vendor, DailySummaryItem, Site } from '../types/interfaces';
 import { fetchDailySummary } from '../utils/fetchUtils';
@@ -35,6 +35,51 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
   const navigate = useNavigate();
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:10000';
 
+  // Stable fetch functions
+  const fetchSites = useCallback(async (signal: AbortSignal) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[Inventory] No token found, redirecting to login');
+      navigate('/login');
+      return [];
+    }
+    const res = await fetch(`${API_BASE_URL}/api/sites`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Sites fetch failed: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+    }
+    return await res.json();
+  }, [navigate, API_BASE_URL]);
+
+  const fetchLocations = useCallback(async (siteId: string, signal: AbortSignal) => {
+    if (!siteId) return [];
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[Inventory] No token found, redirecting to login');
+      navigate('/login');
+      return [];
+    }
+    const res = await fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Locations fetch failed for siteId ${siteId}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+    }
+    return await res.json();
+  }, [navigate, API_BASE_URL]);
+
+  // Fetch inventory on mount
   useEffect(() => {
     console.log('[Inventory] Inventory prop:', {
       length: inventory.length,
@@ -44,9 +89,13 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         type: item.type,
         siteId: item.siteId,
         locationId: item.locationId,
+        account: item.account,
       })),
     });
+    const abortController = new AbortController();
     const fetchData = async () => {
+      if (isLoading) return;
+      setIsLoading(true);
       try {
         await refreshInventory();
         console.log('[Inventory] refreshInventory called');
@@ -58,8 +107,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
       }
     };
     fetchData();
+    return () => abortController.abort();
   }, [refreshInventory]);
 
+  // Fetch daily summary on mount
   useEffect(() => {
     console.log('[Inventory] Fetching daily summary');
     fetchDailySummary()
@@ -78,52 +129,25 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
       });
   }, []);
 
+  // Fetch sites and locations on mount
   useEffect(() => {
+    const abortController = new AbortController();
     const fetchLocationsAndSites = async () => {
+      if (isLoading) return;
+      setIsLoading(true);
       try {
-        console.log('[Inventory] Fetching sites');
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('[Inventory] No token found, redirecting to login');
-          navigate('/login');
-          return;
-        }
-        const sitesRes = await fetch(`${API_BASE_URL}/api/sites`, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!sitesRes.ok) {
-          const text = await sitesRes.text();
-          throw new Error(`Sites fetch failed: HTTP ${sitesRes.status}, Response: ${text.slice(0, 50)}`);
-        }
-        const sitesData: Site[] = await sitesRes.json();
+        const sitesData: Site[] = await fetchSites(abortController.signal);
         console.log('[Inventory] Fetched sites:', sitesData);
         setSites(sitesData || []);
 
-        const siteIds = inventory
-          .map(item => item?.siteId)
-          .filter((siteId): siteId is string => !!siteId)
-          .concat([OUR_DSP])
-          .filter((siteId, index, arr) => arr.indexOf(siteId) === index);
-
+        const siteIds = Array.from(new Set([
+          ...inventory.map(item => item?.siteId).filter((siteId): siteId is string => !!siteId),
+          OUR_DSP,
+        ]));
         console.log('[Inventory] Site IDs:', siteIds);
 
         const locationPromises = siteIds.map(siteId =>
-          fetch(`${API_BASE_URL}/api/locations?siteId=${encodeURIComponent(siteId)}`, {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          }).then(res => {
-            if (!res.ok) {
-              return res.text().then(text => {
-                throw new Error(`Locations fetch failed for siteId ${siteId}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
-              });
-            }
-            return res.json();
-          }).catch(err => {
+          fetchLocations(siteId, abortController.signal).catch(err => {
             console.error('[Inventory] Locations fetch error for siteId:', siteId, err);
             return [];
           })
@@ -133,25 +157,28 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
         console.log('[Inventory] Fetched locations:', allLocations);
         setLocations(allLocations || []);
       } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return;
         console.error('[Inventory] Fetch locations/sites error:', err);
         setProductionError(err instanceof Error ? `Failed to fetch locations or sites: ${err.message}` : 'Failed to fetch locations or sites: Unknown error');
         setSites([]);
         setLocations([]);
+      } finally {
+        setIsLoading(false);
       }
     };
-
     fetchLocationsAndSites();
-  }, [API_BASE_URL, inventory]);
+    return () => abortController.abort();
+  }, [fetchSites, fetchLocations]);
 
   const getLocationName = (locationId: number | undefined) => {
     if (!locationId) return 'Unknown Location';
-    const location = locations?.find(loc => loc?.locationId === locationId);
+    const location = locations.find(loc => loc?.locationId === locationId);
     return location?.name || 'Unknown Location';
   };
 
   const getSiteName = (siteId: string | undefined) => {
     if (!siteId) return 'Unknown Site';
-    const site = sites?.find(site => site?.siteId === siteId);
+    const site = sites.find(site => site?.siteId === siteId);
     return site?.name || 'Unknown Site';
   };
 
@@ -242,7 +269,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
     navigate(`/inventory/${encodedIdentifier}`);
   };
 
-  const filteredInventory = inventory.filter(item => 
+  const filteredInventory = inventory.filter(item =>
     item?.status && ['Received', 'Stored', 'Processing', 'Packaged'].includes(item.status) && (
       (getIdentifier(item) || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item?.type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -262,6 +289,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
       type: item.type,
       siteId: item.siteId,
       locationId: item.locationId,
+      account: item.account,
     })),
   });
 
@@ -319,6 +347,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
                   <th>Received Date</th>
                   <th>Location</th>
                   <th>Site</th>
+                  <th>Account</th>
                   <th>Source</th>
                   <th>Description</th>
                   <th>Unit Cost</th>
@@ -334,6 +363,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
                     <td>{item?.receivedDate || 'N/A'}</td>
                     <td>{getLocationName(item?.locationId)}</td>
                     <td>{getSiteName(item?.siteId)}</td>
+                    <td>{item?.account || 'N/A'}</td>
                     <td>{item?.source || 'Unknown'}</td>
                     <td>{item?.description || 'N/A'}</td>
                     <td>{item?.cost || 'N/A'}</td>
@@ -352,6 +382,7 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
                     <p className="card-text"><strong>Received Date:</strong> {item?.receivedDate || 'N/A'}</p>
                     <p className="card-text"><strong>Location:</strong> {getLocationName(item?.locationId)}</p>
                     <p className="card-text"><strong>Site:</strong> {getSiteName(item?.siteId)}</p>
+                    <p className="card-text"><strong>Account:</strong> {item?.account || 'N/A'}</p>
                     <p className="card-text"><strong>Source:</strong> {item?.source || 'Unknown'}</p>
                     <p className="card-text"><strong>Description:</strong> {item?.description || 'N/A'}</p>
                     <p className="card-text"><strong>Unit Cost:</strong> {item?.cost || 'N/A'}</p>

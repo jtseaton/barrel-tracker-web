@@ -141,31 +141,28 @@ router.post('/receive', async (req, res) => {
   }
 });
 
-// New POST /api/move route
 router.post('/move', async (req, res) => {
   const { identifier, toAccount, proofGallons } = req.body;
-  console.log('POST /api/move: Received payload', { identifier, toAccount, proofGallons });
+  console.log('POST /api/inventory/move: Received payload', { identifier, toAccount, proofGallons });
 
-  // Validate request body
   if (!identifier || !toAccount || !proofGallons) {
-    console.error('POST /api/move: Missing required fields', { identifier, toAccount, proofGallons });
-    return res.status(400).json({ error: 'Missing required fields: identifier, toAccount, proofGallons' });
+    console.error('POST /api/inventory/move: Missing required fields', { identifier, toAccount, proofGallons });
+    return res.status(400).json({ error: 'identifier, toAccount, and proofGallons are required' });
   }
 
   const validAccounts = ['Storage', 'Processing', 'Production'];
   if (!validAccounts.includes(toAccount)) {
-    console.error('POST /api/move: Invalid toAccount', { toAccount, validAccounts });
-    return res.status(400).json({ error: `Invalid toAccount: must be one of ${validAccounts.join(', ')}` });
+    console.error('POST /api/inventory/move: Invalid toAccount', { toAccount });
+    return res.status(400).json({ error: `Invalid toAccount, must be one of ${validAccounts.join(', ')}` });
   }
 
   const parsedProofGallons = parseFloat(proofGallons);
   if (isNaN(parsedProofGallons) || parsedProofGallons <= 0) {
-    console.error('POST /api/move: Invalid proofGallons', { proofGallons });
+    console.error('POST /api/inventory/move: Invalid proofGallons', { proofGallons });
     return res.status(400).json({ error: 'proofGallons must be a positive number' });
   }
 
   try {
-    // Start transaction
     await new Promise((resolve, reject) => {
       db.run('BEGIN TRANSACTION', (err) => {
         if (err) reject(err);
@@ -173,7 +170,6 @@ router.post('/move', async (req, res) => {
       });
     });
 
-    // Verify item exists
     const item = await new Promise((resolve, reject) => {
       db.get('SELECT * FROM inventory WHERE identifier = ? AND type = ?', [identifier, 'Spirits'], (err, row) => {
         if (err) reject(err);
@@ -183,15 +179,30 @@ router.post('/move', async (req, res) => {
 
     if (!item) {
       await new Promise((resolve) => db.run('ROLLBACK', resolve));
-      console.error('POST /api/move: Item not found or not Spirits', { identifier });
-      return res.status(404).json({ error: `Item with identifier ${identifier} not found or not of type Spirits` });
+      console.error('POST /api/inventory/move: Inventory not found or not Spirits', { identifier });
+      return res.status(404).json({ error: `Inventory item ${identifier} not found or not of type Spirits` });
     }
 
-    // Update inventory item
+    const proof = parseFloat(item.proof || '0');
+    if (proof <= 0) {
+      await new Promise((resolve) => db.run('ROLLBACK', resolve));
+      console.error('POST /api/inventory/move: Invalid proof', { identifier, proof });
+      return res.status(400).json({ error: 'Item proof must be a positive number' });
+    }
+
+    const moveQuantity = (parsedProofGallons * 200 / proof).toFixed(2); // Convert proof gallons to gallons
+    const currentQuantity = parseFloat(item.quantity || '0');
+    if (moveQuantity > currentQuantity) {
+      await new Promise((resolve) => db.run('ROLLBACK', resolve));
+      console.error('POST /api/inventory/move: Insufficient quantity', { identifier, currentQuantity, moveQuantity });
+      return res.status(400).json({ error: `Insufficient quantity: requested ${moveQuantity} gallons, available ${currentQuantity} gallons` });
+    }
+
+    const newQuantity = (currentQuantity - moveQuantity).toFixed(2);
     await new Promise((resolve, reject) => {
       db.run(
-        'UPDATE inventory SET account = ?, proofGallons = ? WHERE identifier = ?',
-        [toAccount, parsedProofGallons, identifier],
+        'UPDATE inventory SET quantity = ?, proofGallons = ? WHERE identifier = ?',
+        [newQuantity, (newQuantity * proof / 200).toFixed(2), identifier],
         (err) => {
           if (err) reject(err);
           else resolve();
@@ -199,7 +210,38 @@ router.post('/move', async (req, res) => {
       );
     });
 
-    // Commit transaction
+    const newIdentifier = `${identifier}-${toAccount}-${Date.now()}`; // Unique identifier for new item
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO inventory (identifier, item, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newIdentifier,
+          item.item,
+          item.type,
+          moveQuantity,
+          item.unit,
+          item.proof,
+          parsedProofGallons,
+          item.receivedDate,
+          item.source,
+          item.siteId,
+          item.locationId,
+          item.status,
+          item.description,
+          item.cost,
+          (parseFloat(item.cost || '0') * moveQuantity).toFixed(2),
+          item.poNumber,
+          item.lotNumber,
+          toAccount,
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+
     await new Promise((resolve, reject) => {
       db.run('COMMIT', (err) => {
         if (err) reject(err);
@@ -207,10 +249,10 @@ router.post('/move', async (req, res) => {
       });
     });
 
-    console.log('POST /api/move: Success', { identifier, toAccount, proofGallons: parsedProofGallons });
-    res.json({ message: 'Item moved successfully' });
+    console.log('POST /api/inventory/move: Success', { identifier, toAccount, proofGallons, moveQuantity, newIdentifier });
+    res.json({ message: 'Inventory moved successfully', newIdentifier });
   } catch (err) {
-    console.error('POST /api/move: Error:', err);
+    console.error('POST /api/inventory/move: Error:', err);
     await new Promise((resolve) => db.run('ROLLBACK', resolve));
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
