@@ -211,7 +211,6 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
         }
         const data = await res.json();
         console.log('Fetched vendors:', data);
-        refreshVendors();
         setFilteredVendors(data);
       } catch (err: any) {
         setProductionError('Failed to fetch vendors: ' + err.message);
@@ -250,8 +249,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     fetchItems();
     fetchVendors();
     if (singleForm.source) fetchPOs();
-    setFilteredVendors(vendors);
-  }, [fetchSites, navigate, refreshVendors, singleForm.source, vendors]);
+  }, [fetchSites, navigate, singleForm.source, vendors]);
 
   useEffect(() => {
     console.log('ReceivePage useEffect: Handling navigation state', location.state);
@@ -690,121 +688,121 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
 return (
-  <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
-    <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ textAlign: 'center', marginBottom: '20px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
-        <h2 style={{ color: '#555', fontSize: '20px', margin: 0 }}>
-          Total Receipt Value: ${calculateTotal}
-        </h2>
-      </div>
-      <h1 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>Receive Inventory</h1>
-      {productionError && <div style={{ color: '#F86752', backgroundColor: '#ffe6e6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{productionError}</div>}
-      {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh', overflowY: 'auto' }}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+          <h2 style={{ color: '#555', fontSize: '20px', margin: 0 }}>
+            Total Receipt Value: ${calculateTotal}
+          </h2>
+        </div>
+        <h1 style={{ color: '#EEC930', fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>Receive Inventory</h1>
+        {productionError && <div style={{ color: '#F86752', backgroundColor: '#ffe6e6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{productionError}</div>}
+        {successMessage && <div style={{ color: '#28A745', backgroundColor: '#e6ffe6', padding: '10px', borderRadius: '4px', marginBottom: '10px', textAlign: 'center' }}>{successMessage}</div>}
 
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
-        <button
-          onClick={() => setUseSingleItem(true)}
-          style={{
-            backgroundColor: useSingleItem ? '#2196F3' : '#ddd',
-            color: useSingleItem ? '#fff' : '#555',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            transition: 'background-color 0.3s',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = useSingleItem ? '#1976D2' : '#ccc')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = useSingleItem ? '#2196F3' : '#ddd')}
-        >
-          Single Item
-        </button>
-        <button
-          onClick={() => {
-            setUseSingleItem(false);
-            setShowMultipleItemsModal(true);
-            setReceiveItems([]);
-            setOtherCharges([]);
-          }}
-          style={{
-            backgroundColor: !useSingleItem ? '#2196F3' : '#ddd',
-            color: !useSingleItem ? '#fff' : '#555',
-            padding: '10px 20px',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            transition: 'background-color 0.3s',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = !useSingleItem ? '#1976D2' : '#ccc')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = !useSingleItem ? '#2196F3' : '#ddd')}
-        >
-          Multiple Items
-        </button>
-      </div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
+          <button
+            onClick={() => setUseSingleItem(true)}
+            style={{
+              backgroundColor: useSingleItem ? '#2196F3' : '#ddd',
+              color: useSingleItem ? '#fff' : '#555',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              transition: 'background-color 0.3s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = useSingleItem ? '#1976D2' : '#ccc')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = useSingleItem ? '#2196F3' : '#ddd')}
+          >
+            Single Item
+          </button>
+          <button
+            onClick={() => {
+              setUseSingleItem(false);
+              setShowMultipleItemsModal(true);
+              setReceiveItems([]);
+              setOtherCharges([]);
+            }}
+            style={{
+              backgroundColor: !useSingleItem ? '#2196F3' : '#ddd',
+              color: !useSingleItem ? '#fff' : '#555',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              transition: 'background-color 0.3s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = !useSingleItem ? '#1976D2' : '#ccc')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = !useSingleItem ? '#2196F3' : '#ddd')}
+          >
+            Multiple Items
+          </button>
+        </div>
 
-      {useSingleItem && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <div style={{ position: 'relative' }}>
-            <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
-              Site (required):
-            </label>
-            <input
-              type="text"
-              value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                setFilteredSites(
-                  sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
-                );
-                setShowSiteSuggestions(true);
-                if (value === '') {
-                  setSelectedSite('');
-                  setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
-                  setFilteredLocations([]);
-                }
-              }}
-              onFocus={() => setShowSiteSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
-              placeholder="Type to search sites"
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                boxSizing: 'border-box',
-                fontSize: '16px',
-              }}
-            />
-            {showSiteSuggestions && Array.isArray(filteredSites) && (
-              <ul className="typeahead">
-                {filteredSites.map((site) => (
+        {useSingleItem && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div style={{ position: 'relative' }}>
+              <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
+                Site (required):
+              </label>
+              <input
+                type="text"
+                value={sites.find((s) => s.siteId === selectedSite)?.name || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFilteredSites(
+                    sites.filter((s) => s.name.toLowerCase().includes(value.toLowerCase()))
+                  );
+                  setShowSiteSuggestions(true);
+                  if (value === '') {
+                    setSelectedSite('');
+                    setSingleForm((prev) => ({ ...prev, siteId: '', locationId: '' }));
+                    setFilteredLocations([]);
+                  }
+                }}
+                onFocus={() => setShowSiteSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 300)}
+                placeholder="Type to search sites"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px',
+                }}
+              />
+              {showSiteSuggestions && Array.isArray(filteredSites) && (
+                <ul className="typeahead">
+                  {filteredSites.map((site) => (
+                    <li
+                      key={site.siteId}
+                      onMouseDown={() => {
+                        console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
+                        setSelectedSite(site.siteId);
+                        setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
+                        setShowSiteSuggestions(false);
+                        fetchLocations(site.siteId);
+                      }}
+                      className={selectedSite === site.siteId ? 'selected' : ''}
+                    >
+                      {site.name}
+                    </li>
+                  ))}
                   <li
-                    key={site.siteId}
                     onMouseDown={() => {
-                      console.log('Selected site:', { siteId: site.siteId, siteName: site.name });
-                      setSelectedSite(site.siteId);
-                      setSingleForm((prev) => ({ ...prev, siteId: site.siteId, locationId: '' }));
+                      navigate('/sites', { state: { fromReceive: true } });
                       setShowSiteSuggestions(false);
-                      fetchLocations(site.siteId);
                     }}
-                    className={selectedSite === site.siteId ? 'selected' : ''}
+                    className="add-new"
                   >
-                    {site.name}
+                    Add New Site
                   </li>
-                ))}
-                <li
-                  onMouseDown={() => {
-                    navigate('/sites', { state: { fromReceive: true } });
-                    setShowSiteSuggestions(false);
-                  }}
-                  className="add-new"
-                >
-                  Add New Site
-                </li>
-              </ul>
-            )}
-          </div>
+                </ul>
+              )}
+            </div>
           <div style={{ position: 'relative' }}>
             <label style={{ fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '5px' }}>
               Physical Location (required):
