@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   const { siteId, type, locationId } = req.query;
-  let query = 'SELECT * FROM inventory WHERE 1=1';
+  let query = 'SELECT * FROM inventory WHERE enabled = 1';
   const params = [];
   if (siteId) {
     query += ' AND siteId = ?';
@@ -29,149 +29,17 @@ router.get('/', (req, res) => {
   });
 });
 
-router.post('/', (req, res) => {
-  const { identifier, account, type, quantity, unit, price, isKegDepositItem, receivedDate, source, siteId, locationId, status, description, cost, totalCost } = req.body;
-  if (!identifier || !type || !quantity || !unit || !siteId || !status) {
-    console.error('POST /api/inventory: Missing required fields', { identifier, type, quantity, unit, siteId, status });
-    return res.status(400).json({ error: 'identifier, type, quantity, unit, siteId, and status are required' });
-  }
-  db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
-    if (err) {
-      console.error('POST /api/inventory: Fetch site error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!site) {
-      console.error('POST /api/inventory: Invalid siteId', { siteId });
-      return res.status(400).json({ error: 'Invalid siteId' });
-    }
-    if (locationId) {
-      db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, siteId], (err, location) => {
-        if (err) {
-          console.error('POST /api/inventory: Fetch location error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        if (!location) {
-          console.error('POST /api/inventory: Invalid locationId', { locationId, siteId });
-          return res.status(400).json({ error: 'Invalid locationId for given siteId' });
-        }
-        insertInventory();
-      });
-    } else {
-      insertInventory();
-    }
-    function insertInventory() {
-      db.run(
-        `INSERT INTO inventory (identifier, account, type, quantity, unit, price, isKegDepositItem, receivedDate, source, siteId, locationId, status, description, cost, totalCost)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          identifier,
-          account || 'Storage',
-          type,
-          quantity,
-          unit,
-          price || null,
-          isKegDepositItem ? 1 : 0,
-          receivedDate || new Date().toISOString().split('T')[0],
-          source || null,
-          siteId,
-          locationId || null,
-          status,
-          description || null,
-          cost || null,
-          totalCost || 0,
-        ],
-        function(err) {
-          if (err) {
-            console.error('POST /api/inventory: Insert error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          console.log('POST /api/inventory: Success', { identifier, type, quantity });
-          res.json({ id: this.lastID, identifier, type, quantity, unit, siteId });
-        }
-      );
-    }
-  });
-});
-
-router.patch('/', (req, res) => {
-  const { identifier, siteId, locationId, updates } = req.body;
-  if (!identifier || !siteId || !updates || typeof updates !== 'object') {
-    console.error('PATCH /api/inventory: Missing required fields', { identifier, siteId, updates });
-    return res.status(400).json({ error: 'identifier, siteId, and updates object are required' });
-  }
-  db.get('SELECT siteId FROM sites WHERE siteId = ?', [siteId], (err, site) => {
-    if (err) {
-      console.error('PATCH /api/inventory: Fetch site error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!site) {
-      console.error('PATCH /api/inventory: Invalid siteId', { siteId });
-      return res.status(400).json({ error: 'Invalid siteId' });
-    }
-    if (locationId) {
-      db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, siteId], (err, location) => {
-        if (err) {
-          console.error('PATCH /api/inventory: Fetch location error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        if (!location) {
-          console.error('PATCH /api/inventory: Invalid locationId', { locationId, siteId });
-          return res.status(400).json({ error: 'Invalid locationId for given siteId' });
-        }
-        updateInventory();
-      });
-    } else {
-      updateInventory();
-    }
-    function updateInventory() {
-      const allowedFields = ['quantity', 'unit', 'price', 'isKegDepositItem', 'status', 'description', 'cost', 'totalCost'];
-      const updatesArray = [];
-      const params = [];
-      for (const [key, value] of Object.entries(updates)) {
-        if (allowedFields.includes(key)) {
-          updatesArray.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-      if (updatesArray.length === 0) {
-        console.error('PATCH /api/inventory: No valid fields to update', { updates });
-        return res.status(400).json({ error: 'No valid fields to update' });
-      }
-      params.push(identifier, siteId, locationId || null);
-      db.run(
-        `UPDATE inventory SET ${updatesArray.join(', ')} WHERE identifier = ? AND siteId = ? AND locationId = ?`,
-        params,
-        function(err) {
-          if (err) {
-            console.error('PATCH /api/inventory: Update error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          if (this.changes === 0) {
-            console.error('PATCH /api/inventory: No records updated', { identifier, siteId, locationId });
-            return res.status(404).json({ error: 'Inventory item not found' });
-          }
-          console.log('PATCH /api/inventory: Success', { identifier, siteId, updates });
-          res.json({ message: 'Inventory updated successfully' });
-        }
-      );
-    }
-  });
-});
-
 router.post('/receive', async (req, res) => {
   console.log('POST /api/inventory/receive: Received payload', JSON.stringify(req.body, null, 2));
   const items = Array.isArray(req.body) ? req.body : [req.body];
   const validAccounts = ['Storage', 'Processing', 'Production'];
   const validateItem = (item) => {
-    const { identifier, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
-    if (!identifier || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
-      return 'Missing required fields (identifier, type, quantity, unit, receivedDate, status, siteId, locationId)';
+    const { identifier, item, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
+    if (!identifier || !item || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
+      return 'Missing required fields (identifier, item, type, quantity, unit, receivedDate, status, siteId, locationId)';
     }
     if (type === 'Spirits' && (!account || !validAccounts.includes(account) || !proof)) {
       return 'Spirits require account (Storage, Processing, or Production) and proof';
-    }
-    if (type !== 'Spirits' && account && !validAccounts.includes(account)) {
-      return 'Invalid account for non-Spirits type';
     }
     if (type === 'Other' && !description) return 'Description required for Other type';
     const parsedQuantity = parseFloat(quantity);
@@ -196,8 +64,8 @@ router.post('/receive', async (req, res) => {
       });
     });
     for (const item of items) {
-      const { identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
-      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
+      const { identifier, item: itemName, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account } = item;
+      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 200)).toFixed(2)) : null;
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
       const finalAccount = type === 'Spirits' ? account : null;
@@ -212,32 +80,32 @@ router.post('/receive', async (req, res) => {
         throw new Error(`Invalid locationId: ${locationId} for siteId: ${siteId}`);
       }
       await new Promise((resolve, reject) => {
-        db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)', [identifier, type, 1], (err) => {
+        db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)', [itemName, type, 1], (err) => {
           if (err) reject(err);
           else resolve();
         });
       });
       const row = await new Promise((resolve, reject) => {
         db.get(
-          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND (account = ? OR account IS NULL) AND siteId = ? AND locationId = ?',
-          [identifier, type, finalAccount, siteId, locationId],
+          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ?',
+          [identifier],
           (err, row) => {
             if (err) reject(err);
             else resolve(row);
           }
         );
       });
-      console.log('POST /api/inventory/receive: Processing item', { identifier, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
+      console.log('POST /api/inventory/receive: Processing item', { identifier, item: itemName, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
       if (row) {
-        const existingQuantity = parseFloat(row.quantity);
+        const existingQuantity = parseFloat(row.quantity || '0');
         const existingTotalCost = parseFloat(row.totalCost || '0');
         const newQuantity = (existingQuantity + parseFloat(quantity)).toFixed(2);
         const newTotalCost = (existingTotalCost + parseFloat(finalTotalCost)).toFixed(2);
         const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
         await new Promise((resolve, reject) => {
           db.run(
-            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?, poNumber = ?, lotNumber = ? WHERE identifier = ? AND type = ? AND (account = ? OR account IS NULL) AND siteId = ? AND locationId = ?`,
-            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, identifier, type, finalAccount, siteId, locationId],
+            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?, poNumber = ?, lotNumber = ? WHERE identifier = ?`,
+            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, identifier],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -247,9 +115,9 @@ router.post('/receive', async (req, res) => {
       } else {
         await new Promise((resolve, reject) => {
           db.run(
-            `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, totalCost, cost, receivedDate, source, siteId, locationId, status, description, poNumber, lotNumber)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [identifier, finalAccount, type, quantity, unit, proof || null, finalProofGallons, finalTotalCost, finalUnitCost, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null, poNumber || null, lotNumber || null],
+            `INSERT INTO inventory (identifier, item, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [identifier, itemName, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null, finalUnitCost, finalTotalCost, poNumber || null, lotNumber || null, finalAccount],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -293,8 +161,8 @@ router.post('/loss', (req, res) => {
       return res.status(400).json({ error: 'Invalid siteId' });
     }
     db.get(
-      'SELECT quantity FROM inventory WHERE identifier = ? AND siteId = ? AND locationId = ?',
-      [identifier, siteId, locationId || null],
+      'SELECT quantity FROM inventory WHERE identifier = ?',
+      [identifier],
       (err, inventory) => {
         if (err) {
           console.error('POST /api/inventory/loss: Fetch inventory error:', err);
@@ -315,8 +183,8 @@ router.post('/loss', (req, res) => {
               return res.status(500).json({ error: err.message });
             }
             db.run(
-              'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ? AND siteId = ? AND locationId = ?',
-              [quantityLost, identifier, siteId, locationId || null],
+              'UPDATE inventory SET quantity = quantity - ? WHERE identifier = ?',
+              [quantityLost, identifier],
               (err) => {
                 if (err) {
                   db.run('ROLLBACK');
