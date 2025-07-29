@@ -10,6 +10,11 @@ interface ReceivePageProps {
   refreshVendors: () => Promise<void>;
 }
 
+interface PurchaseOrdersResponse {
+  purchaseOrders: PurchaseOrder[];
+  totalPages: number;
+}
+
 interface Item {
   name: string;
   type: string;
@@ -229,33 +234,38 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   useEffect(() => {
   console.log('Fetching POs for source:', singleForm.source);
-  const fetchPOs = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('fetchPOs: No token found, redirecting to login');
-        navigate('/login');
-        throw new Error('No token found in localStorage');
+    const fetchPOs = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('fetchPOs: No token found, redirecting to login');
+          navigate('/login');
+          throw new Error('No token found in localStorage');
+        }
+        const encodedSource = encodeURIComponent(singleForm.source || '');
+        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+        }
+        const response: PurchaseOrdersResponse = await res.json(); // Type the response
+        const data: PurchaseOrder[] = response.purchaseOrders || []; // Safely access purchaseOrders
+        console.log('Fetched purchase orders:', data);
+        setPurchaseOrders(data);
+      } catch (err: any) {
+        console.error('fetchPOs error:', err);
+        setPurchaseOrders([]); // Set empty array on error
+        if (err.message.includes('no table exist')) {
+          // Suppress table not found error
+        } else {
+          setProductionError('Failed to fetch purchase orders: ' + err.message);
+        }
       }
-      const encodedSource = encodeURIComponent(singleForm.source || '');
-      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const data: PurchaseOrder[] = await res.json() || [];
-      console.log('Fetched purchase orders:', data);
-      setPurchaseOrders(data);
-    } catch (err: any) {
-      setProductionError('Failed to fetch purchase orders: ' + err.message);
-      console.error('fetchPOs error:', err);
-      setPurchaseOrders([]);
-    }
-  };
+    };
   if (singleForm.source) fetchPOs();
 }, [singleForm.source, navigate]);
 
