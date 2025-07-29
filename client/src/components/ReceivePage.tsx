@@ -124,43 +124,47 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   }, [API_BASE_URL, navigate]);
 
   const fetchSites = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('fetchSites: No token found, redirecting to login');
-        navigate('/login');
-        throw new Error('No token found in localStorage');
-      }
-      const url = `${API_BASE_URL}/api/sites`;
-      console.log(`Fetching sites from: ${url}`);
-      const res = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-      }
-      const data: Site[] = await res.json();
-      console.log('Fetched sites:', data);
-      if (data.length === 0) {
-        console.warn('No sites returned from API');
-        setProductionError('No sites found');
-      }
-      setSites(data);
-      setFilteredSites(data);
-      const newSiteId = locationState?.newSiteId || (data.length > 0 ? data[0].siteId : '');
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('fetchSites: No token found, redirecting to login');
+      navigate('/login');
+      throw new Error('No token found in localStorage');
+    }
+    const url = `${API_BASE_URL}/api/sites`;
+    console.log(`Fetching sites from: ${url}`);
+    const res = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+    }
+    const data: Site[] = await res.json() || [];
+    console.log('Fetched sites:', data);
+    if (data.length === 0) {
+      console.warn('No sites returned from API');
+      setProductionError('No sites found');
+    }
+    setSites(data);
+    setFilteredSites(data);
+    // Only set selectedSite and singleForm.siteId if not already set
+    if (!selectedSite && !singleForm.siteId && !locationState?.newSiteId) {
+      const newSiteId = data.length > 0 ? data[0].siteId : '';
       setSelectedSite(newSiteId);
       setSingleForm((prev) => ({ ...prev, siteId: newSiteId }));
-    } catch (err: any) {
-      console.error('Fetch sites error:', err);
-      setProductionError('Failed to fetch sites: ' + err.message);
-      setSites([]);
-      setFilteredSites([]);
+      if (newSiteId) fetchLocations(newSiteId);
     }
-  }, [API_BASE_URL, navigate, locationState]);
+  } catch (err: any) {
+    console.error('Fetch sites error:', err);
+    setProductionError('Failed to fetch sites: ' + err.message);
+    setSites([]);
+    setFilteredSites([]);
+  }
+}, [API_BASE_URL, navigate, locationState, selectedSite, singleForm.siteId, fetchLocations]);
 
   useEffect(() => {
     console.log('ReceivePage useEffect: Fetching initial data');
@@ -218,38 +222,42 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       }
     };
 
-    const fetchPOs = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('fetchPOs: No token found, redirecting to login');
-          navigate('/login');
-          throw new Error('No token found in localStorage');
-        }
-        const encodedSource = encodeURIComponent(singleForm.source || '');
-        const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
-        }
-        const data = await res.json();
-        console.log('Fetched purchase orders:', data);
-        setPurchaseOrders(data);
-      } catch (err: any) {
-        setProductionError('Failed to fetch purchase orders: ' + err.message);
-        console.error('fetchPOs error:', err);
-      }
-    };
-
     fetchSites();
     fetchItems();
     fetchVendors();
-    if (singleForm.source) fetchPOs();
-  }, [fetchSites, navigate, singleForm.source, vendors]);
+  }, [fetchSites, navigate]);
+
+  useEffect(() => {
+  console.log('Fetching POs for source:', singleForm.source);
+  const fetchPOs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('fetchPOs: No token found, redirecting to login');
+        navigate('/login');
+        throw new Error('No token found in localStorage');
+      }
+      const encodedSource = encodeURIComponent(singleForm.source || '');
+      const res = await fetch(`${API_BASE_URL}/api/purchase-orders?supplier=${encodedSource}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      }
+      const data: PurchaseOrder[] = await res.json() || [];
+      console.log('Fetched purchase orders:', data);
+      setPurchaseOrders(data);
+    } catch (err: any) {
+      setProductionError('Failed to fetch purchase orders: ' + err.message);
+      console.error('fetchPOs error:', err);
+      setPurchaseOrders([]);
+    }
+  };
+  if (singleForm.source) fetchPOs();
+}, [singleForm.source, navigate]);
 
   useEffect(() => {
     console.log('ReceivePage useEffect: Handling navigation state', location.state);
@@ -376,6 +384,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
   };
 
   const handleVendorSelect = (vendor: Vendor) => {
+    console.log('Selecting vendor:', vendor.name, 'Current site:', selectedSite, 'Current form:', singleForm);
     setSingleForm((prev: ReceiveForm) => ({ ...prev, source: vendor.name }));
     setShowVendorSuggestions(false);
   };
