@@ -104,9 +104,6 @@ const reportsRouter = require('./routes/reports');
 const kegsRouter = require('./routes/kegs');
 const productionRouter = require('./routes/production');
 
-initializeDatabase();
-insertTestData();
-
 app.use('/api/users', authenticateJWT, usersRouter);
 app.use('/api/customers', authenticateJWT, customersRouter);
 app.use('/api/sales-orders', authenticateJWT, salesOrdersRouter);
