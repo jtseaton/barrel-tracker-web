@@ -400,10 +400,10 @@ const ProductDetails: React.FC = () => {
           if (itemRes.status === 401) {
             console.error('[ProductDetails] Unauthorized, redirecting to login');
             navigate('/login');
-            continue; // Skip to next item
+            continue;
           }
           console.warn('[ProductDetails] Failed to create item, continuing:', { itemName, error: text });
-          continue; // Skip to next item instead of throwing
+          continue;
         }
       }
 
@@ -420,13 +420,20 @@ const ProductDetails: React.FC = () => {
   }, [product, packageTypes, id, getAuthHeaders, navigate]);
 
   const handleAddRecipe = useCallback(async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
+    if (!product || !product.id || product.id === 0) {
+      setError('Cannot add recipe: Product must be saved first');
+      setShowAddRecipeModal(false);
+      return;
+    }
     const headers = await getAuthHeaders();
     if (!headers) return;
     try {
+      const recipeWithValidProductId = { ...recipe, productId: product.id };
+      console.log('[ProductDetails] Sending recipe:', recipeWithValidProductId);
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(recipe),
+        body: JSON.stringify(recipeWithValidProductId),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -453,7 +460,7 @@ const ProductDetails: React.FC = () => {
       console.error('[ProductDetails] Add recipe error:', err);
       setError(`Failed to add recipe: ${err.message}`);
     }
-  }, [recipes, getAuthHeaders, navigate]);
+  }, [recipes, product, getAuthHeaders, navigate]);
 
   const addPackageType = useCallback(() => {
     setPackageTypes([...packageTypes, { type: '', price: '', isKegDepositItem: false }]);
@@ -471,6 +478,7 @@ const ProductDetails: React.FC = () => {
 
   console.log('[ProductDetails] Render:', {
     productId: id,
+    productExists: !!product,
     packageTypesLength: packageTypes.length,
     availablePackageTypesLength: availablePackageTypes.length,
     showAddRecipeModal,
@@ -725,7 +733,11 @@ const ProductDetails: React.FC = () => {
             <button onClick={handleSave} className="btn btn-primary">
               Save Product
             </button>
-            <button onClick={() => setShowAddRecipeModal(true)} className="btn btn-primary">
+            <button
+              onClick={() => setShowAddRecipeModal(true)}
+              className="btn btn-primary"
+              disabled={!product || !product.id || product.id === 0}
+            >
               Add New Recipe
             </button>
             <Link to="/products" className="btn btn-danger">
@@ -743,9 +755,9 @@ const ProductDetails: React.FC = () => {
           setError(null);
         }}
         onSave={handleAddRecipe}
-        products={product ? [product] : []}
+        products={product && product.id && product.id !== 0 ? [product] : []}
         items={items}
-        defaultProductId={parseInt(id || '0', 10)}
+        defaultProductId={product && product.id && product.id !== 0 ? product.id : undefined}
       />
     </div>
   );
