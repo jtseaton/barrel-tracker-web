@@ -79,6 +79,11 @@ const ProductDetails: React.FC = () => {
       navigate('/login');
       return null;
     }
+    if (!token.startsWith('eyJ')) {
+      console.error('[ProductDetails] Invalid token format, redirecting to login');
+      navigate('/login');
+      return null;
+    }
     return {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -176,12 +181,19 @@ const ProductDetails: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/products/${id}`, { headers });
       if (!res.ok) {
         const text = await res.text();
+        console.error('[ProductDetails] Fetch product response:', { status: res.status, text });
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
-          throw new Error('Unauthorized');
+          throw new Error('Unauthorized: Please log in again');
         }
         throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[ProductDetails] Fetch product non-JSON response:', { status: res.status, text });
+        throw new Error(`Invalid response: Expected JSON, got ${contentType || 'unknown content-type'}`);
       }
       const data = await res.json();
       console.log('[ProductDetails] Fetched product:', data);
@@ -190,7 +202,7 @@ const ProductDetails: React.FC = () => {
       setPackageTypes(data.packageTypes || []);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch product error:', err);
-      setError('Failed to fetch product: ' + err.message);
+      setError(`Failed to fetch product: ${err.message}`);
     }
   }, [id, getAuthHeaders, navigate]);
 
@@ -201,19 +213,26 @@ const ProductDetails: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${id}`, { headers });
       if (!res.ok) {
         const text = await res.text();
+        console.error('[ProductDetails] Fetch recipes response:', { status: res.status, text });
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
-          throw new Error('Unauthorized');
+          throw new Error('Unauthorized: Please log in again');
         }
         throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
       }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[ProductDetails] Fetch recipes non-JSON response:', { status: res.status, text });
+        throw new Error(`Invalid response: Expected JSON, got ${contentType || 'unknown content-type'}`);
+      }
       const data = await res.json();
       console.log('[ProductDetails] Fetched recipes:', data);
-      setRecipes(data);
+      setRecipes(data || []);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch recipes error:', err);
-      setError('Failed to fetch recipes: ' + err.message);
+      setError(`Failed to fetch recipes: ${err.message}`);
     }
   }, [id, getAuthHeaders, navigate]);
 
@@ -224,19 +243,26 @@ const ProductDetails: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/items`, { headers });
       if (!res.ok) {
         const text = await res.text();
+        console.error('[ProductDetails] Fetch items response:', { status: res.status, text });
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
-          throw new Error('Unauthorized');
+          throw new Error('Unauthorized: Please log in again');
         }
         throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
       }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[ProductDetails] Fetch items non-JSON response:', { status: res.status, text });
+        throw new Error(`Invalid response: Expected JSON, got ${contentType || 'unknown content-type'}`);
+      }
       const data = await res.json();
       console.log('[ProductDetails] Fetched items:', data);
-      setItems(data);
+      setItems(data || []);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch items error:', err);
-      setError('Failed to fetch items: ' + err.message);
+      setError(`Failed to fetch items: ${err.message}`);
     }
   }, [getAuthHeaders, navigate]);
 
@@ -247,10 +273,11 @@ const ProductDetails: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/api/product-package-types`, { headers });
       if (!res.ok) {
         const text = await res.text();
+        console.error('[ProductDetails] Fetch package types response:', { status: res.status, text });
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
-          throw new Error('Unauthorized');
+          throw new Error('Unauthorized: Please log in again');
         }
         if (res.status === 404) {
           console.error('[ProductDetails] Package types endpoint not found');
@@ -258,12 +285,19 @@ const ProductDetails: React.FC = () => {
         }
         throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
       }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[ProductDetails] Fetch package types non-JSON response:', { status: res.status, text });
+        throw new Error(`Invalid response: Expected JSON, got ${contentType || 'unknown content-type'}`);
+      }
       const data = await res.json();
       console.log('[ProductDetails] Fetched package types:', data);
-      setAvailablePackageTypes(data);
+      setAvailablePackageTypes(data || []);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch package types error:', err);
       setError(`Failed to fetch package types: ${err.message}`);
+      setAvailablePackageTypes([]); // Fallback to empty array
     }
   }, [getAuthHeaders, navigate]);
 
@@ -287,6 +321,7 @@ const ProductDetails: React.FC = () => {
         ibu: 0,
       });
       setPackageTypes([]);
+      setAvailablePackageTypes([]);
     }
   }, [id, fetchProduct, fetchRecipes, fetchItems, fetchPackageTypes]);
 
@@ -319,12 +354,19 @@ const ProductDetails: React.FC = () => {
       });
       if (!res.ok) {
         const text = await res.text();
+        console.error('[ProductDetails] Save response:', { status: res.status, text });
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
-          throw new Error('Unauthorized');
+          throw new Error('Unauthorized: Please log in again');
         }
         throw new Error(`Failed to save product: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[ProductDetails] Save non-JSON response:', { status: res.status, text });
+        throw new Error(`Invalid response: Expected JSON, got ${contentType || 'unknown content-type'}`);
       }
       const savedProduct = await res.json();
       console.log('[ProductDetails] Saved product:', savedProduct);
@@ -339,10 +381,11 @@ const ProductDetails: React.FC = () => {
         });
         if (!itemRes.ok) {
           const text = await itemRes.text();
+          console.error('[ProductDetails] Create item response:', { status: itemRes.status, text });
           if (itemRes.status === 401) {
             console.error('[ProductDetails] Unauthorized, redirecting to login');
             navigate('/login');
-            throw new Error('Unauthorized');
+            throw new Error('Unauthorized: Please log in again');
           }
           throw new Error(`Failed to create item ${itemName}: HTTP ${itemRes.status}, Response: ${text.slice(0, 50)}`);
         }
@@ -371,12 +414,19 @@ const ProductDetails: React.FC = () => {
       });
       if (!res.ok) {
         const text = await res.text();
+        console.error('[ProductDetails] Add recipe response:', { status: res.status, text });
         if (res.status === 401) {
           console.error('[ProductDetails] Unauthorized, redirecting to login');
           navigate('/login');
-          throw new Error('Unauthorized');
+          throw new Error('Unauthorized: Please log in again');
         }
         throw new Error(`Add recipe error: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+      }
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[ProductDetails] Add recipe non-JSON response:', { status: res.status, text });
+        throw new Error(`Invalid response: Expected JSON, got ${contentType || 'unknown content-type'}`);
       }
       const addedRecipe = await res.json();
       console.log('[ProductDetails] Added recipe:', addedRecipe);
