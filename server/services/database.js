@@ -451,7 +451,7 @@ async function insertTestData() {
           }
 
           try {
-            const xmlPath = path.join(__dirname, '../../config/package-types.xml');
+            const xmlPath = path.join(__dirname, '../../config/package_types.xml');
             console.log(`Reading package-types.xml from: ${xmlPath}`);
             const xmlData = await fs.readFile(xmlPath, 'utf-8');
             const parser = new xml2js.Parser({ explicitArray: false });
@@ -472,7 +472,7 @@ async function insertTestData() {
                 [name, volume, enabled],
                 (err) => {
                   if (err) console.error(`Error inserting package type ${name}:`, err);
-                  else console.log(`Inserted package type from package-types.xml: ${name}`);
+                  else console.log(`Inserted package type from package_types.xml: ${name}`);
                 }
               );
             }
