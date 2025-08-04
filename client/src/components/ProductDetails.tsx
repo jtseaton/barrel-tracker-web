@@ -270,7 +270,7 @@ const ProductDetails: React.FC = () => {
     const headers = getAuthHeaders();
     if (!headers) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/products/product-package-types${id ? `?productId=${id}` : ''}`, { headers });
+      const res = await fetch(`${API_BASE_URL}/api/package-types`, { headers });
       if (!res.ok) {
         const text = await res.text();
         console.error('[ProductDetails] Fetch package types response:', { status: res.status, text });
@@ -300,7 +300,7 @@ const ProductDetails: React.FC = () => {
       setError(`Failed to fetch package types: ${err.message}. Please try again or contact support.`);
       setAvailablePackageTypes([]);
     }
-  }, [id, getAuthHeaders, navigate]);
+  }, [getAuthHeaders, navigate]);
 
   useEffect(() => {
     if (id) {
@@ -457,6 +457,7 @@ const ProductDetails: React.FC = () => {
   console.log('[ProductDetails] Render:', {
     productId: id,
     packageTypesLength: packageTypes.length,
+    availablePackageTypesLength: availablePackageTypes.length,
     showAddRecipeModal,
     error,
     successMessage,
@@ -621,6 +622,9 @@ const ProductDetails: React.FC = () => {
             )}
           </div>
           <h3 className="app-header mb-3">Package Types</h3>
+          {packageTypes.length === 0 && availablePackageTypes.length === 0 && (
+            <div className="alert alert-warning">No package types available. Please contact support to add package types.</div>
+          )}
           {packageTypes.map((pt, index) => (
             <div key={index} className="package-type-row">
               <select
@@ -663,6 +667,7 @@ const ProductDetails: React.FC = () => {
           <button
             onClick={addPackageType}
             className="btn btn-primary mt-3"
+            disabled={availablePackageTypes.length === 0}
           >
             Add Package Type
           </button>

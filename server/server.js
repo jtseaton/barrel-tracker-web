@@ -121,6 +121,17 @@ app.use('/api/facility-design', authenticateJWT, facilityDesignRouter);
 app.use('/api/reports', authenticateJWT, reportsRouter);
 app.use('/api/kegs', authenticateJWT, kegsRouter);
 app.use('/api/production', authenticateJWT, productionRouter);
+app.use('/api/package-types', authenticateJWT, (req, res) => {
+  console.log('GET /api/package-types: Query');
+  db.all('SELECT name, volume, enabled FROM package_types WHERE enabled = 1', [], (err, rows) => {
+    if (err) {
+      console.error('GET /api/package-types: Fetch error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('GET /api/package-types: Success', { count: rows.length });
+    res.json(rows);
+  });
+});
 
 app.post('/api/login/test', (req, res) => {
   console.log('Test route hit: POST /api/login/test', { body: req.body });

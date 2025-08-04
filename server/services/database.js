@@ -137,27 +137,27 @@ function initializeDatabase() {
         else console.log('Products table created');
       });
       db.run(`
-      CREATE TABLE IF NOT EXISTS batches (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        batchId TEXT UNIQUE,
-        productId INTEGER,
-        recipeId INTEGER,
-        siteId TEXT,
-        status TEXT,
-        date TEXT,
-        additionalIngredients TEXT,
-        equipmentId INTEGER,
-        fermenterId INTEGER,
-        volume REAL,
-        stage TEXT,
-        brewLog TEXT,
-        FOREIGN KEY (productId) REFERENCES products(id),
-        FOREIGN KEY (recipeId) REFERENCES recipes(id),
-        FOREIGN KEY (siteId) REFERENCES sites(siteId),
-        FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
-        FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
-      )
-    `, (err) => {
+        CREATE TABLE IF NOT EXISTS batches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          batchId TEXT UNIQUE,
+          productId INTEGER,
+          recipeId INTEGER,
+          siteId TEXT,
+          status TEXT,
+          date TEXT,
+          additionalIngredients TEXT,
+          equipmentId INTEGER,
+          fermenterId INTEGER,
+          volume REAL,
+          stage TEXT,
+          brewLog TEXT,
+          FOREIGN KEY (productId) REFERENCES products(id),
+          FOREIGN KEY (recipeId) REFERENCES recipes(id),
+          FOREIGN KEY (siteId) REFERENCES sites(siteId),
+          FOREIGN KEY (equipmentId) REFERENCES equipment(equipmentId),
+          FOREIGN KEY (fermenterId) REFERENCES equipment(equipmentId)
+        )
+      `, (err) => {
         if (err) console.error('Error creating batches table:', err);
         else console.log('Batches table created');
       });
@@ -195,12 +195,23 @@ function initializeDatabase() {
           type TEXT NOT NULL,
           price TEXT NOT NULL,
           isKegDepositItem INTEGER NOT NULL,
+          enabled INTEGER DEFAULT 1,
           FOREIGN KEY (productId) REFERENCES products(id),
           UNIQUE(productId, type)
         )
       `, (err) => {
         if (err) console.error('Error creating product_package_types table:', err);
         else console.log('Product Package Types table created');
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS package_types (
+          name TEXT PRIMARY KEY,
+          volume REAL NOT NULL,
+          enabled INTEGER DEFAULT 1
+        )
+      `, (err) => {
+        if (err) console.error('Error creating package_types table:', err);
+        else console.log('Package Types table created');
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS facility_designs (
@@ -437,6 +448,36 @@ async function insertTestData() {
             }
           } catch (err) {
             console.error('Error loading items.xml:', err);
+          }
+
+          try {
+            const xmlPath = path.join(__dirname, '../../config/package-types.xml');
+            console.log(`Reading package-types.xml from: ${xmlPath}`);
+            const xmlData = await fs.readFile(xmlPath, 'utf-8');
+            const parser = new xml2js.Parser({ explicitArray: false });
+            const result = await parser.parseStringPromise(xmlData);
+            const packageTypes = result.packageTypes.packageType;
+            const packageTypesArray = Array.isArray(packageTypes) ? packageTypes : [packageTypes].filter(Boolean);
+
+            for (const pkg of packageTypesArray) {
+              const name = pkg.$.name || '';
+              const volume = parseFloat(pkg.$.volume) || 0;
+              const enabled = parseInt(pkg.$.enabled || '1', 10);
+              if (!name || volume <= 0) {
+                console.warn('Skipping package type with invalid name or volume in package-types.xml:', pkg);
+                continue;
+              }
+              db.run(
+                'INSERT OR IGNORE INTO package_types (name, volume, enabled) VALUES (?, ?, ?)',
+                [name, volume, enabled],
+                (err) => {
+                  if (err) console.error(`Error inserting package type ${name}:`, err);
+                  else console.log(`Inserted package type from package-types.xml: ${name}`);
+                }
+              );
+            }
+          } catch (err) {
+            console.error('Error loading package-types.xml:', err);
           }
         })();
 
