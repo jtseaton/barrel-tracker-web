@@ -1,4 +1,3 @@
-// client/src/components/RecipeModal.tsx
 import React, { useState, useEffect } from 'react';
 import { Product, Ingredient } from '../types/interfaces';
 
@@ -14,18 +13,26 @@ interface RecipeModalProps {
 const RecipeModal: React.FC<RecipeModalProps> = ({ show, onClose, onSave, products, items, defaultProductId }) => {
   const [recipe, setRecipe] = useState<{
     name: string;
-    productId: number;
+    productId: number | undefined;
     ingredients: Ingredient[];
     quantity: number;
     unit: string;
   }>({
     name: '',
-    productId: defaultProductId || 0,
+    productId: defaultProductId,
     ingredients: [{ itemName: '', quantity: 0, unit: 'lbs' }],
     quantity: 0,
     unit: 'barrels',
   });
   const [error, setError] = useState<string | null>(null);
+
+  const isSingleProduct = products.length === 1 && defaultProductId !== undefined;
+
+  useEffect(() => {
+    if (isSingleProduct && defaultProductId) {
+      setRecipe(prev => ({ ...prev, productId: defaultProductId }));
+    }
+  }, [defaultProductId, isSingleProduct]);
 
   const addIngredient = () => {
     setRecipe({
@@ -58,8 +65,13 @@ const RecipeModal: React.FC<RecipeModalProps> = ({ show, onClose, onSave, produc
       setError('Recipe name, product, valid quantity, unit, and ingredients are required');
       return;
     }
-    onSave(recipe);
-    setError(null);
+    onSave({
+      name: recipe.name,
+      productId: recipe.productId,
+      ingredients: recipe.ingredients,
+      quantity: recipe.quantity,
+      unit: recipe.unit,
+    });
   };
 
   if (!show) return null;
@@ -83,22 +95,33 @@ const RecipeModal: React.FC<RecipeModalProps> = ({ show, onClose, onSave, produc
                 className="form-control"
               />
             </label>
-            <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
-              Product (required):
-              <select
-                value={recipe.productId || ''}
-                onChange={e => setRecipe({ ...recipe, productId: parseInt(e.target.value, 10) })}
-                className="form-control"
-                disabled={!!defaultProductId}
-              >
-                <option value="">Select Product</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {isSingleProduct ? (
+              <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
+                Product:
+                <input
+                  type="text"
+                  value={products[0]?.name || 'Unknown Product'}
+                  disabled
+                  className="form-control"
+                />
+              </label>
+            ) : (
+              <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
+                Product (required):
+                <select
+                  value={recipe.productId || ''}
+                  onChange={e => setRecipe({ ...recipe, productId: parseInt(e.target.value, 10) || undefined })}
+                  className="form-control"
+                >
+                  <option value="">Select Product</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="form-label" style={{ fontWeight: 'bold', color: '#555555' }}>
               Recipe Quantity (required):
               <input
