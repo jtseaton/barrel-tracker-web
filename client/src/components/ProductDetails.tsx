@@ -72,8 +72,8 @@ const ProductDetails: React.FC = () => {
 
   const beerTypes = [ProductType.MaltBeverage, ProductType.Seltzer];
 
-  const getAuthHeaders = useCallback(() => {
-    const token = localStorage.getItem('token');
+  const getAuthHeaders = useCallback(async () => {
+    let token = localStorage.getItem('token');
     if (!token) {
       console.error('[ProductDetails] No token found, redirecting to login');
       navigate('/login');
@@ -81,6 +81,19 @@ const ProductDetails: React.FC = () => {
     }
     if (!token.startsWith('eyJ')) {
       console.error('[ProductDetails] Invalid token format, redirecting to login');
+      navigate('/login');
+      return null;
+    }
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp < now) {
+        console.error('[ProductDetails] Token expired, redirecting to login', { exp: payload.exp, now });
+        navigate('/login');
+        return null;
+      }
+    } catch (err) {
+      console.error('[ProductDetails] Token parsing error:', err);
       navigate('/login');
       return null;
     }
@@ -175,7 +188,7 @@ const ProductDetails: React.FC = () => {
   };
 
   const fetchProduct = useCallback(async () => {
-    const headers = getAuthHeaders();
+    const headers = await getAuthHeaders();
     if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/products/${id}`, { headers });
@@ -207,7 +220,7 @@ const ProductDetails: React.FC = () => {
   }, [id, getAuthHeaders, navigate]);
 
   const fetchRecipes = useCallback(async () => {
-    const headers = getAuthHeaders();
+    const headers = await getAuthHeaders();
     if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/recipes?productId=${id}`, { headers });
@@ -237,7 +250,7 @@ const ProductDetails: React.FC = () => {
   }, [id, getAuthHeaders, navigate]);
 
   const fetchItems = useCallback(async () => {
-    const headers = getAuthHeaders();
+    const headers = await getAuthHeaders();
     if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/items`, { headers });
@@ -267,7 +280,7 @@ const ProductDetails: React.FC = () => {
   }, [getAuthHeaders, navigate]);
 
   const fetchPackageTypes = useCallback(async () => {
-    const headers = getAuthHeaders();
+    const headers = await getAuthHeaders();
     if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/package-types`, { headers });
@@ -297,7 +310,7 @@ const ProductDetails: React.FC = () => {
       setAvailablePackageTypes(data || []);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch package types error:', err);
-      setError(`Failed to fetch package types: ${err.message}. Please try again or contact support.`);
+      setError(`Failed to fetch package types: ${err.message}. Please try logging out and back in or contact support.`);
       setAvailablePackageTypes([]);
     }
   }, [getAuthHeaders, navigate]);
@@ -340,12 +353,13 @@ const ProductDetails: React.FC = () => {
       setError('All package types must have a valid type and non-negative price');
       return;
     }
-    const headers = getAuthHeaders();
+    const headers = await getAuthHeaders();
     if (!headers) return;
     try {
       const serverClass = mapToServerClass(product.class);
       const serverType = mapToServerType(product.class, product.type);
       const serverProduct = { ...product, class: serverClass, type: serverType };
+      console.log('[ProductDetails] Sending save request:', { serverProduct, packageTypes: validPackageTypes });
       const method = id ? 'PATCH' : 'POST';
       const url = id ? `${API_BASE_URL}/api/products/${id}` : `${API_BASE_URL}/api/products`;
       const res = await fetch(url, {
@@ -405,7 +419,7 @@ const ProductDetails: React.FC = () => {
   }, [product, packageTypes, id, getAuthHeaders, navigate]);
 
   const handleAddRecipe = useCallback(async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
-    const headers = getAuthHeaders();
+    const headers = await getAuthHeaders();
     if (!headers) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/recipes`, {
@@ -645,7 +659,7 @@ const ProductDetails: React.FC = () => {
                 type="text"
                 value={pt.price}
                 onChange={(e) => updatePackageType(index, 'price', e.target.value)}
-                placeholder="Price"
+                placeholder="Price (e.g., 10.00)"
                 className="form-control"
               />
               <label>
