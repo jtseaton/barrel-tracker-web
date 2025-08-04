@@ -400,13 +400,14 @@ const ProductDetails: React.FC = () => {
           if (itemRes.status === 401) {
             console.error('[ProductDetails] Unauthorized, redirecting to login');
             navigate('/login');
-            throw new Error('Unauthorized: Please log in again');
+            continue; // Skip to next item
           }
-          throw new Error(`Failed to create item ${itemName}: HTTP ${itemRes.status}, Response: ${text.slice(0, 50)}`);
+          console.warn('[ProductDetails] Failed to create item, continuing:', { itemName, error: text });
+          continue; // Skip to next item instead of throwing
         }
       }
 
-      setSuccessMessage('Product and items saved successfully');
+      setSuccessMessage('Product saved successfully');
       setTimeout(() => {
         setSuccessMessage(null);
         navigate('/products');

@@ -21,15 +21,19 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'Name and type are required' });
   }
   db.run(
-    'INSERT INTO items (name, type, enabled) VALUES (?, ?, ?)',
+    'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
     [name, type, enabled ? 1 : 0],
     function(err) {
       if (err) {
         console.error('POST /api/items: Insert error:', err);
         return res.status(500).json({ error: err.message });
       }
+      if (this.changes === 0) {
+        console.log('POST /api/items: Item already exists', { name, type });
+        return res.status(200).json({ message: `Item ${name} already exists`, name, type, enabled });
+      }
       console.log('POST /api/items: Success', { name, type });
-      res.json({ name, type, enabled });
+      res.status(201).json({ name, type, enabled });
     }
   );
 });
