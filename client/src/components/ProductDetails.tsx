@@ -270,7 +270,7 @@ const ProductDetails: React.FC = () => {
     const headers = getAuthHeaders();
     if (!headers) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/product-package-types`, { headers });
+      const res = await fetch(`${API_BASE_URL}/api/products/product-package-types${id ? `?productId=${id}` : ''}`, { headers });
       if (!res.ok) {
         const text = await res.text();
         console.error('[ProductDetails] Fetch package types response:', { status: res.status, text });
@@ -280,8 +280,9 @@ const ProductDetails: React.FC = () => {
           throw new Error('Unauthorized: Please log in again');
         }
         if (res.status === 404) {
-          console.error('[ProductDetails] Package types endpoint not found');
-          throw new Error('Package types endpoint not found: HTTP 404');
+          console.warn('[ProductDetails] Package types endpoint returned 404, using empty array');
+          setAvailablePackageTypes([]);
+          return;
         }
         throw new Error(`HTTP error! status: ${res.status}, Response: ${text.slice(0, 50)}`);
       }
@@ -296,10 +297,10 @@ const ProductDetails: React.FC = () => {
       setAvailablePackageTypes(data || []);
     } catch (err: any) {
       console.error('[ProductDetails] Fetch package types error:', err);
-      setError(`Failed to fetch package types: ${err.message}`);
-      setAvailablePackageTypes([]); // Fallback to empty array
+      setError(`Failed to fetch package types: ${err.message}. Please try again or contact support.`);
+      setAvailablePackageTypes([]);
     }
-  }, [getAuthHeaders, navigate]);
+  }, [id, getAuthHeaders, navigate]);
 
   useEffect(() => {
     if (id) {
