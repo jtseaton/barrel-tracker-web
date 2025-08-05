@@ -279,263 +279,248 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   };
 
   const handleAddBatch = async () => {
-    if (!newBatch.batchId || !newBatch.productId || !newBatch.siteId) {
-      setError('Batch ID, Product, and Site are required');
+  if (!newBatch.batchId || !newBatch.productId || !newBatch.siteId) {
+    setError('Batch ID, Product, and Site are required');
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
+    return;
+  }
+
+  if (productClass === ProductClass.Spirits && !newBatch.batchType) {
+    setError('Batch Type is required for spirits');
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
+    return;
+  }
+
+  const headers = getAuthHeaders();
+  if (!headers) return;
+
+  try {
+    console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
+    await refreshInventory();
+
+    const product = products.find(p => p.id === newBatch.productId);
+    if (!product) {
+      setError('Invalid product selected');
       setShowErrorPopup(true);
       setShowAddBatchModal(false);
       return;
     }
 
-    if (productClass === ProductClass.Spirits && !newBatch.batchType) {
-      setError('Batch Type is required for spirits');
+    const site = sites.find(s => s.siteId === newBatch.siteId);
+    if (!site) {
+      setError(`Invalid site selected: ${newBatch.siteId}`);
       setShowErrorPopup(true);
       setShowAddBatchModal(false);
       return;
     }
 
-    const headers = getAuthHeaders();
-    if (!headers) return;
+    let batchData: {
+      batchId: string;
+      productId: number;
+      recipeId?: number | null;
+      siteId: string;
+      fermenterId: number | null;
+      status: string;
+      date: string;
+      volume: number;
+      batchType?: string;
+    };
 
-    try {
-      console.log('[Production] Refreshing inventory before batch creation', { siteId: newBatch.siteId });
-      await refreshInventory();
+    const isFermentationBatch = productClass !== ProductClass.Spirits || newBatch.batchType === BatchType.Fermentation;
 
-      const product = products.find(p => p.id === newBatch.productId);
-      if (!product) {
-        setError('Invalid product selected');
+    if (isFermentationBatch) {
+      if (!newBatch.recipeId) {
+        setError('Recipe is required for fermentation batches');
         setShowErrorPopup(true);
         setShowAddBatchModal(false);
         return;
       }
 
-      let batchData: {
-        batchId: string;
-        productId: number;
-        recipeId?: number | null;
-        siteId: string;
-        fermenterId: number | null;
-        status: string;
-        date: string;
-        volume: number;
-        batchType?: string;
-      };
-
-      const isFermentationBatch = productClass !== ProductClass.Spirits || newBatch.batchType === BatchType.Fermentation;
-
-      if (isFermentationBatch) {
-        if (!newBatch.recipeId) {
-          setError('Recipe is required for fermentation batches');
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        const recipe = recipes.find(r => r.id === newBatch.recipeId);
-        if (!recipe) {
-          setError('Invalid recipe selected');
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        if (!recipe.ingredients || recipe.ingredients.length === 0) {
-          setError('Selected recipe has no ingredients. Please add ingredients to the recipe in Product Details.');
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        const invalidIngredients = recipe.ingredients.filter((ing: Ingredient) => {
-          const inventoryItem = inventory.find(i =>
-            i.item === ing.itemName &&
-            i.status === 'Stored' &&
-            i.siteId === newBatch.siteId &&
-            (i.type === MaterialType.Spirits ? i.account === Account.Storage : true) &&
-            parseFloat(i.quantity) >= ing.quantity &&
-            i.unit === ing.unit
-          );
-          console.log('[Production] Checking batch ingredient:', {
-            itemName: ing.itemName,
-            siteId: newBatch.siteId,
-            requiredQuantity: ing.quantity,
-            unit: ing.unit,
-            inventoryItem: inventoryItem ? {
-              identifier: inventoryItem.identifier,
-              type: inventoryItem.type,
-              account: inventoryItem.account,
-              status: inventoryItem.status,
-              siteId: inventoryItem.siteId,
-              quantity: inventoryItem.quantity,
-              unit: inventoryItem.unit,
-            } : null,
-          });
-          return !inventoryItem;
-        });
-
-        if (invalidIngredients.length > 0) {
-          const errorMessage = `Insufficient inventory: ${invalidIngredients.map((i: Ingredient) => `${i.itemName} (${i.quantity} ${i.unit})`).join(', ')} not available at site ${newBatch.siteId}. Please add inventory at Madison Brewery.`;
-          console.log('[Production] Batch validation error:', errorMessage);
-          setError(errorMessage);
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        batchData = {
-          batchId: newBatch.batchId,
-          productId: newBatch.productId,
-          recipeId: newBatch.recipeId,
-          siteId: newBatch.siteId,
-          fermenterId: newBatch.fermenterId || null,
-          status: Status.Processing,
-          date: new Date().toISOString().split('T')[0],
-          volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20,
-          batchType: newBatch.batchType || BatchType.Fermentation,
-        };
-      } else {
-        if (!desiredVolume || !desiredAbv) {
-          setError('Desired Volume and ABV are required for proofing batches');
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
-        const spiritProof = 190;
-        const proofGallons = (spiritVolume * spiritProof) / 100;
-
-        const spiritItem = inventory.find(i =>
-          i.identifier === '321654987' &&
-          i.status === 'Stored' &&
-          i.siteId === newBatch.siteId &&
-          i.type === MaterialType.Spirits &&
-          i.account === Account.Storage &&
-          parseFloat(i.quantity) >= spiritVolume
-        );
-
-        if (!spiritItem) {
-          setError(`Insufficient Neutral Grain (Lot 321654987) at site ${newBatch.siteId}. Need ${spiritVolume} gallons.`);
-          setShowErrorPopup(true);
-          setShowAddBatchModal(false);
-          return;
-        }
-
-        batchData = {
-          batchId: newBatch.batchId,
-          productId: newBatch.productId,
-          recipeId: null,
-          siteId: newBatch.siteId,
-          fermenterId: newBatch.fermenterId || null,
-          status: Status.Processing,
-          date: new Date().toISOString().split('T')[0],
-          volume: desiredVolume,
-          batchType: BatchType.Proofing,
-        };
-      }
-
-      console.log('[Production] Sending batch data:', batchData);
-
-      const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(batchData),
-      });
-
-      if (!resBatch.ok) {
-        const text = await resBatch.text();
-        let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
-        if (resBatch.status === 401) {
-          console.error('[Production] Unauthorized batch creation, redirecting to login');
-          navigate('/login');
-          throw new Error('Unauthorized');
-        }
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          console.error('[Production] Failed to parse batch error:', text);
-        }
-        console.log('[Production] Batch creation error:', errorMessage);
-        setErrorMessage(errorMessage);
+      const recipe = recipes.find(r => r.id === newBatch.recipeId);
+      if (!recipe) {
+        setError('Invalid recipe selected');
         setShowErrorPopup(true);
         setShowAddBatchModal(false);
-        throw new Error(errorMessage);
+        return;
       }
 
-      const newBatchResponse = await resBatch.json();
-      console.log('[Production] Added batch:', newBatchResponse);
+      if (!recipe.ingredients || recipe.ingredients.length === 0) {
+        setError('Selected recipe has no ingredients. Please add ingredients to the recipe in Product Details.');
+        setShowErrorPopup(true);
+        setShowAddBatchModal(false);
+        return;
+      }
 
-      if (isFermentationBatch) {
-        const recipe = recipes.find(r => r.id === newBatch.recipeId);
-        if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
-          for (const ing of recipe.ingredients) {
-            const ingredientData: Ingredient = {
-              itemName: ing.itemName,
-              quantity: ing.quantity,
-              unit: ing.unit,
-              isRecipe: true,
-            };
-            console.log('[Production] Adding ingredient to batch:', {
-              batchId: newBatchResponse.batchId,
-              ingredient: ingredientData,
-            });
-            const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatchResponse.batchId}/ingredients`, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(ingredientData),
-            });
-            if (!resIngredient.ok) {
-              const text = await resIngredient.text();
-              let errorMessage = `Failed to add ingredient: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
-              if (resIngredient.status === 401) {
-                console.error('[Production] Unauthorized ingredient addition, redirecting to login');
-                navigate('/login');
-                throw new Error('Unauthorized');
-              }
-              try {
-                const errorData = JSON.parse(text);
-                errorMessage = errorData.error || errorMessage;
-              } catch {
-                console.error('[Production] Failed to parse ingredient error:', text);
-              }
-              console.log('[Production] Ingredient addition error:', errorMessage);
-              setErrorMessage(errorMessage);
-              setShowErrorPopup(true);
-              setShowAddBatchModal(false);
-              throw new Error(errorMessage);
-            }
-            console.log('[Production] Added ingredient:', await resIngredient.json());
-          }
-        }
-      } else {
-        const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
-        const spiritProof = 190;
-        const proofGallons = (spiritVolume * spiritProof) / 100;
-        const ingredients: Ingredient[] = [
-          {
-            itemName: 'Neutral Grain',
-            quantity: spiritVolume,
-            unit: Unit.Gallons,
-            proof: spiritProof,
-            proofGallons: proofGallons,
-            isRecipe: false,
-          },
-          {
-            itemName: 'Water',
-            quantity: waterVolume,
-            unit: Unit.Gallons,
-            isRecipe: false,
-          },
-        ];
-        for (const ing of ingredients) {
+      console.log('[Production] Available inventory:', inventory.map(i => ({
+        identifier: i.identifier,
+        item: i.item,
+        siteId: i.siteId,
+        quantity: i.quantity,
+        unit: i.unit,
+        status: i.status,
+        type: i.type,
+        account: i.account,
+      })));
+
+      const invalidIngredients = recipe.ingredients.filter((ing: Ingredient) => {
+        const inventoryItem = inventory.find(i =>
+          i.item === ing.itemName &&
+          i.status === 'Stored' &&
+          i.siteId === newBatch.siteId &&
+          (i.type === MaterialType.Spirits ? i.account === Account.Storage : true) &&
+          parseFloat(i.quantity) >= ing.quantity &&
+          i.unit.toLowerCase() === ing.unit.toLowerCase()
+        );
+        console.log('[Production] Checking batch ingredient:', {
+          itemName: ing.itemName,
+          siteId: newBatch.siteId,
+          requiredQuantity: ing.quantity,
+          unit: ing.unit,
+          inventoryItem: inventoryItem ? {
+            identifier: inventoryItem.identifier,
+            type: inventoryItem.type,
+            account: inventoryItem.account,
+            status: inventoryItem.status,
+            siteId: inventoryItem.siteId,
+            quantity: inventoryItem.quantity,
+            unit: inventoryItem.unit,
+          } : null,
+        });
+        return !inventoryItem;
+      });
+
+      if (invalidIngredients.length > 0) {
+        const errorMessage = `Insufficient inventory: ${invalidIngredients.map((i: Ingredient) => `${i.itemName} (${i.quantity} ${i.unit})`).join(', ')} not available at site ${newBatch.siteId} (${site.name}).`;
+        console.log('[Production] Batch validation error:', errorMessage);
+        setError(errorMessage);
+        setShowErrorPopup(true);
+        setShowAddBatchModal(false);
+        return;
+      }
+
+      batchData = {
+        batchId: newBatch.batchId,
+        productId: newBatch.productId,
+        recipeId: newBatch.recipeId,
+        siteId: newBatch.siteId,
+        fermenterId: newBatch.fermenterId || null,
+        status: Status.Processing,
+        date: new Date().toISOString().split('T')[0],
+        volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20,
+        batchType: newBatch.batchType || BatchType.Fermentation,
+      };
+    } else {
+      if (!desiredVolume || !desiredAbv) {
+        setError('Desired Volume and ABV are required for proofing batches');
+        setShowErrorPopup(true);
+        setShowAddBatchModal(false);
+        return;
+      }
+
+      const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
+      const spiritProof = 190;
+      const proofGallons = (spiritVolume * spiritProof) / 100;
+
+      const spiritItem = inventory.find(i =>
+        i.identifier === '321654987' &&
+        i.status === 'Stored' &&
+        i.siteId === newBatch.siteId &&
+        i.type === MaterialType.Spirits &&
+        i.account === Account.Storage &&
+        parseFloat(i.quantity) >= spiritVolume &&
+        i.unit.toLowerCase() === 'gallons'
+      );
+
+      console.log('[Production] Checking spirit ingredient:', {
+        itemName: 'Neutral Grain',
+        siteId: newBatch.siteId,
+        requiredQuantity: spiritVolume,
+        unit: 'gallons',
+        spiritItem: spiritItem ? {
+          identifier: spiritItem.identifier,
+          type: spiritItem.type,
+          account: spiritItem.account,
+          status: spiritItem.status,
+          siteId: spiritItem.siteId,
+          quantity: spiritItem.quantity,
+          unit: spiritItem.unit,
+        } : null,
+      });
+
+      if (!spiritItem) {
+        const errorMessage = `Insufficient Neutral Grain (Lot 321654987) at site ${newBatch.siteId} (${site.name}). Need ${spiritVolume} gallons.`;
+        console.log('[Production] Batch validation error:', errorMessage);
+        setError(errorMessage);
+        setShowErrorPopup(true);
+        setShowAddBatchModal(false);
+        return;
+      }
+
+      batchData = {
+        batchId: newBatch.batchId,
+        productId: newBatch.productId,
+        recipeId: null,
+        siteId: newBatch.siteId,
+        fermenterId: newBatch.fermenterId || null,
+        status: Status.Processing,
+        date: new Date().toISOString().split('T')[0],
+        volume: desiredVolume,
+        batchType: BatchType.Proofing,
+      };
+    }
+
+    console.log('[Production] Sending batch data:', batchData);
+
+    const resBatch = await fetch(`${API_BASE_URL}/api/batches`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(batchData),
+    });
+
+    if (!resBatch.ok) {
+      const text = await resBatch.text();
+      let errorMessage = `Failed to add batch: HTTP ${resBatch.status}, ${text.slice(0, 50)}`;
+      if (resBatch.status === 401) {
+        console.error('[Production] Unauthorized batch creation, redirecting to login');
+        navigate('/login');
+        throw new Error('Unauthorized');
+      }
+      try {
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        console.error('[Production] Failed to parse batch error:', text);
+      }
+      console.log('[Production] Batch creation error:', errorMessage);
+      setErrorMessage(errorMessage);
+      setShowErrorPopup(true);
+      setShowAddBatchModal(false);
+      throw new Error(errorMessage);
+    }
+
+    const newBatchResponse = await resBatch.json();
+    console.log('[Production] Added batch:', newBatchResponse);
+
+    if (isFermentationBatch) {
+      const recipe = recipes.find(r => r.id === newBatch.recipeId);
+      if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
+        for (const ing of recipe.ingredients) {
+          const ingredientData: Ingredient = {
+            itemName: ing.itemName,
+            quantity: ing.quantity,
+            unit: ing.unit,
+            isRecipe: true,
+          };
           console.log('[Production] Adding ingredient to batch:', {
             batchId: newBatchResponse.batchId,
-            ingredient: ing,
+            ingredient: ingredientData,
           });
           const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatchResponse.batchId}/ingredients`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(ing),
+            body: JSON.stringify(ingredientData),
           });
           if (!resIngredient.ok) {
             const text = await resIngredient.text();
@@ -559,47 +544,100 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           }
           console.log('[Production] Added ingredient:', await resIngredient.json());
         }
-
-        const moveData = {
-          identifier: '321654987',
-          toAccount: Account.Production,
-          proofGallons: proofGallons.toString(),
-        };
-        const resMove = await fetch(`${API_BASE_URL}/api/inventory/move`, {
+      }
+    } else {
+      const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
+      const spiritProof = 190;
+      const proofGallons = (spiritVolume * spiritProof) / 100;
+      const ingredients: Ingredient[] = [
+        {
+          itemName: 'Neutral Grain',
+          quantity: spiritVolume,
+          unit: Unit.Gallons,
+          proof: spiritProof,
+          proofGallons: proofGallons,
+          isRecipe: false,
+        },
+        {
+          itemName: 'Water',
+          quantity: waterVolume,
+          unit: Unit.Gallons,
+          isRecipe: false,
+        },
+      ];
+      for (const ing of ingredients) {
+        console.log('[Production] Adding ingredient to batch:', {
+          batchId: newBatchResponse.batchId,
+          ingredient: ing,
+        });
+        const resIngredient = await fetch(`${API_BASE_URL}/api/batches/${newBatchResponse.batchId}/ingredients`, {
           method: 'POST',
           headers,
-          body: JSON.stringify(moveData),
+          body: JSON.stringify(ing),
         });
-        if (!resMove.ok) {
-          const text = await resMove.text();
-          if (resMove.status === 401) {
-            console.error('[Production] Unauthorized move, redirecting to login');
+        if (!resIngredient.ok) {
+          const text = await resIngredient.text();
+          let errorMessage = `Failed to add ingredient: HTTP ${resIngredient.status}, ${text.slice(0, 50)}`;
+          if (resIngredient.status === 401) {
+            console.error('[Production] Unauthorized ingredient addition, redirecting to login');
             navigate('/login');
             throw new Error('Unauthorized');
           }
-          throw new Error(`Failed to move spirit: HTTP ${resMove.status}, ${text.slice(0, 50)}`);
+          try {
+            const errorData = JSON.parse(text);
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            console.error('[Production] Failed to parse ingredient error:', text);
+          }
+          console.log('[Production] Ingredient addition error:', errorMessage);
+          setErrorMessage(errorMessage);
+          setShowErrorPopup(true);
+          setShowAddBatchModal(false);
+          throw new Error(errorMessage);
         }
+        console.log('[Production] Added ingredient:', await resIngredient.json());
       }
 
-      setShowAddBatchModal(false);
-      setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null, batchType: undefined });
-      setDesiredVolume(0);
-      setDesiredAbv(0);
-      setRecipes([]);
-      setEquipment([]);
-      await refreshInventory();
-      await fetchBatches();
-      setError(null);
-      setErrorMessage(null);
-      setShowErrorPopup(false);
-    } catch (err: any) {
-      console.error('[Production] Add batch error:', err);
-      const errorMessage = err.message || 'Unknown error';
-      setError('Failed to add batch: ' + errorMessage);
-      setShowErrorPopup(true);
-      setShowAddBatchModal(false);
+      const moveData = {
+        identifier: '321654987',
+        toAccount: Account.Production,
+        proofGallons: proofGallons.toString(),
+      };
+      const resMove = await fetch(`${API_BASE_URL}/api/inventory/move`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(moveData),
+      });
+      if (!resMove.ok) {
+        const text = await resMove.text();
+        if (resMove.status === 401) {
+          console.error('[Production] Unauthorized move, redirecting to login');
+          navigate('/login');
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`Failed to move spirit: HTTP ${resMove.status}, ${text.slice(0, 50)}`);
+      }
     }
-  };
+
+    setShowAddBatchModal(false);
+    setNewBatch({ batchId: '', productId: 0, recipeId: 0, siteId: '', fermenterId: null, batchType: undefined });
+    setDesiredVolume(0);
+    setDesiredAbv(0);
+    setRecipes([]);
+    setEquipment([]);
+    await refreshInventory();
+    await fetchBatches();
+    setError(null);
+    setErrorMessage(null);
+    setShowErrorPopup(false);
+  } catch (err: any) {
+    console.error('[Production] Add batch error:', err);
+    const errorMessage = err.message || 'Unknown error';
+    setError('Failed to add batch: ' + errorMessage);
+    setShowErrorPopup(true);
+    setShowAddBatchModal(false);
+  }
+};
 
   const handleAddRecipe = async (recipe: { name: string; productId: number; ingredients: Ingredient[]; quantity: number; unit: string }) => {
     const headers = getAuthHeaders();
