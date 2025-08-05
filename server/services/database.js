@@ -494,7 +494,7 @@ async function insertTestData() {
 
         db.run(
           `INSERT OR IGNORE INTO inventory (identifier, item, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ['2-Row Barley-001', '2-Row Barley', 'Grain', '100', 'Pounds', new Date().toISOString().split('T')[0], 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
+          ['2-Row Barley', '2-Row Barley', 'Grain', '100', 'Pounds', new Date().toISOString().split('T')[0], 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
           (err) => { if (err) console.error('Error inserting test inventory item:', err); else console.log('Inserted test inventory item'); }
         );
 
