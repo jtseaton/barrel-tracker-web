@@ -36,11 +36,14 @@ router.post('/receive', async (req, res) => {
 
   const validateItem = (item) => {
     const { identifier, item: itemName, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
-    if (!identifier || !itemName || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
-      return 'Missing required fields (identifier, item, type, quantity, unit, receivedDate, status, siteId, locationId)';
+    if (!identifier || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
+      return 'Missing required fields (identifier, type, quantity, unit, receivedDate, status, siteId, locationId)';
     }
     if (type === 'Spirits' && (!account || !validAccounts.includes(account) || !proof)) {
       return 'Spirits require account (Storage, Processing, or Production) and proof';
+    }
+    if (type !== 'Spirits' && account && !validAccounts.includes(account)) {
+      return 'Invalid account for non-Spirits type';
     }
     if (type === 'Other' && !description) return 'Description required for Other type';
     const parsedQuantity = parseFloat(quantity);
@@ -69,16 +72,13 @@ router.post('/receive', async (req, res) => {
 
     const results = [];
     for (const item of items) {
-      const { identifier: baseIdentifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
-      // Generate unique identifier per site and location
-      const uniqueIdentifier = `${baseIdentifier}-${siteId}-${locationId}`;
-      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : null;
+      const { identifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost } = item;
+      const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : '0.00';
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
       const finalAccount = type === 'Spirits' ? account : null;
       const finalStatus = ['Grain', 'Hops'].includes(type) ? 'Stored' : status;
 
-      // Validate siteId
       const site = await new Promise((resolve, reject) => {
         db.get('SELECT siteId, name FROM sites WHERE siteId = ?', [siteId], (err, row) => {
           if (err) reject(err);
@@ -89,7 +89,6 @@ router.post('/receive', async (req, res) => {
         throw new Error(`Invalid siteId: ${siteId}`);
       }
 
-      // Validate locationId
       const location = await new Promise((resolve, reject) => {
         db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, siteId], (err, row) => {
           if (err) reject(err);
@@ -100,19 +99,17 @@ router.post('/receive', async (req, res) => {
         throw new Error(`Invalid locationId: ${locationId} for siteId: ${siteId}`);
       }
 
-      // Validate item
       await new Promise((resolve, reject) => {
-        db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)', [itemName, type, 1], (err) => {
+        db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)', [identifier, type, 1], (err) => {
           if (err) reject(err);
           else resolve();
         });
       });
 
-      // Check existing inventory
       const row = await new Promise((resolve, reject) => {
         db.get(
-          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND siteId = ? AND locationId = ?',
-          [uniqueIdentifier, siteId, locationId],
+          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND type = ? AND (account = ? OR account IS NULL) AND siteId = ?',
+          [identifier, type, finalAccount, siteId],
           (err, row) => {
             if (err) reject(err);
             else resolve(row);
@@ -120,7 +117,7 @@ router.post('/receive', async (req, res) => {
         );
       });
 
-      console.log('POST /api/inventory/receive: Processing item', { identifier: uniqueIdentifier, item: itemName, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
+      console.log('POST /api/inventory/receive: Processing item', { identifier, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
 
       if (row) {
         const existingQuantity = parseFloat(row.quantity || '0');
@@ -130,9 +127,9 @@ router.post('/receive', async (req, res) => {
         const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
         await new Promise((resolve, reject) => {
           db.run(
-            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?, poNumber = ?, lotNumber = ?
-             WHERE identifier = ? AND siteId = ? AND locationId = ?`,
-            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, uniqueIdentifier, siteId, locationId],
+            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?
+             WHERE identifier = ? AND type = ? AND (account = ? OR account IS NULL) AND siteId = ?`,
+            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, identifier, type, finalAccount, siteId],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -142,9 +139,9 @@ router.post('/receive', async (req, res) => {
       } else {
         await new Promise((resolve, reject) => {
           db.run(
-            `INSERT INTO inventory (identifier, item, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [uniqueIdentifier, itemName, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null, finalUnitCost, finalTotalCost, poNumber || null, lotNumber || null, finalAccount],
+            `INSERT INTO inventory (identifier, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, isKegDepositItem)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [identifier, finalAccount, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null, finalUnitCost, finalTotalCost, 0],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -154,8 +151,8 @@ router.post('/receive', async (req, res) => {
       }
 
       results.push({
-        identifier: uniqueIdentifier, item: itemName, type, quantity, unit, receivedDate, source,
-        siteId, locationId, status: finalStatus, description, cost: finalUnitCost, totalCost: finalTotalCost, poNumber, lotNumber, account: finalAccount
+        identifier, item: itemName, type, quantity, unit, receivedDate, source,
+        siteId, locationId, status: finalStatus, description, cost: finalUnitCost, totalCost: finalTotalCost, account: finalAccount
       });
     }
 

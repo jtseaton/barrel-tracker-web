@@ -599,7 +599,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
 
   // In ReceivePage.tsx, update the handleReceive function to swap item and description for spirits
 
-  const handleReceive = async (items?: ReceiveItem[]) => {
+const handleReceive = async (items?: ReceiveItem[]) => {
   const itemsToReceive: ReceiveItem[] = items || (useSingleItem ? [singleForm as ReceiveItem] : receiveItems);
   if (useSingleItem) {
     console.log('Single Item Receive:', singleForm);
@@ -647,16 +647,16 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
     const unitCost = totalItemCost / quantity || 0;
     const finalTotalCost = (totalItemCost + costPerItem).toFixed(2);
     const finalUnitCost = (parseFloat(finalTotalCost) / quantity || 0).toFixed(2);
-    const finalAccount = item.materialType === MaterialType.Spirits ? item.account : undefined;
+    const finalAccount = item.materialType === MaterialType.Spirits ? item.account : undefined; // Changed from null to undefined
     const finalStatus = ['Grain', 'Hops'].includes(item.materialType) ? Status.Stored : Status.Received;
     let finalItem = item.item;
     let finalDescription = item.description;
-    let finalIdentifier = `${item.identifier}-${item.siteId}-${item.locationId}`;
+    let finalIdentifier = item.identifier;
     let finalLotNumber = item.lotNumber;
     if (item.materialType === MaterialType.Spirits) {
       finalItem = item.lotNumber || 'UNKNOWN_LOT';
       finalDescription = item.item;
-      finalIdentifier = `${item.lotNumber || 'UNKNOWN_LOT'}-${item.siteId}-${item.locationId}`;
+      finalIdentifier = item.lotNumber || 'UNKNOWN_LOT';
       finalLotNumber = undefined;
     }
     console.log('Prepared inventory item:', {
@@ -667,6 +667,7 @@ const ReceivePage: React.FC<ReceivePageProps> = ({ refreshInventory, vendors, re
       type: item.materialType,
       quantity: item.quantity,
       unit: item.unit,
+      account: finalAccount,
     });
     return {
       identifier: finalIdentifier,
