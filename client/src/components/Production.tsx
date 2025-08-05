@@ -99,7 +99,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     }
   }, [page, getAuthHeaders, navigate]);
 
-  useEffect(() => {
+useEffect(() => {
   const fetchData = async () => {
     const headers = getAuthHeaders();
     if (!headers) return;
@@ -286,7 +286,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     return { spiritVolume: Number(spiritVolume.toFixed(2)), waterVolume: Number(waterVolume.toFixed(2)) };
   };
 
-  const handleAddBatch = async () => {
+const handleAddBatch = async () => {
   if (!newBatch.batchId || !newBatch.productId || !newBatch.siteId) {
     setError('Batch ID, Product, and Site are required');
     setShowErrorPopup(true);
@@ -374,10 +374,9 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
       const invalidIngredients = recipe.ingredients.filter((ing: Ingredient) => {
         const inventoryItem = inventory.find(i =>
-          i.item === ing.itemName &&
+          i.identifier === ing.itemName &&
           i.status === 'Stored' &&
           i.siteId === newBatch.siteId &&
-          (i.type === MaterialType.Spirits ? i.account === Account.Storage : true) &&
           parseFloat(i.quantity) >= ing.quantity &&
           i.unit.toLowerCase() === ing.unit.toLowerCase()
         );
@@ -432,11 +431,11 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const proofGallons = (spiritVolume * spiritProof) / 100;
 
       const spiritItem = inventory.find(i =>
-        i.identifier === '321654987' &&
+        i.identifier === 'Neutral Grain' &&
         i.status === 'Stored' &&
         i.siteId === newBatch.siteId &&
         i.type === MaterialType.Spirits &&
-        i.account === Account.Storage &&
+        (i.account === Account.Storage || i.account === undefined) &&
         parseFloat(i.quantity) >= spiritVolume &&
         i.unit.toLowerCase() === 'gallons'
       );
@@ -458,7 +457,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       });
 
       if (!spiritItem) {
-        const errorMessage = `Insufficient Neutral Grain (Lot 321654987) at site ${newBatch.siteId} (${site.name}). Need ${spiritVolume} gallons.`;
+        const errorMessage = `Insufficient Neutral Grain at site ${newBatch.siteId} (${site.name}). Need ${spiritVolume} gallons.`;
         console.log('[Production] Batch validation error:', errorMessage);
         setError(errorMessage);
         setShowErrorPopup(true);
@@ -607,7 +606,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       }
 
       const moveData = {
-        identifier: '321654987',
+        identifier: 'Neutral Grain',
         toAccount: Account.Production,
         proofGallons: proofGallons.toString(),
       };
