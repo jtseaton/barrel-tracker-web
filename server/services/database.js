@@ -71,9 +71,8 @@ function initializeDatabase() {
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS inventory (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          identifier TEXT NOT NULL,
-          item TEXT NOT NULL,
+          identifier TEXT,
+          account TEXT,
           type TEXT,
           quantity TEXT,
           unit TEXT,
@@ -89,11 +88,11 @@ function initializeDatabase() {
           totalCost TEXT,
           poNumber TEXT,
           lotNumber TEXT,
-          account TEXT,
+          isKegDepositItem INTEGER,
           enabled INTEGER DEFAULT 1,
           FOREIGN KEY (siteId) REFERENCES sites(siteId),
           FOREIGN KEY (locationId) REFERENCES locations(locationId),
-          UNIQUE(identifier, siteId, locationId)
+          UNIQUE(identifier, type, account, siteId)
         )
       `, (err) => {
         if (err) console.error('Error creating inventory table:', err);
@@ -567,13 +566,13 @@ async function insertTestData() {
         );
 
         db.run(
-          `INSERT OR IGNORE INTO inventory (identifier, item, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ['2-Row Barley-BR-AL-20019-7', '2-Row Barley', 'Grain', '150', 'lbs', new Date().toISOString().split('T')[0], 'Grain Co', 'BR-AL-20019', 7, 'Stored'],
+          `INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ['2-Row Barley', 'Storage', 'Grain', '150', 'lbs', '2025-08-05', 'Grain Co', 'BR-AL-20019', 7, 'Stored'],
           (err) => { if (err) console.error('Error inserting test inventory item BR-AL-20019:', err); else console.log('Inserted test inventory item BR-AL-20019'); }
         );
         db.run(
-          `INSERT OR IGNORE INTO inventory (identifier, item, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ['2-Row Barley-DSP-AL-20051-1', '2-Row Barley', 'Grain', '100', 'lbs', new Date().toISOString().split('T')[0], 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
+          `INSERT OR IGNORE INTO inventory (identifier, account, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ['2-Row Barley', 'Storage', 'Grain', '100', 'lbs', '2025-08-05', 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
           (err) => { if (err) console.error('Error inserting test inventory item DSP-AL-20051:', err); else console.log('Inserted test inventory item DSP-AL-20051'); }
         );
 
