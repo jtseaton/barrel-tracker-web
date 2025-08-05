@@ -69,7 +69,9 @@ router.post('/receive', async (req, res) => {
 
     const results = [];
     for (const item of items) {
-      const { identifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
+      const { identifier: baseIdentifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
+      // Generate unique identifier per site and location
+      const uniqueIdentifier = `${baseIdentifier}-${siteId}-${locationId}`;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : null;
       const finalTotalCost = totalCost || '0.00';
       const finalUnitCost = cost || '0.00';
@@ -106,11 +108,11 @@ router.post('/receive', async (req, res) => {
         });
       });
 
-      // Check existing inventory with siteId
+      // Check existing inventory
       const row = await new Promise((resolve, reject) => {
         db.get(
           'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND siteId = ? AND locationId = ?',
-          [identifier, siteId, locationId],
+          [uniqueIdentifier, siteId, locationId],
           (err, row) => {
             if (err) reject(err);
             else resolve(row);
@@ -118,7 +120,7 @@ router.post('/receive', async (req, res) => {
         );
       });
 
-      console.log('POST /api/inventory/receive: Processing item', { identifier, item: itemName, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
+      console.log('POST /api/inventory/receive: Processing item', { identifier: uniqueIdentifier, item: itemName, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
 
       if (row) {
         const existingQuantity = parseFloat(row.quantity || '0');
@@ -130,7 +132,7 @@ router.post('/receive', async (req, res) => {
           db.run(
             `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?, poNumber = ?, lotNumber = ?
              WHERE identifier = ? AND siteId = ? AND locationId = ?`,
-            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, identifier, siteId, locationId],
+            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, uniqueIdentifier, siteId, locationId],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -142,7 +144,7 @@ router.post('/receive', async (req, res) => {
           db.run(
             `INSERT INTO inventory (identifier, item, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber, account)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [identifier, itemName, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null, finalUnitCost, finalTotalCost, poNumber || null, lotNumber || null, finalAccount],
+            [uniqueIdentifier, itemName, type, quantity, unit, proof || null, finalProofGallons, receivedDate, source || 'Unknown', siteId, locationId, finalStatus, description || null, finalUnitCost, finalTotalCost, poNumber || null, lotNumber || null, finalAccount],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -152,7 +154,7 @@ router.post('/receive', async (req, res) => {
       }
 
       results.push({
-        identifier, item: itemName, type, quantity, unit, receivedDate, source,
+        identifier: uniqueIdentifier, item: itemName, type, quantity, unit, receivedDate, source,
         siteId, locationId, status: finalStatus, description, cost: finalUnitCost, totalCost: finalTotalCost, poNumber, lotNumber, account: finalAccount
       });
     }

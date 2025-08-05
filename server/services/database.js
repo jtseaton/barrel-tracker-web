@@ -71,7 +71,8 @@ function initializeDatabase() {
       });
       db.run(`
         CREATE TABLE IF NOT EXISTS inventory (
-          identifier TEXT PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          identifier TEXT NOT NULL,
           item TEXT NOT NULL,
           type TEXT,
           quantity TEXT,
@@ -91,7 +92,8 @@ function initializeDatabase() {
           account TEXT,
           enabled INTEGER DEFAULT 1,
           FOREIGN KEY (siteId) REFERENCES sites(siteId),
-          FOREIGN KEY (locationId) REFERENCES locations(locationId)
+          FOREIGN KEY (locationId) REFERENCES locations(locationId),
+          UNIQUE(identifier, siteId, locationId)
         )
       `, (err) => {
         if (err) console.error('Error creating inventory table:', err);
@@ -151,6 +153,7 @@ function initializeDatabase() {
           volume REAL,
           stage TEXT,
           brewLog TEXT,
+          batchType TEXT,
           FOREIGN KEY (productId) REFERENCES products(id),
           FOREIGN KEY (recipeId) REFERENCES recipes(id),
           FOREIGN KEY (siteId) REFERENCES sites(siteId),
@@ -185,7 +188,7 @@ function initializeDatabase() {
           FOREIGN KEY (recipeId) REFERENCES recipes(id)
         )
       `, (err) => {
-        if (err) console.error('Error creating recipes_ingredients table:', err);
+        if (err) console.error('Error creating recipe_ingredients table:', err);
         else console.log('Recipe Ingredients table created');
       });
       db.run(`
@@ -267,6 +270,72 @@ function initializeDatabase() {
       `, (err) => {
         if (err) console.error('Error creating purchase_orders table:', err);
         else console.log('Purchase_orders table created');
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS batch_actions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          batchId TEXT NOT NULL,
+          action TEXT NOT NULL,
+          timestamp TEXT NOT NULL,
+          FOREIGN KEY (batchId) REFERENCES batches(batchId)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating batch_actions table:', err);
+        else console.log('Batch Actions table created');
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS batch_packaging (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          batchId TEXT NOT NULL,
+          packageType TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          volume REAL NOT NULL,
+          locationId INTEGER,
+          date TEXT NOT NULL,
+          siteId TEXT NOT NULL,
+          kegCodes TEXT,
+          FOREIGN KEY (batchId) REFERENCES batches(batchId),
+          FOREIGN KEY (locationId) REFERENCES locations(locationId),
+          FOREIGN KEY (siteId) REFERENCES sites(siteId)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating batch_packaging table:', err);
+        else console.log('Batch Packaging table created');
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS kegs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          status TEXT NOT NULL,
+          productId INTEGER,
+          batchId TEXT,
+          lastScanned TEXT,
+          locationId INTEGER,
+          customerId TEXT,
+          FOREIGN KEY (productId) REFERENCES products(id),
+          FOREIGN KEY (batchId) REFERENCES batches(batchId),
+          FOREIGN KEY (locationId) REFERENCES locations(locationId)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating kegs table:', err);
+        else console.log('Kegs table created');
+      });
+      db.run(`
+        CREATE TABLE IF NOT EXISTS keg_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kegId INTEGER NOT NULL,
+          action TEXT NOT NULL,
+          productId INTEGER,
+          batchId TEXT,
+          date TEXT NOT NULL,
+          location TEXT,
+          FOREIGN KEY (kegId) REFERENCES kegs(id),
+          FOREIGN KEY (productId) REFERENCES products(id),
+          FOREIGN KEY (batchId) REFERENCES batches(batchId)
+        )
+      `, (err) => {
+        if (err) console.error('Error creating keg_transactions table:', err);
+        else console.log('Keg Transactions table created');
       });
       db.run('SELECT 1', (err) => {
         if (err) {
@@ -491,11 +560,21 @@ async function insertTestData() {
           ['Corn', 'Grain', 1],
           (err) => { if (err) console.error('Error inserting item Corn:', err); }
         );
+        db.run(
+          'INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)',
+          ['2-Row Barley', 'Grain', 1],
+          (err) => { if (err) console.error('Error inserting item 2-Row Barley:', err); }
+        );
 
         db.run(
           `INSERT OR IGNORE INTO inventory (identifier, item, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ['2-Row Barley', '2-Row Barley', 'Grain', '100', 'Pounds', new Date().toISOString().split('T')[0], 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
-          (err) => { if (err) console.error('Error inserting test inventory item:', err); else console.log('Inserted test inventory item'); }
+          ['2-Row Barley-BR-AL-20019-7', '2-Row Barley', 'Grain', '150', 'lbs', new Date().toISOString().split('T')[0], 'Grain Co', 'BR-AL-20019', 7, 'Stored'],
+          (err) => { if (err) console.error('Error inserting test inventory item BR-AL-20019:', err); else console.log('Inserted test inventory item BR-AL-20019'); }
+        );
+        db.run(
+          `INSERT OR IGNORE INTO inventory (identifier, item, type, quantity, unit, receivedDate, source, siteId, locationId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ['2-Row Barley-DSP-AL-20051-1', '2-Row Barley', 'Grain', '100', 'lbs', new Date().toISOString().split('T')[0], 'ABC Supplier', 'DSP-AL-20051', 1, 'Stored'],
+          (err) => { if (err) console.error('Error inserting test inventory item DSP-AL-20051:', err); else console.log('Inserted test inventory item DSP-AL-20051'); }
         );
 
         db.run('SELECT 1', (err) => {
