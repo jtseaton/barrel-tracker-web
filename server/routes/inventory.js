@@ -33,6 +33,7 @@ router.post('/receive', async (req, res) => {
   console.log('POST /api/inventory/receive: Received payload', JSON.stringify(req.body, null, 2));
   const items = Array.isArray(req.body) ? req.body : [req.body];
   const validAccounts = ['Storage', 'Processing', 'Production'];
+
   const validateItem = (item) => {
     const { identifier, item: itemName, account, type, quantity, unit, proof, receivedDate, status, description, cost, siteId, locationId } = item;
     if (!identifier || !itemName || !type || !quantity || !unit || !receivedDate || !status || !siteId || !locationId) {
@@ -50,12 +51,14 @@ router.post('/receive', async (req, res) => {
         (parsedCost && parsedCost < 0)) return 'Invalid quantity, proof, or cost';
     return null;
   };
+
   const errors = items.map(item => {
     const error = validateItem(item);
     if (error) console.log('POST /api/inventory/receive: Validation error', { item, error });
     return error;
   }).filter(e => e);
   if (errors.length) return res.status(400).json({ error: errors[0] });
+
   try {
     await new Promise((resolve, reject) => {
       db.run('BEGIN TRANSACTION', (err) => {
@@ -63,6 +66,8 @@ router.post('/receive', async (req, res) => {
         else resolve();
       });
     });
+
+    const results = [];
     for (const item of items) {
       const { identifier, item: itemName, account, type, quantity, unit, proof, proofGallons, receivedDate, source, siteId, locationId, status, description, cost, totalCost, poNumber, lotNumber } = item;
       const finalProofGallons = type === 'Spirits' ? (proofGallons || (parseFloat(quantity) * (parseFloat(proof) / 100)).toFixed(2)) : null;
@@ -70,6 +75,19 @@ router.post('/receive', async (req, res) => {
       const finalUnitCost = cost || '0.00';
       const finalAccount = type === 'Spirits' ? account : null;
       const finalStatus = ['Grain', 'Hops'].includes(type) ? 'Stored' : status;
+
+      // Validate siteId
+      const site = await new Promise((resolve, reject) => {
+        db.get('SELECT siteId, name FROM sites WHERE siteId = ?', [siteId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+      if (!site) {
+        throw new Error(`Invalid siteId: ${siteId}`);
+      }
+
+      // Validate locationId
       const location = await new Promise((resolve, reject) => {
         db.get('SELECT locationId FROM locations WHERE locationId = ? AND siteId = ?', [locationId, siteId], (err, row) => {
           if (err) reject(err);
@@ -79,23 +97,29 @@ router.post('/receive', async (req, res) => {
       if (!location) {
         throw new Error(`Invalid locationId: ${locationId} for siteId: ${siteId}`);
       }
+
+      // Validate item
       await new Promise((resolve, reject) => {
         db.run('INSERT OR IGNORE INTO items (name, type, enabled) VALUES (?, ?, ?)', [itemName, type, 1], (err) => {
           if (err) reject(err);
           else resolve();
         });
       });
+
+      // Check existing inventory with siteId
       const row = await new Promise((resolve, reject) => {
         db.get(
-          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ?',
-          [identifier],
+          'SELECT quantity, totalCost, unit, source FROM inventory WHERE identifier = ? AND siteId = ? AND locationId = ?',
+          [identifier, siteId, locationId],
           (err, row) => {
             if (err) reject(err);
             else resolve(row);
           }
         );
       });
+
       console.log('POST /api/inventory/receive: Processing item', { identifier, item: itemName, account: finalAccount, status: finalStatus, siteId, locationId, quantity, unit });
+
       if (row) {
         const existingQuantity = parseFloat(row.quantity || '0');
         const existingTotalCost = parseFloat(row.totalCost || '0');
@@ -104,8 +128,9 @@ router.post('/receive', async (req, res) => {
         const avgUnitCost = (newTotalCost / newQuantity).toFixed(2);
         await new Promise((resolve, reject) => {
           db.run(
-            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?, poNumber = ?, lotNumber = ? WHERE identifier = ?`,
-            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, identifier],
+            `UPDATE inventory SET quantity = ?, totalCost = ?, cost = ?, proofGallons = ?, receivedDate = ?, source = ?, unit = ?, status = ?, account = ?, poNumber = ?, lotNumber = ?
+             WHERE identifier = ? AND siteId = ? AND locationId = ?`,
+            [newQuantity, newTotalCost, avgUnitCost, finalProofGallons, receivedDate, source || 'Unknown', unit, finalStatus, finalAccount, poNumber || null, lotNumber || null, identifier, siteId, locationId],
             (err) => {
               if (err) reject(err);
               else resolve();
@@ -125,15 +150,22 @@ router.post('/receive', async (req, res) => {
           );
         });
       }
+
+      results.push({
+        identifier, item: itemName, type, quantity, unit, receivedDate, source,
+        siteId, locationId, status: finalStatus, description, cost: finalUnitCost, totalCost: finalTotalCost, poNumber, lotNumber, account: finalAccount
+      });
     }
+
     await new Promise((resolve, reject) => {
       db.run('COMMIT', (err) => {
         if (err) reject(err);
         else resolve();
       });
     });
-    console.log('POST /api/inventory/receive: Success', { items });
-    res.json({ message: 'Receive successful' });
+
+    console.log('POST /api/inventory/receive: Success', { items: results });
+    res.json({ items: results });
   } catch (err) {
     console.error('POST /api/inventory/receive: Error:', err);
     await new Promise((resolve) => db.run('ROLLBACK', resolve));

@@ -122,43 +122,43 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, refreshInventory, vend
 
   // Fetch sites and locations on mount
   useEffect(() => {
-    const abortController = new AbortController();
-    const fetchLocationsAndSites = async () => {
-      setIsLoading(true);
-      try {
-        const sitesData: Site[] = await fetchSites(abortController.signal);
-        console.log('[Inventory] Fetched sites:', sitesData);
-        setSites(sitesData || []);
+  const abortController = new AbortController();
+  const fetchLocationsAndSites = async () => {
+    setIsLoading(true);
+    try {
+      const sitesData: Site[] = await fetchSites(abortController.signal);
+      console.log('[Inventory] Fetched sites:', sitesData);
+      setSites(sitesData || []);
 
-        const siteIds = Array.from(new Set([
-          ...inventory.map(item => item?.siteId).filter((siteId): siteId is string => !!siteId),
-          OUR_DSP,
-        ]));
-        console.log('[Inventory] Site IDs:', siteIds);
+      const siteIds = Array.from(new Set([
+        ...inventory.map(item => item?.siteId).filter((siteId): siteId is string => !!siteId),
+        ...sitesData.map(site => site.siteId),
+      ]));
+      console.log('[Inventory] Site IDs:', siteIds);
 
-        const locationPromises = siteIds.map(siteId =>
-          fetchLocations(siteId, abortController.signal).catch(err => {
-            console.error('[Inventory] Locations fetch error for siteId:', siteId, err);
-            return [];
-          })
-        );
-        const locationArrays = await Promise.all(locationPromises);
-        const allLocations = locationArrays.flat();
-        console.log('[Inventory] Fetched locations:', allLocations);
-        setLocations(allLocations || []);
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') return;
-        console.error('[Inventory] Fetch locations/sites error:', err);
-        setProductionError(err instanceof Error ? `Failed to fetch locations or sites: ${err.message}` : 'Failed to fetch locations or sites: Unknown error');
-        setSites([]);
-        setLocations([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchLocationsAndSites();
-    return () => abortController.abort();
-  }, [fetchSites, fetchLocations]);
+      const locationPromises = siteIds.map(siteId =>
+        fetchLocations(siteId, abortController.signal).catch(err => {
+          console.error('[Inventory] Locations fetch error for siteId:', siteId, err);
+          return [];
+        })
+      );
+      const locationArrays = await Promise.all(locationPromises);
+      const allLocations = locationArrays.flat();
+      console.log('[Inventory] Fetched locations:', allLocations);
+      setLocations(allLocations || []);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.error('[Inventory] Fetch locations/sites error:', err);
+      setProductionError(err instanceof Error ? `Failed to fetch locations or sites: ${err.message}` : 'Failed to fetch locations or sites: Unknown error');
+      setSites([]);
+      setLocations([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  fetchLocationsAndSites();
+  return () => abortController.abort();
+}, [fetchSites, fetchLocations, inventory]);
 
   const getLocationName = (locationId: number | undefined) => {
     if (!locationId) return 'Unknown Location';

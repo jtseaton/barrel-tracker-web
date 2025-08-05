@@ -100,45 +100,53 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
   }, [page, getAuthHeaders, navigate]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const headers = getAuthHeaders();
-      if (!headers) return;
-      try {
-        const endpoints = [
-          { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
-          { url: `${API_BASE_URL}/api/sites`, setter: setSites, name: 'sites' },
-          { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
-        ];
-        const responses = await Promise.all(
-          endpoints.map(({ url }) => fetch(url, { headers }))
-        );
-        for (let i = 0; i < responses.length; i++) {
-          const res = responses[i];
-          const { name, setter } = endpoints[i];
-          if (!res.ok) {
-            const text = await res.text();
-            if (res.status === 401) {
-              console.error('[Production] Unauthorized, redirecting to login');
-              navigate('/login');
-              throw new Error(`Unauthorized: ${name}`);
+  const fetchData = async () => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const endpoints = [
+        { url: `${API_BASE_URL}/api/products`, setter: setProducts, name: 'products' },
+        { url: `${API_BASE_URL}/api/sites`, setter: (data: Site[]) => {
+            console.log('[Production] Fetched sites:', data);
+            setSites(data);
+            if (data.length > 0 && !newBatch.siteId) {
+              const defaultSite = data.find(s => s.siteId === 'BR-AL-20019') || data[0];
+              console.log('[Production] Setting default site:', defaultSite);
+              setNewBatch(prev => ({ ...prev, siteId: defaultSite.siteId }));
             }
-            throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
+          }, name: 'sites' },
+        { url: `${API_BASE_URL}/api/items`, setter: setItems, name: 'items' },
+      ];
+      const responses = await Promise.all(
+        endpoints.map(({ url }) => fetch(url, { headers }))
+      );
+      for (let i = 0; i < responses.length; i++) {
+        const res = responses[i];
+        const { name, setter } = endpoints[i];
+        if (!res.ok) {
+          const text = await res.text();
+          if (res.status === 401) {
+            console.error('[Production] Unauthorized, redirecting to login');
+            navigate('/login');
+            throw new Error(`Unauthorized: ${name}`);
           }
-          const data = await res.json();
-          if (!Array.isArray(data)) {
-            console.error(`Invalid ${name} data: expected array, got`, data);
-            throw new Error(`Invalid ${name} response`);
-          }
-          setter(data);
+          throw new Error(`Failed to fetch ${name}: HTTP ${res.status}, Response: ${text.slice(0, 50)}`);
         }
-        await fetchBatches();
-      } catch (err: any) {
-        console.error('[Production] Initial fetch error:', err);
-        setError('Failed to load production data: ' + err.message);
+        const data = await res.json();
+        if (!Array.isArray(data)) {
+          console.error(`Invalid ${name} data: expected array, got`, data);
+          throw new Error(`Invalid ${name} response`);
+        }
+        setter(data);
       }
-    };
-    fetchData();
-  }, [fetchBatches, getAuthHeaders, navigate]);
+      await fetchBatches();
+    } catch (err: any) {
+      console.error('[Production] Initial fetch error:', err);
+      setError('Failed to load production data: ' + err.message);
+    }
+  };
+  fetchData();
+}, [fetchBatches, getAuthHeaders, navigate]);
 
   const refreshProducts = useCallback(async () => {
     const headers = getAuthHeaders();
