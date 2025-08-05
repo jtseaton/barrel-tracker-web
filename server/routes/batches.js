@@ -58,85 +58,92 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   const { batchId, productId, recipeId, siteId, fermenterId, status, date, volume, batchType } = req.body;
   console.log('POST /api/batches:', { batchId, productId, recipeId, siteId, fermenterId, status, date, volume, batchType });
-  if (!batchId || !productId || !recipeId || !siteId) {
-    console.error('POST /api/batches: Missing required fields', { batchId, productId, recipeId, siteId });
-    return res.status(400).json({ error: 'batchId, productId, recipeId, and siteId are required' });
+  if (!batchId || !productId || !siteId) {
+    console.error('POST /api/batches: Missing required fields', { batchId, productId, siteId });
+    return res.status(400).json({ error: 'batchId, productId, and siteId are required' });
   }
   if (volume !== undefined && (isNaN(parseFloat(volume)) || parseFloat(volume) <= 0)) {
     console.error('POST /api/batches: Invalid volume', { volume });
     return res.status(400).json({ error: 'Volume must be a positive number if provided' });
   }
-  db.all('SELECT itemName, quantity, unit FROM recipe_ingredients WHERE recipeId = ?', [parseInt(recipeId)], (err, ingredients) => {
-    if (err) {
-      console.error('POST /api/batches: Fetch ingredients error:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log('POST /api/batches: Ingredients', ingredients);
-    const errors = [];
-    let pending = ingredients.length;
-    if (!pending) {
-      insertBatch();
-      return;
-    }
-    for (const ing of ingredients) {
-      const inventoryItemName = ing.itemName;
-      const recipeUnit = ing.unit.toLowerCase() === 'pounds' ? 'lbs' : ing.unit.toLowerCase();
-      db.all(
-        'SELECT identifier, quantity, unit, receivedDate, account, status, siteId, locationId FROM inventory WHERE identifier = ? AND siteId = ? AND status = ?',
-        [inventoryItemName, siteId, 'Stored'],
-        (err, rows) => {
-          if (err) {
-            console.error('POST /api/batches: Inventory check error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          console.log('POST /api/batches: Inventory query', {
-            item: inventoryItemName,
-            siteId,
-            status: 'Stored',
-            rows: rows.map(r => ({ identifier: r.identifier, account: r.account, status: r.status, siteId: r.siteId, locationId: r.locationId, quantity: r.quantity, unit: r.unit })),
-          });
-          const totalAvailable = rows.reduce((sum, row) => {
-            const inventoryUnit = row.unit.toLowerCase() === 'pounds' ? 'lbs' : row.unit.toLowerCase();
-            return inventoryUnit === recipeUnit ? sum + parseFloat(row.quantity) : sum;
-          }, 0);
-          console.log('POST /api/batches: Inventory check', {
-            item: inventoryItemName,
-            unit: recipeUnit,
-            available: totalAvailable,
-            needed: ing.quantity,
-            rows,
-          });
-          if (totalAvailable < ing.quantity) {
-            errors.push(
-              `Insufficient inventory for ${ing.itemName}: ${totalAvailable}${recipeUnit} available, ${ing.quantity}${recipeUnit} needed`
-            );
-          }
-          pending--;
-          if (pending === 0) {
-            if (errors.length > 0) {
-              console.log('POST /api/batches: Validation errors', errors);
-              return res.status(400).json({ error: errors.join('; ') });
+  if (batchType === 'Fermentation' && !recipeId) {
+    console.error('POST /api/batches: recipeId required for fermentation batches');
+    return res.status(400).json({ error: 'recipeId is required for fermentation batches' });
+  }
+  if (batchType === 'Fermentation') {
+    db.all('SELECT itemName, quantity, unit FROM recipe_ingredients WHERE recipeId = ?', [parseInt(recipeId)], (err, ingredients) => {
+      if (err) {
+        console.error('POST /api/batches: Fetch ingredients error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      console.log('POST /api/batches: Ingredients', ingredients);
+      const errors = [];
+      let pending = ingredients.length;
+      if (!pending) {
+        insertBatch();
+        return;
+      }
+      for (const ing of ingredients) {
+        const inventoryItemName = ing.itemName;
+        const recipeUnit = ing.unit.toLowerCase() === 'pounds' ? 'lbs' : ing.unit.toLowerCase();
+        db.all(
+          'SELECT identifier, quantity, unit, receivedDate, account, status, siteId, locationId FROM inventory WHERE identifier = ? AND siteId = ? AND status = ?',
+          [inventoryItemName, siteId, 'Stored'],
+          (err, rows) => {
+            if (err) {
+              console.error('POST /api/batches: Inventory check error:', err);
+              return res.status(500).json({ error: err.message });
             }
-            insertBatch();
+            console.log('POST /api/batches: Inventory query', {
+              item: inventoryItemName,
+              siteId,
+              status: 'Stored',
+              rows: rows.map(r => ({ identifier: r.identifier, account: r.account, status: r.status, siteId: r.siteId, locationId: r.locationId, quantity: r.quantity, unit: r.unit })),
+            });
+            const totalAvailable = rows.reduce((sum, row) => {
+              const inventoryUnit = row.unit.toLowerCase() === 'pounds' ? 'lbs' : row.unit.toLowerCase();
+              return inventoryUnit === recipeUnit ? sum + parseFloat(row.quantity) : sum;
+            }, 0);
+            console.log('POST /api/batches: Inventory check', {
+              item: inventoryItemName,
+              unit: recipeUnit,
+              available: totalAvailable,
+              needed: ing.quantity,
+              rows,
+            });
+            if (totalAvailable < ing.quantity) {
+              errors.push(`Insufficient inventory for ${ing.itemName}: ${totalAvailable}${recipeUnit} available, ${ing.quantity}${recipeUnit} needed`);
+            }
+            pending--;
+            if (pending === 0) {
+              if (errors.length > 0) {
+                console.log('POST /api/batches: Validation errors', errors);
+                return res.status(400).json({ error: errors.join('; ') });
+              }
+              insertBatch();
+            }
           }
+        );
+      }
+    });
+  } else {
+    insertBatch();
+  }
+
+  function insertBatch() {
+    db.run(
+      'INSERT INTO batches (batchId, productId, recipeId, siteId, fermenterId, status, date, volume, batchType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [batchId, productId, recipeId || null, siteId, fermenterId || null, status || 'In Progress', date || new Date().toISOString().split('T')[0], volume || null, batchType || null],
+      (err) => {
+        if (err) {
+          console.error('POST /api/batches: Insert error:', err);
+          return res.status(500).json({ error: err.message });
         }
-      );
-    }
-    function insertBatch() {
-      db.run(
-        'INSERT INTO batches (batchId, productId, recipeId, siteId, fermenterId, status, date, volume, batchType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [batchId, productId, parseInt(recipeId), siteId, fermenterId || null, status || 'In Progress', date || new Date().toISOString().split('T')[0], volume || null, batchType || null],
-        (err) => {
-          if (err) {
-            console.error('POST /api/batches: Insert error:', err);
-            return res.status(500).json({ error: err.message });
-          }
-          console.log('POST /api/batches: Success', { batchId, volume });
-          res.json({ batchId });
-        }
-      );
-    }
-  });
+        console.log('POST /api/batches: Success', { batchId, volume, batchType });
+        res.json({ batchId });
+      }
+    );
+  }
 });
 
 router.post('/:batchId/ingredients', (req, res) => {
@@ -191,7 +198,6 @@ router.post('/:batchId/ingredients', (req, res) => {
               return res.status(500).json({ error: err.message });
             }
             let additionalIngredients = batchRow.additionalIngredients ? JSON.parse(batchRow.additionalIngredients) : [];
-            console.log(`POST /api/batches/:batchId/ingredients: Current additionalIngredients`, additionalIngredients);
             additionalIngredients = additionalIngredients.filter(
               ing => !ing.excluded || (ing.excluded && ing.itemName !== itemName) || (ing.quantity && ing.quantity > 0)
             );
@@ -216,10 +222,10 @@ router.post('/:batchId/ingredients', (req, res) => {
                     console.log(`POST /api/batches/:batchId/ingredients: Inventory updated`, { itemName, quantity, unit: normalizedUnit, siteId });
                     db.get(`
                       SELECT b.batchId, b.productId, p.name AS productName, b.recipeId, r.name AS recipeName,
-                             b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId, b.fermenterId, b.volume
+                             b.siteId, s.name AS siteName, b.status, b.date, r.ingredients, b.additionalIngredients, b.equipmentId, b.fermenterId, b.volume, b.batchType
                       FROM batches b
                       JOIN products p ON b.productId = p.id
-                      JOIN recipes r ON b.recipeId = r.id
+                      LEFT JOIN recipes r ON b.recipeId = r.id
                       JOIN sites s ON b.siteId = s.siteId
                       WHERE b.batchId = ?
                     `, [batchId], (err, updatedBatch) => {

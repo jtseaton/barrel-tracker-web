@@ -1,3 +1,4 @@
+// src/components/Production.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Batch, Product, Recipe, Site, Ingredient, Equipment, InventoryItem } from '../types/interfaces';
@@ -270,7 +271,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
 
   const calculateSpiritsRequirements = () => {
     if (!desiredVolume || !desiredAbv) return { spiritVolume: 0, waterVolume: 0 };
-    const spiritProof = 190; // From inventory: 190-proof Neutral Grain
+    const spiritProof = 190; // Neutral Grain
     const desiredProof = desiredAbv * 2;
     const spiritVolume = (desiredVolume * desiredProof) / spiritProof;
     const waterVolume = desiredVolume - spiritVolume;
@@ -310,7 +311,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       let batchData: {
         batchId: string;
         productId: number;
-        recipeId?: number;
+        recipeId?: number | null;
         siteId: string;
         fermenterId: number | null;
         status: string;
@@ -389,7 +390,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           status: Status.Processing,
           date: new Date().toISOString().split('T')[0],
           volume: recipe.unit.toLowerCase() === 'barrels' ? recipe.quantity : 20,
-          batchType: newBatch.batchType,
+          batchType: newBatch.batchType || BatchType.Fermentation,
         };
       } else {
         if (!desiredVolume || !desiredAbv) {
@@ -422,12 +423,13 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
         batchData = {
           batchId: newBatch.batchId,
           productId: newBatch.productId,
+          recipeId: null,
           siteId: newBatch.siteId,
           fermenterId: newBatch.fermenterId || null,
           status: Status.Processing,
           date: new Date().toISOString().split('T')[0],
           volume: desiredVolume,
-          batchType: newBatch.batchType,
+          batchType: BatchType.Proofing,
         };
       }
 
@@ -463,7 +465,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
       const newBatchResponse = await resBatch.json();
       console.log('[Production] Added batch:', newBatchResponse);
 
-      // Send ingredients for fermentation batches
       if (isFermentationBatch) {
         const recipe = recipes.find(r => r.id === newBatch.recipeId);
         if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
@@ -507,7 +508,6 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           }
         }
       } else {
-        // Proofing batch: Add Neutral Grain and Water
         const { spiritVolume, waterVolume } = calculateSpiritsRequirements();
         const spiritProof = 190;
         const proofGallons = (spiritVolume * spiritProof) / 100;
@@ -565,19 +565,19 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
           toAccount: Account.Production,
           proofGallons: proofGallons.toString(),
         };
-        const moveRes = await fetch(`${API_BASE_URL}/api/inventory/move`, {
+        const resMove = await fetch(`${API_BASE_URL}/api/inventory/move`, {
           method: 'POST',
           headers,
           body: JSON.stringify(moveData),
         });
-        if (!moveRes.ok) {
-          const text = await moveRes.text();
-          if (moveRes.status === 401) {
+        if (!resMove.ok) {
+          const text = await resMove.text();
+          if (resMove.status === 401) {
             console.error('[Production] Unauthorized move, redirecting to login');
             navigate('/login');
             throw new Error('Unauthorized');
           }
-          throw new Error(`Failed to move spirit: HTTP ${moveRes.status}, ${text.slice(0, 50)}`);
+          throw new Error(`Failed to move spirit: HTTP ${resMove.status}, ${text.slice(0, 50)}`);
         }
       }
 
@@ -647,7 +647,7 @@ const Production: React.FC<ProductionProps> = ({ inventory, refreshInventory }) 
     } catch (err: any) {
       console.error('[Production] Add recipe error:', err);
       const errorMessage = err.message || 'Unknown error';
-      setError('Failed to save recipe: ' + errorMessage);
+      setError('Failed to save recipe: ' + err.message);
       setShowErrorPopup(true);
     }
   };
